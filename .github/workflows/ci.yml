@@ -23,12 +23,7 @@ jobs:
       fail-fast: false
 
     steps:
-    # - uses: actions/checkout@v4
     - uses: actions/checkout@v4
-      with:
-        repository: jasmin-lang/jasmin
-        ref: refs/heads/main
-        path: jasmin
 
     - name: Compile & Install EasyCrypt
       run: |
