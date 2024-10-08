@@ -1,0 +1,837 @@
+require import List DBool.
+(*^
+  (Indistinguishability)
+  IND-CPA
+  IND-CCA1
+  IND-1-CCA2
+  IND-CCA2
+  IND-CPCA (?)
+  
+  (Non-Malleability)
+  NM-CPA
+  NM-CCA1
+  NM-CCA
+  
+  (Plaintext-Awareness (PKE) KEM?)
+  PA0
+  PA1 
+  PA1+ 
+  PA2 
+  PA2I
+  
+  (One-Wayness)
+  OW-CPA
+  OW-CCA1
+  OW-CCA2
+  OW-PCA
+  OW-PCVA
+  
+  (Binding (KEM)/Robustness (PKE))
+  ...
+^*)
+
+(* Require/Import libraries *)
+
+(* Types *)
+(** Public keys (asymmetric) **)
+type pk_t.
+
+(** Secret keys (asymmetric) **)
+type sk_t.
+
+(** Shared/session keys (symmetric) **)
+type key_t.
+
+(** Ciphertexts/Encapsulations **)
+type ctxt_t.
+
+
+(* Distributions *)
+(** (Sub-)Distribution over the type of (symmetric) keys **)
+op dkey : key_t distr.
+
+(* General *)
+(** Key encapsulation mechanism (interface) **)
+module type Scheme = {
+  proc keygen() : pk_t * sk_t
+  proc encaps(pk : pk_t) : key_t * ctxt_t
+  proc decaps(sk : sk_t, c : ctxt_t) : key_t option 
+}.
+
+
+(** Correctness *)
+module Correctness (S : Scheme) = {
+  proc main() : bool = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var k : key_t;
+    var c : ctxt_t;
+    var k' : key_t option;
+    
+    (pk, sk) <@ S.keygen();
+    (k, c) <@ S.encaps(pk);
+    k' <@ S.decaps(sk, c);
+    
+    return k' = Some k;
+  }
+}.
+
+
+(* 
+  Chosen-Plaintext Attacks (CPA)
+  The adversary is given the considered public key and, hence, 
+  is able to produce ciphertexts corresponding to chosen plaintexts.
+*)
+module type Adv_OWCPA = {
+  proc find(pk : pk_t, c : ctxt_t) : key_t 
+}.
+
+module OW_CPA (S : Scheme, A : Adv_OWCPA) = {
+  proc main() : bool = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    
+    (pk, sk) <@ S.keygen();
+    
+    (k, c) <@ S.encaps(pk);
+    
+    k' <@ A.find(pk, c);
+    
+    return k' = k; 
+  }
+}.
+
+module type Adv_INDCPA = { 
+  proc distinguish(pk : pk_t, k : key_t, c : ctxt_t) : bool 
+}.
+
+module IND_CPA (S : Scheme, A : Adv_INDCPA) = {
+  proc main() : bool = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var b, b' : bool;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    
+    (pk, sk) <@ S.keygen();
+    
+    (k, c) <@ S.encaps(pk);
+    k' <$ dkey;
+    
+    b <$ {0,1};
+    
+    b' <@ A.distinguish(pk, if b then k' else k, c);
+    
+    return b' = b; 
+  }
+}.
+
+
+(* 
+  (Non-Adaptive) Chosen-Ciphertext Attacks (CCA1)
+  The adversary is given the considered public key and access to a decryption oracle
+  *before* the stage in which it is expected to return a break.
+  Hence, the adversary is able to produce ciphertext corresponding to chosen plaintexts
+  *and* query for decryptions of chosen ciphertexts.
+*)
+module type Oracles_CCA1i = {
+  proc init(sk_init : sk_t) : unit
+  proc decaps(c : ctxt_t) : key_t option
+}.
+
+module O_CCA1_Default (S : Scheme) : Oracles_CCA1i = {
+  var sk : sk_t
+  var qs : (ctxt_t * key_t option) list
+  
+  proc init(sk_init : sk_t) = {
+    sk <- sk_init;
+    qs <- [];
+  }
+  
+  proc decaps(c : ctxt_t) : key_t option = {
+    var k : key_t option;
+    
+    k <@ S.decaps(sk, c);
+    
+    qs <- rcons qs (c, k);
+    
+    return k;
+  }
+}.
+
+module type Oracles_CCA1 = {
+  include Oracles_CCA1i [-init]
+}.
+
+module type Adv_OWCCA1 (O : Oracles_CCA1) = { 
+  proc scout(pk : pk_t) : unit { O.decaps } 
+  proc find(c : ctxt_t) : key_t { }
+}.
+
+module OW_CCA1 (S : Scheme, O : Oracles_CCA1i, A : Adv_OWCCA1) = {
+  proc main() : bool = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    
+    (pk, sk) <@ S.keygen();
+    O.init(sk);
+    
+    A(O).scout(pk);
+    
+    (k, c) <@ S.encaps(pk);
+    
+    k' <@ A(O).find(c);
+    
+    return k' = k; 
+  }
+}.
+
+module type Adv_INDCCA1 (O : Oracles_CCA1) = { 
+  proc scout(pk : pk_t) : unit { O.decaps } 
+  proc distinguish(k : key_t, c : ctxt_t) : bool { }
+}.
+
+module IND_CCA1 (S : Scheme, O : Oracles_CCA1i, A : Adv_INDCCA1) = {
+  proc main() : bool = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var b, b' : bool;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    
+    (pk, sk) <@ S.keygen();
+    O.init(sk);
+    
+    A(O).scout(pk);
+    
+    (k, c) <@ S.encaps(pk);
+    k' <$ dkey;
+    
+    b <$ {0,1};
+    
+    b' <@ A(O).distinguish(if b then k' else k, c);
+    
+    return b' = b; 
+  }
+}.
+
+(* 
+  Adaptive Chosen-Ciphertext Attacks (CCA2) 
+  The adversary is given the considered public key and access to a decryption oracle throughout.  
+  Hence, the adversary is able to produce ciphertext corresponding to chosen plaintexts
+  *and* query for decryptions of chosen ciphertexts (potentially barring ciphertexts
+  that are part of the challenge).
+*)
+module type Oracles_CCA2i = {
+  proc init1(sk_init : sk_t) : unit
+  proc init2(c'_init : ctxt_t) : unit
+  proc decaps1(c : ctxt_t) : key_t option
+  proc decaps2(c : ctxt_t) : key_t option
+}.
+
+module O_CCA2_Default (S : Scheme) : Oracles_CCA2i = {
+  var sk : sk_t
+  var c' : ctxt_t 
+  var qs1 : (ctxt_t * key_t option) list
+  var qs2 : (ctxt_t * key_t option) list
+  
+  proc init1(sk_init : sk_t) = {
+    sk <- sk_init;
+    qs1 <- [];
+  }
+  
+  proc init2(c'_init : ctxt_t) = {
+    c' <- c'_init;
+    qs2 <- [];
+  }
+  
+  proc decaps1(c : ctxt_t) : key_t option = {
+    var k : key_t option;
+    
+    k <@ S.decaps(sk, c);
+    
+    qs1 <- rcons qs1 (c, k);
+    
+    return k;
+  }
+  
+  proc decaps2(c : ctxt_t) : key_t option = {
+    var k : key_t option;
+    
+    if (c <> c') {
+      k <@ S.decaps(sk, c);
+    } else {
+      k <- None;
+    }
+    
+    qs2 <- rcons qs2 (c, k);
+        
+    return k;
+  }
+}.
+
+module type Oracles_CCA2 = {
+  include Oracles_CCA2i [-init1, init2]
+}.
+
+module type Adv_OWCCA2 (O : Oracles_CCA2) = { 
+  proc scout(pk : pk_t) : unit { O.decaps1 } 
+  proc find(c : ctxt_t) : key_t { O.decaps2 }
+}.
+
+module OW_CCA2 (S : Scheme, O : Oracles_CCA2i, A : Adv_OWCCA2) = {
+  proc main() : bool = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    
+    (pk, sk) <@ S.keygen();
+    O.init1(sk);
+    
+    A(O).scout(pk);
+    
+    (k, c) <@ S.encaps(pk);
+    O.init2(c);
+    
+    k' <@ A(O).find(c);
+    
+    return k' = k; 
+  }
+}.
+
+module type Adv_INDCCA2 (O : Oracles_CCA2) = { 
+  proc scout(pk : pk_t) : unit { O.decaps1 } 
+  proc distinguish(k : key_t, c : ctxt_t) : bool { O.decaps2 }
+}.
+
+module IND_CCA2 (S : Scheme, O : Oracles_CCA2i, A : Adv_INDCCA2) = {
+  proc main() : bool = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var b, b' : bool;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    
+    (pk, sk) <@ S.keygen();
+    O.init1(sk);
+    
+    A(O).scout(pk);
+    
+    (k, c) <@ S.encaps(pk);
+    k' <$ dkey;
+    O.init2(c);
+    
+    b <$ {0,1};
+    
+    b' <@ A(O).distinguish(if b then k' else k, c);
+    
+    return b' = b; 
+  }
+}.
+
+
+(*
+  Binding (Bind)
+*)
+(**
+  Abbreviation for binding break check.
+  I.e., used to check whether binding sources (bs) are equal while, simultaneously,
+  binding targets (bt) are unequal.
+**)
+abbrev bb (bs : 'a * 'a) (bt : 'b * 'b) : bool =
+  bs.`1 = bs.`2 /\ bt.`1 <> bt.`2.
+
+(* Honestly binding *)
+module type Oracles_HONBINDi = {
+  proc init(sk0_init : sk_t, sk1_init : sk_t) : unit
+  proc decaps(b : bool, c : ctxt_t) : key_t option
+}.
+
+module O_HONBIND_Default (S : Scheme) : Oracles_HONBINDi = {
+  var sk0, sk1 : sk_t
+  var qs : (bool * ctxt_t * key_t option) list
+  
+  proc init(sk0_init : sk_t, sk1_init : sk_t) : unit = {
+    sk0 <- sk0_init;
+    sk1 <- sk1_init;
+    qs <- [];  
+  }
+  
+  proc decaps(b : bool, c : ctxt_t) : key_t option = {
+    var k : key_t option;
+
+    k <@ S.decaps(if b then sk1 else sk0, c);
+    
+    qs <- rcons qs (b, c, k);
+    
+    return k;
+  }
+}.
+
+module type Oracle_HONBIND = {
+  include Oracles_HONBINDi [-init]
+}.
+
+module type Adv_HONBIND (O : Oracle_HONBIND) = {
+  proc find(pk0 : pk_t, pk1 : pk_t) : ctxt_t * ctxt_t
+}.
+(*
+module HON_BIND_PK_K (S : Scheme, O : Oracles_HONBINDi, A : Adv_HONBIND) = {
+  proc main() : bool = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+    
+    (pk, sk) <@ S.keygen();
+    O.init(sk, sk);
+    
+    (c0, c1) <@ A(O).find(pk, pk);
+    
+    k0 <@ S.decaps(sk, c0);
+    k1 <@ S.decaps(sk, c1);
+    
+    return k0 <> None /\ k1 <> None /\ k0 <> k1;
+  }
+}.
+
+module HON_BIND_PK_CT (S : Scheme, O : Oracles_HONBINDi, A : Adv_HONBIND) = {
+  proc main() : bool = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+        
+    (pk, sk) <@ S.keygen();
+    O.init(sk, sk);
+    
+    (c0, c1) <@ A(O).find(pk, pk);
+    
+    k0 <@ S.decaps(sk, c0);
+    k1 <@ S.decaps(sk, c1);
+    
+    return k0 <> None /\ k1 <> None /\ c0 <> c1;
+  }
+}.
+*)
+
+module HON_BIND_K_PK (S : Scheme, O : Oracles_HONBINDi, A : Adv_HONBIND) = {
+  proc main() = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    O.init(sk0, sk1);
+    
+    (c0, c1) <@ A(O).find(pk0, pk1);
+    
+    k0 <@ S.decaps(sk0, c0);
+    k1 <@ S.decaps(sk1, c1);
+    
+    return k0 <> None /\ k1 <> None /\ bb (k0, k1) (pk0, pk1);
+  }
+}.
+
+module HON_BIND_K_CT (S : Scheme, O : Oracles_HONBINDi, A : Adv_HONBIND) = {
+  proc main() = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    O.init(sk0, sk1);
+    
+    (c0, c1) <@ A(O).find(pk0, pk1);
+    
+    k0 <@ S.decaps(sk0, c0);
+    k1 <@ S.decaps(sk1, c1);
+    
+    return k0 <> None /\ k1 <> None /\ bb (k0, k1) (c0, c1);
+  }
+}.
+
+module HON_BIND_CT_K (S : Scheme, O : Oracles_HONBINDi, A : Adv_HONBIND) = {
+  proc main() = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    O.init(sk0, sk1);
+    
+    (c0, c1) <@ A(O).find(pk0, pk1);
+    
+    k0 <@ S.decaps(sk0, c0);
+    k1 <@ S.decaps(sk1, c1);
+    
+    return k0 <> None /\ k1 <> None /\ bb (c0, c1) (k0, k1);
+  }
+}.
+
+module HON_BIND_CT_PK (S : Scheme, O : Oracles_HONBINDi, A : Adv_HONBIND) = {
+  proc main() = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    O.init(sk0, sk1);
+    
+    (c0, c1) <@ A(O).find(pk0, pk1);
+    
+    k0 <@ S.decaps(sk0, c0);
+    k1 <@ S.decaps(sk1, c1);
+    
+    return k0 <> None /\ k1 <> None /\ bb (c0, c1) (pk0, pk1);
+  }
+}.
+
+module HON_BIND_KCT_PK (S : Scheme, O : Oracles_HONBINDi, A : Adv_HONBIND) = {
+  proc main() = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    O.init(sk0, sk1);
+    
+    (c0, c1) <@ A(O).find(pk0, pk1);
+    
+    k0 <@ S.decaps(sk0, c0);
+    k1 <@ S.decaps(sk1, c1);
+    
+    return k0 <> None /\ k1 <> None /\ bb ((k0, c0), (k1, c1)) (pk0, pk1);
+  }
+}.
+
+module HON_BIND_KPK_CT (S : Scheme, O : Oracles_HONBINDi, A : Adv_HONBIND) = {
+  proc main() = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+    
+    (pk, sk) <@ S.keygen();
+    O.init(sk, sk);
+    
+    (c0, c1) <@ A(O).find(pk, pk);
+    
+    k0 <@ S.decaps(sk, c0);
+    k1 <@ S.decaps(sk, c1);
+    
+    return k0 <> None /\ k1 <> None /\ bb ((k0, pk), (k1, pk)) (c0, c1);
+  }
+}.
+
+(* "Sanity check" *)
+module HON_BIND_PKCT_K (S : Scheme, O : Oracles_HONBINDi, A : Adv_HONBIND) = {
+  proc main() = {
+    var pk, pk1 : pk_t;
+    var sk, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+    
+    (pk, sk) <@ S.keygen();
+    O.init(sk, sk);
+    
+    (c0, c1) <@ A(O).find(pk, pk);
+    
+    k0 <@ S.decaps(sk, c0);
+    k1 <@ S.decaps(sk, c1);
+    
+    return k0 <> None /\ k1 <> None /\ bb ((c0, pk), (c1, pk)) (k0, k1);
+  }
+}.
+
+(* Leakingly binding *)
+module type Adv_LEAKBIND= {
+  proc find(pk0 : pk_t, sk0 : sk_t, pk1 : pk_t, sk1 : sk_t) : ctxt_t * ctxt_t
+}.
+
+module LEAK_BIND_K_PK (S : Scheme, A : Adv_LEAKBIND) = {
+  proc main() = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    
+    (c0, c1) <@ A.find(pk0, sk0, pk1, sk1);
+    
+    k0 <@ S.decaps(sk0, c0);
+    k1 <@ S.decaps(sk1, c1);
+    
+    return k0 <> None /\ k1 <> None /\ bb (k0, k1) (pk0, pk1);
+  }
+}.
+
+module LEAK_BIND_K_CT (S : Scheme, A : Adv_LEAKBIND) = {
+  proc main() = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    
+    (c0, c1) <@ A.find(pk0, sk0, pk1, sk1);
+    
+    k0 <@ S.decaps(sk0, c0);
+    k1 <@ S.decaps(sk1, c1);
+    
+    return k0 <> None /\ k1 <> None /\ bb (k0, k1) (c0, c1);
+  }
+}.
+
+module LEAK_BIND_CT_K (S : Scheme, A : Adv_LEAKBIND) = {
+  proc main() = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    
+    (c0, c1) <@ A.find(pk0, sk0, pk1, sk1);
+    
+    k0 <@ S.decaps(sk0, c0);
+    k1 <@ S.decaps(sk1, c1);
+    
+    return k0 <> None /\ k1 <> None /\ bb (c0, c1) (k0, k1);
+  }
+}.
+
+module LEAK_BIND_CT_PK (S : Scheme, A : Adv_LEAKBIND) = {
+  proc main() = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    
+    (c0, c1) <@ A.find(pk0, sk0, pk1, sk1);
+    
+    k0 <@ S.decaps(sk0, c0);
+    k1 <@ S.decaps(sk1, c1);
+    
+    return k0 <> None /\ k1 <> None /\ bb (c0, c1) (pk0, pk1);
+  }
+}.
+
+module LEAK_BIND_KCT_PK (S : Scheme, A : Adv_LEAKBIND) = {
+  proc main() = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    
+    (c0, c1) <@ A.find(pk0, sk0, pk1, sk1);
+    
+    k0 <@ S.decaps(sk0, c0);
+    k1 <@ S.decaps(sk1, c1);
+    
+    return k0 <> None /\ k1 <> None /\ bb ((k0, c0), (k1, c1)) (pk0, pk1);
+  }
+}.
+
+module LEAK_BIND_KPK_CT (S : Scheme, A : Adv_LEAKBIND) = {
+  proc main() = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+    
+    (pk, sk) <@ S.keygen();
+    
+    (c0, c1) <@ A.find(pk, sk, pk, sk);
+    
+    k0 <@ S.decaps(sk, c0);
+    k1 <@ S.decaps(sk, c1);
+    
+    return k0 <> None /\ k1 <> None /\ bb ((k0, pk), (k1, pk)) (c0, c1);
+  }
+}.
+
+(* "Sanity check" *)
+module LEAK_BIND_PKCT_K (S : Scheme, A : Adv_LEAKBIND) = {
+  proc main() = {
+    var pk, pk1 : pk_t;
+    var sk, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+    
+    (pk, sk) <@ S.keygen();
+    
+    (c0, c1) <@ A.find(pk, sk, pk, sk);
+    
+    k0 <@ S.decaps(sk, c0);
+    k1 <@ S.decaps(sk, c1);
+    
+    return k0 <> None /\ k1 <> None /\ bb ((c0, pk), (c1, pk)) (k0, k1);
+  }
+}.
+
+
+abstract theory MALBIND.
+
+op sk2pk : sk_t -> pk_t.
+
+module type Adv_MALBIND_DD = {
+  proc find() : sk_t * sk_t * ctxt_t * ctxt_t
+}.
+
+module MAL_BIND_DD_K_PK (S : Scheme, A : Adv_MALBIND_DD) = {
+  proc main() = {
+    var sk0, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+    var pk0, pk1 : pk_t;
+    
+    (sk0, sk1, c0, c1) <@ A.find();
+    
+    k0 <@ S.decaps(sk0, c0);
+    k1 <@ S.decaps(sk1, c1);
+    
+    pk0 <- sk2pk sk0;
+    pk1 <- sk2pk sk1;
+    
+    return k0 <> None /\ k1 <> None /\ bb (k0, k1) (pk0, pk1);
+  }
+}.
+
+module MAL_BIND_DD_K_CT (S : Scheme, A : Adv_MALBIND_DD) = {
+  proc main() = {
+    var sk0, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+    var pk0, pk1 : pk_t;
+    
+    (sk0, sk1, c0, c1) <@ A.find();
+    
+    k0 <@ S.decaps(sk0, c0);
+    k1 <@ S.decaps(sk1, c1);
+    
+    return k0 <> None /\ k1 <> None /\ bb (k0, k1) (c0, c1);
+  }
+}.
+
+module MAL_BIND_DD_CT_K (S : Scheme, A : Adv_MALBIND_DD) = {
+  proc main() = {
+    var sk0, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+    var pk0, pk1 : pk_t;
+    
+    (sk0, sk1, c0, c1) <@ A.find();
+    
+    k0 <@ S.decaps(sk0, c0);
+    k1 <@ S.decaps(sk1, c1);
+    
+    return k0 <> None /\ k1 <> None /\ bb (c0, c1) (k0, k1);
+  }
+}.
+
+module MAL_BIND_DD_CT_PK (S : Scheme, A : Adv_MALBIND_DD) = {
+  proc main() = {
+    var sk0, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+    var pk0, pk1 : pk_t;
+    
+    (sk0, sk1, c0, c1) <@ A.find();
+    
+    k0 <@ S.decaps(sk0, c0);
+    k1 <@ S.decaps(sk1, c1);
+    
+    pk0 <- sk2pk sk0;
+    pk1 <- sk2pk sk1;
+    
+    return k0 <> None /\ k1 <> None /\ bb (c0, c1) (pk0, pk1);
+  }
+}.
+
+module MAL_BIND_DD_KCT_PK (S : Scheme, A : Adv_MALBIND_DD) = {
+  proc main() = {
+    var sk0, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+    var pk0, pk1 : pk_t;
+    
+    (sk0, sk1, c0, c1) <@ A.find();
+    
+    k0 <@ S.decaps(sk0, c0);
+    k1 <@ S.decaps(sk1, c1);
+    
+    pk0 <- sk2pk sk0;
+    pk1 <- sk2pk sk1;
+    
+    return k0 <> None /\ k1 <> None /\ bb ((k0, c0), (k1, c1)) (pk0, pk1);
+  }
+}.
+
+module MAL_BIND_DD_KPK_CT (S : Scheme, A : Adv_MALBIND_DD) = {
+  proc main() = {
+    var sk0, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+    var pk0, pk1 : pk_t;
+    
+    (sk0, sk1, c0, c1) <@ A.find();
+    
+    k0 <@ S.decaps(sk0, c0);
+    k1 <@ S.decaps(sk1, c1);
+    
+    pk0 <- sk2pk sk0;
+    pk1 <- sk2pk sk1;
+    
+    return k0 <> None /\ k1 <> None /\ bb ((k0, pk0), (k1, pk1)) (c0, c1);
+  }
+}.
+
+(* "Sanity check" *)
+module MAL_BIND_DD_PKCT_K (S : Scheme, A : Adv_MALBIND_DD) = {
+  proc main() = {
+    var sk0, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+    var pk0, pk1 : pk_t;
+    
+    (sk0, sk1, c0, c1) <@ A.find();
+    
+    k0 <@ S.decaps(sk0, c0);
+    k1 <@ S.decaps(sk1, c1);
+    
+    pk0 <- sk2pk sk0;
+    pk1 <- sk2pk sk1;
+    
+    return k0 <> None /\ k1 <> None /\ bb ((k0, pk0), (k1, pk1)) (c0, c1);
+  }
+}.
+
+
+end MALBIND.
