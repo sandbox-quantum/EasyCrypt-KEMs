@@ -1,0 +1,30 @@
+(*^
+  (Indistinguishability)
+  IND-CPA
+  IND-CCA1
+  IND-1-CCA2
+  IND-CCA2
+  IND-CPCA (?)
+  
+  (Non-Malleability)
+  NM-CPA
+  NM-CCA1
+  NM-CCA
+  
+  (Plaintext-Awareness (PKE) KEM?)
+  PA0
+  PA1 
+  PA1+ 
+  PA2 
+  PA2I
+  
+  (One-Wayness)
+  OW-CPA
+  OW-CCA1
+  OW-CCA2
+  OW-PCA
+  OW-PCVA
+  
+  (Binding (KEM)/Robustness (PKE))
+  ...
+^*)

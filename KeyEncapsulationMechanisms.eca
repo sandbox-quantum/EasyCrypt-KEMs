@@ -1,36 +1,21 @@
-require import List DBool.
 (*^
-  (Indistinguishability)
-  IND-CPA
-  IND-CCA1
-  IND-1-CCA2
-  IND-CCA2
-  IND-CPCA (?)
-  
-  (Non-Malleability)
-  NM-CPA
-  NM-CCA1
-  NM-CCA
-  
-  (Plaintext-Awareness (PKE) KEM?)
-  PA0
-  PA1 
-  PA1+ 
-  PA2 
-  PA2I
-  
-  (One-Wayness)
-  OW-CPA
-  OW-CCA1
-  OW-CCA2
-  OW-PCA
-  OW-PCVA
-  
-  (Binding (KEM)/Robustness (PKE))
-  ...
+  This library aims to generically define Key Encapsulation Mechanisms (KEMs)
+  and their properties (both correctness and security).
+  Most of the content is based on relevant literature.
+  More precisely, (almost) all of the content is extracted from 
+  one or more of the following papers (in no particular order):
+  - [Design and Analysis of Practical Public-Key Encryption Schemes Secure against Adaptive Chosen Ciphertext Attack](https://eprint.iacr.org/2001/108.pdf)
+  - [On the Equivalence of Several Security Notions of Key Encapsulation Mechanism](https://eprint.iacr.org/2006/268.pdf)
+  - [KEM/DEM: Necessary and Sufficient Conditions for Secure Hybrid Encryption](https://eprint.iacr.org/2006/265.pdf)
+  - [Keeping Up with the KEMs: Stronger Security Notions for KEMs and Automated Analysis of KEM-based Protocols](https://eprint.iacr.org/2023/1933.pdf)
+  - [Unbindable Kemmy Schmidt: ML-KEM is neither MAL-BIND-K-CT nor MAL-BIND-K-PK](https://eprint.iacr.org/2024/523.pdf)
+  - [On the Complete Non-Malleability of the Fujisaki-Okamoto Transform](https://eprint.iacr.org/2022/1654.pdf)
+    (TODO: Add complete non-malleability)
 ^*)
 
 (* Require/Import libraries *)
+require import AllCore List DBool.
+
 
 (* Types *)
 (** Public keys (asymmetric) **)
@@ -47,11 +32,12 @@ type ctxt_t.
 
 
 (* Distributions *)
-(** (Sub-)Distribution over the type of (symmetric) keys **)
+(** (Sub-)Distribution over (symmetric) keys **)
 op dkey : key_t distr.
 
-(* General *)
-(** Key encapsulation mechanism (interface) **)
+
+(* Module types *)
+(** KEM (interface) **)
 module type Scheme = {
   proc keygen() : pk_t * sk_t
   proc encaps(pk : pk_t) : key_t * ctxt_t
@@ -59,7 +45,8 @@ module type Scheme = {
 }.
 
 
-(** Correctness *)
+(* Properties *)
+(** Correctness **)
 module Correctness (S : Scheme) = {
   proc main() : bool = {
     var pk : pk_t;
@@ -77,15 +64,23 @@ module Correctness (S : Scheme) = {
 }.
 
 
+
 (* 
-  Chosen-Plaintext Attacks (CPA)
+  Chosen-Plaintext Attacks (CPA).
   The adversary is given the considered public key and, hence, 
-  is able to produce ciphertexts corresponding to chosen plaintexts.
+  is able to produce ciphertexts corresponding to chosen (symmetric) keys.
 *)
+(*
+  One-Way under Chosen-Plaintext Attacks (OW-CPA).
+  In a CPA setting, the adversary is asked to produce the (symmetric) key
+  encapsulated by a given ciphertext.
+*)
+(** Adversary class considered for OW-CPA **)
 module type Adv_OWCPA = {
   proc find(pk : pk_t, c : ctxt_t) : key_t 
 }.
 
+(** OW-CPA security game **)
 module OW_CPA (S : Scheme, A : Adv_OWCPA) = {
   proc main() : bool = {
     var pk : pk_t;
@@ -103,10 +98,19 @@ module OW_CPA (S : Scheme, A : Adv_OWCPA) = {
   }
 }.
 
+
+(*
+  (ciphertext) INDistinguishability under Chosen-Plaintext Attacks (IND-CPA).
+  In a CPA setting, the adversary is asked to determine whether a given
+  (symmetric) key is (1) encapsulated by a given ciphertext or (2) independently
+  sampled at random (from dkey).
+*)
+(** Adversary class considered for IND-CPA **)
 module type Adv_INDCPA = { 
   proc distinguish(pk : pk_t, k : key_t, c : ctxt_t) : bool 
 }.
 
+(** IND-CPA security game (sampled bit) **)
 module IND_CPA (S : Scheme, A : Adv_INDCPA) = {
   proc main() : bool = {
     var pk : pk_t;
@@ -128,6 +132,180 @@ module IND_CPA (S : Scheme, A : Adv_INDCPA) = {
   }
 }.
 
+(** IND-CPA security game (provided bit) **)
+module IND_CPA_P (S : Scheme, A : Adv_INDCPA) = {
+  proc main(b : bool) : bool = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var b' : bool;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    
+    (pk, sk) <@ S.keygen();
+    
+    (k, c) <@ S.encaps(pk);
+    k' <$ dkey;
+    
+    b' <@ A.distinguish(pk, if b then k' else k, c);
+    
+    return b'; 
+  }
+}.
+
+
+(*
+  (ciphertext) Non-Malleability under Chosen-Plaintext Attacks (NM-CPA).
+  In a CPA setting, given a ciphertext (encapsulating some key K), the adversary is 
+  asked to provide a relation R and a list of ciphertexts such that the (symmetric) keys 
+  resulting from decapsulating the ciphertexts (in the list) are related (through R) with
+  K (significantly) more often than with a (symmetric) key that is independently sampled
+  at random.
+*)
+(** Adversary class considered for NM-CPA **)
+module type Adv_NMCPA = {
+  proc find(pk : pk_t, c : ctxt_t) : (key_t -> key_t option list -> bool) * ctxt_t list
+}.
+
+(** NM-CPA security game (sampled bit) **)
+module NM_CPA (S : Scheme, A : Adv_NMCPA) = {
+  proc main() = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    var rel : key_t -> key_t option list -> bool;
+    var cl : ctxt_t list;
+    var ko : key_t option;
+    var kol : key_t option list;
+    var b : bool;
+    
+    (pk, sk) <@ S.keygen();
+    
+    (k, c) <@ S.encaps(pk);
+    k' <$ dkey;
+    
+    (rel, cl) <@ A.find(pk, c);
+    
+    kol <- [];
+    while (size kol < size cl) {
+      ko <@ S.decaps(sk, nth witness cl (size kol));
+      kol <- rcons kol ko;
+    }
+    
+    b <$ {0,1};
+    
+    return !(c \in cl) /\ rel (if b then k' else k) kol;
+  }
+}.
+
+(** NM-CPA security game (provided bit) **)
+module NM_CPA_P (S : Scheme, A : Adv_NMCPA) = {
+  proc main(b : bool) = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    var rel : key_t -> key_t option list -> bool;
+    var cl : ctxt_t list;
+    var ko : key_t option;
+    var kol : key_t option list;
+    
+    (pk, sk) <@ S.keygen();
+    
+    (k, c) <@ S.encaps(pk);
+    k' <$ dkey;
+    
+    (rel, cl) <@ A.find(pk, c);
+    
+    kol <- [];
+    while (size kol < size cl) {
+      ko <@ S.decaps(sk, nth witness cl (size kol));
+      kol <- rcons kol ko;
+    }
+    
+    return !(c \in cl) /\ rel (if b then k' else k) kol;
+  }
+}.
+
+
+(*
+  (ciphertext) Strong Non-Malleability under Chosen-Plaintext Attacks (SNM-CPA).
+  As NM-CPA, but the adversary is additionally given a pair of (symmetric) keys of
+  which one is independently sampled at random, and the other is the one
+  encapsulated by the given ciphertext. (The order in which they appear in the pair
+  is (uniformly) random).
+*)
+(** Adversary class considered for SNM-CPA **)
+module type Adv_SNMCPA = {
+  proc find(pk : pk_t, c : ctxt_t, kk : key_t * key_t) : (key_t -> key_t option list -> bool) * ctxt_t list
+}.
+
+(** SNM-CPA security game (sampled bit) **)
+module SNM_CPA (S : Scheme, A : Adv_SNMCPA) = {
+  proc main() = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    var rel : key_t -> key_t option list -> bool;
+    var cl : ctxt_t list;
+    var ko : key_t option;
+    var kol : key_t option list;
+    var b, o : bool;
+    
+    (pk, sk) <@ S.keygen();
+    
+    (k, c) <@ S.encaps(pk);
+    k' <$ dkey;
+    
+    o <$ {0,1};
+    (rel, cl) <@ A.find(pk, c, if o then (k', k) else (k, k'));
+    
+    kol <- [];
+    while (size kol < size cl) {
+      ko <@ S.decaps(sk, nth witness cl (size kol));
+      kol <- rcons kol ko;
+    }
+    
+    b <$ {0,1};
+    
+    return !(c \in cl) /\ rel (if b then k' else k) kol;
+  }
+}.
+
+
+(** SNM-CPA security game (provided bit) **)
+module SNM_CPA_P (S : Scheme, A : Adv_SNMCPA) = {
+  proc main(b : bool) = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    var rel : key_t -> key_t option list -> bool;
+    var cl : ctxt_t list;
+    var ko : key_t option;
+    var kol : key_t option list;
+    var o : bool;
+    
+    (pk, sk) <@ S.keygen();
+    
+    (k, c) <@ S.encaps(pk);
+    k' <$ dkey;
+    
+    o <$ {0,1};
+    (rel, cl) <@ A.find(pk, c, if o then (k', k) else (k, k'));
+    
+    kol <- [];
+    while (size kol < size cl) {
+      ko <@ S.decaps(sk, nth witness cl (size kol));
+      kol <- rcons kol ko;
+    }
+    
+    return !(c \in cl) /\ rel (if b then k' else k) kol;
+  }
+}.
+
+
 
 (* 
   (Non-Adaptive) Chosen-Ciphertext Attacks (CCA1)
@@ -136,11 +314,14 @@ module IND_CPA (S : Scheme, A : Adv_INDCPA) = {
   Hence, the adversary is able to produce ciphertext corresponding to chosen plaintexts
   *and* query for decryptions of chosen ciphertexts.
 *)
+(* Oracles *)
+(** Interface for oracles employed in CCA1 security games **)
 module type Oracles_CCA1i = {
   proc init(sk_init : sk_t) : unit
   proc decaps(c : ctxt_t) : key_t option
 }.
 
+(** A default implementation for the oracles employed in CCA1 security games **)
 module O_CCA1_Default (S : Scheme) : Oracles_CCA1i = {
   var sk : sk_t
   var qs : (ctxt_t * key_t option) list
@@ -161,15 +342,24 @@ module O_CCA1_Default (S : Scheme) : Oracles_CCA1i = {
   }
 }.
 
+(** Interface for oracles given to the adversary in CCA1 security games **)
 module type Oracles_CCA1 = {
   include Oracles_CCA1i [-init]
 }.
 
+
+(*
+  One-Way under Chosen-Ciphertext Attacks (OW-CCA1).
+  In a CCA1 setting, the adversary is asked to produce the (symmetric) key
+  encapsulated by a given ciphertext.
+*)
+(** Adversary class considered for OW-CCA1 **)
 module type Adv_OWCCA1 (O : Oracles_CCA1) = { 
   proc scout(pk : pk_t) : unit { O.decaps } 
   proc find(c : ctxt_t) : key_t { }
 }.
 
+(** OW-CCA1 security game **)
 module OW_CCA1 (S : Scheme, O : Oracles_CCA1i, A : Adv_OWCCA1) = {
   proc main() : bool = {
     var pk : pk_t;
@@ -190,11 +380,20 @@ module OW_CCA1 (S : Scheme, O : Oracles_CCA1i, A : Adv_OWCCA1) = {
   }
 }.
 
+
+(*
+  (ciphertext) INDistinguishability under Chosen-Ciphertext Attacks (IND-CCA1).
+  In a CCA1 setting, the adversary is asked to determine whether a given
+  (symmetric) key is (1) encapsulated by a given ciphertext or (2) independently
+  sampled at random (from dkey).
+*)
+(** Adversary class considered for IND-CCA1 **)
 module type Adv_INDCCA1 (O : Oracles_CCA1) = { 
   proc scout(pk : pk_t) : unit { O.decaps } 
   proc distinguish(k : key_t, c : ctxt_t) : bool { }
 }.
 
+(** IND-CCA1 security game (sampled bit) **)
 module IND_CCA1 (S : Scheme, O : Oracles_CCA1i, A : Adv_INDCCA1) = {
   proc main() : bool = {
     var pk : pk_t;
@@ -219,13 +418,206 @@ module IND_CCA1 (S : Scheme, O : Oracles_CCA1i, A : Adv_INDCCA1) = {
   }
 }.
 
+(** IND-CCA1 security game (provided bit) **)
+module IND_CCA_P (S : Scheme, O : Oracles_CCA1i, A : Adv_INDCCA1) = {
+  proc main(b : bool) : bool = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var b' : bool;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    
+    (pk, sk) <@ S.keygen();
+    O.init(sk);
+    
+    A(O).scout(pk);
+    
+    (k, c) <@ S.encaps(pk);
+    k' <$ dkey;
+    
+    b' <@ A(O).distinguish(if b then k' else k, c);
+    
+    return b' = b; 
+  }
+}.
+
+
+(*
+  (ciphertext) Non-Malleability under Chosen-Ciphertext Attacks (NM-CCA1).
+  In a CCA1 setting, given a ciphertext (encapsulating some key K), the adversary is 
+  asked to provide a relation R and a list of ciphertexts such that the (symmetric) keys 
+  resulting from decapsulating the ciphertexts (in the list) are related (through R) with
+  K (significantly) more often than with a (symmetric) key that is independently sampled
+  at random.
+*)
+(** Adversary class considered for NM-CCA1 **)
+module type Adv_NMCCA1 (O : Oracles_CCA1) = {
+  proc scout(pk : pk_t) : unit { O.decaps }
+  proc find(c : ctxt_t) : (key_t -> key_t option list -> bool) * ctxt_t list { }
+}.
+
+(** NM-CCA1 security game (sampled bit) **)
+module NM_CCA1 (S : Scheme, O : Oracles_CCA1i, A : Adv_NMCCA1) = {
+  proc main() = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    var rel : key_t -> key_t option list -> bool;
+    var cl : ctxt_t list;
+    var ko : key_t option;
+    var kol : key_t option list;
+    var b : bool;
+    
+    (pk, sk) <@ S.keygen();
+    O.init(sk);
+    
+    A(O).scout(pk);
+    
+    (k, c) <@ S.encaps(pk);
+    k' <$ dkey;
+    
+    (rel, cl) <@ A(O).find(c);
+    
+    kol <- [];
+    while (size kol < size cl) {
+      ko <@ S.decaps(sk, nth witness cl (size kol));
+      kol <- rcons kol ko;
+    }
+    
+    b <$ {0,1};
+    
+    return !(c \in cl) /\ rel (if b then k' else k) kol;
+  }
+}.
+
+(** NM-CCA1 security game (provided bit) **)
+module NM_CCA1_P (S : Scheme, O : Oracles_CCA1i, A : Adv_NMCCA1) = {
+  proc main(b : bool) = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    var rel : key_t -> key_t option list -> bool;
+    var cl : ctxt_t list;
+    var ko : key_t option;
+    var kol : key_t option list;
+    
+    (pk, sk) <@ S.keygen();
+    O.init(sk);
+    
+    A(O).scout(pk);
+    
+    (k, c) <@ S.encaps(pk);
+    k' <$ dkey;
+    
+    (rel, cl) <@ A(O).find(c);
+    
+    kol <- [];
+    while (size kol < size cl) {
+      ko <@ S.decaps(sk, nth witness cl (size kol));
+      kol <- rcons kol ko;
+    }
+    
+    return !(c \in cl) /\ rel (if b then k' else k) kol;
+  }
+}.
+
+
+(*
+  (ciphertext) Strong Non-Malleability under Chosen-Ciphertext Attacks (SNM-CCA1).
+  As NM-CCA1, but the adversary is additionally given a pair of (symmetric) keys of
+  which one is independently sampled at random, and the other is the one
+  encapsulated by the given ciphertext. (The order in which they appear in the pair
+  is (uniformly) random).
+*)
+(** Adversary class considered for SNM-CCA1 **)
+module type Adv_SNMCCA1 (O : Oracles_CCA1) = {
+  proc scout(pk : pk_t) : unit { O.decaps }
+  proc find(c : ctxt_t, kk : key_t * key_t) : (key_t -> key_t option list -> bool) * ctxt_t list { }
+}.
+
+(** SNM-CCA1 security game (sanmpled bit) **)
+module SNM_CCA1 (S : Scheme, O : Oracles_CCA1i, A : Adv_SNMCCA1) = {
+  proc main() = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    var rel : key_t -> key_t option list -> bool;
+    var cl : ctxt_t list;
+    var ko : key_t option;
+    var kol : key_t option list;
+    var b, o : bool;
+    
+    (pk, sk) <@ S.keygen();
+    O.init(sk);
+    
+    A(O).scout(pk);
+        
+    (k, c) <@ S.encaps(pk);
+    k' <$ dkey;
+
+    o <$ {0,1};
+    (rel, cl) <@ A(O).find(c, if o then (k', k) else (k, k'));
+    
+    kol <- [];
+    while (size kol < size cl) {
+      ko <@ S.decaps(sk, nth witness cl (size kol));
+      kol <- rcons kol ko;
+    }
+    
+    b <$ {0,1};
+    
+    return !(c \in cl) /\ rel (if b then k' else k) kol;
+  }
+}.
+
+(** SNM-CCA1 security game (provided bit) **)
+module SNM_CCA1_P (S : Scheme, O : Oracles_CCA1i, A : Adv_SNMCCA1) = {
+  proc main(b : bool) = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    var rel : key_t -> key_t option list -> bool;
+    var cl : ctxt_t list;
+    var ko : key_t option;
+    var kol : key_t option list;
+    var o : bool;
+    
+    (pk, sk) <@ S.keygen();
+    O.init(sk);
+    
+    A(O).scout(pk);
+        
+    (k, c) <@ S.encaps(pk);
+    k' <$ dkey;
+
+    o <$ {0,1};
+    (rel, cl) <@ A(O).find(c, if o then (k', k) else (k, k'));
+    
+    kol <- [];
+    while (size kol < size cl) {
+      ko <@ S.decaps(sk, nth witness cl (size kol));
+      kol <- rcons kol ko;
+    }
+
+    return !(c \in cl) /\ rel (if b then k' else k) kol;
+  }
+}.
+
+
+
 (* 
-  Adaptive Chosen-Ciphertext Attacks (CCA2) 
+  adaptive Chosen-Ciphertext Attacks (CCA2) 
   The adversary is given the considered public key and access to a decryption oracle throughout.  
   Hence, the adversary is able to produce ciphertext corresponding to chosen plaintexts
   *and* query for decryptions of chosen ciphertexts (potentially barring ciphertexts
   that are part of the challenge).
 *)
+(* Oracles *)
+(** Interface for oracles employed in CCA2 security games **)
 module type Oracles_CCA2i = {
   proc init1(sk_init : sk_t) : unit
   proc init2(c'_init : ctxt_t) : unit
@@ -233,6 +625,7 @@ module type Oracles_CCA2i = {
   proc decaps2(c : ctxt_t) : key_t option
 }.
 
+(** A default implementation for the oracles employed in CCA2 security games **)
 module O_CCA2_Default (S : Scheme) : Oracles_CCA2i = {
   var sk : sk_t
   var c' : ctxt_t 
@@ -274,15 +667,24 @@ module O_CCA2_Default (S : Scheme) : Oracles_CCA2i = {
   }
 }.
 
+(** Interface for oracles given to the adversary in CCA2 security games **)
 module type Oracles_CCA2 = {
   include Oracles_CCA2i [-init1, init2]
 }.
 
+
+(*
+  One-Way under adaptive Chosen-Ciphertext Attacks (OW-CCA2).
+  In a CCA1 setting, the adversary is asked to produce the (symmetric) key
+  encapsulated by a given ciphertext.
+*)
+(** Adversary class considered for OW-CCA2 **)
 module type Adv_OWCCA2 (O : Oracles_CCA2) = { 
   proc scout(pk : pk_t) : unit { O.decaps1 } 
   proc find(c : ctxt_t) : key_t { O.decaps2 }
 }.
 
+(** OW-CCA2 security game **)
 module OW_CCA2 (S : Scheme, O : Oracles_CCA2i, A : Adv_OWCCA2) = {
   proc main() : bool = {
     var pk : pk_t;
@@ -304,11 +706,20 @@ module OW_CCA2 (S : Scheme, O : Oracles_CCA2i, A : Adv_OWCCA2) = {
   }
 }.
 
+
+(*
+  (ciphertext) INDistinguishability under adaptive Chosen-Ciphertext Attacks (IND-CCA2).
+  In a CCA2 setting, the adversary is asked to determine whether a given
+  (symmetric) key is (1) encapsulated by a given ciphertext or (2) independently
+  sampled at random (from dkey).
+*)
+(** Adversary class considered for IND-CCA2 **)
 module type Adv_INDCCA2 (O : Oracles_CCA2) = { 
   proc scout(pk : pk_t) : unit { O.decaps1 } 
   proc distinguish(k : key_t, c : ctxt_t) : bool { O.decaps2 }
 }.
 
+(** IND-CCA2 security game (sampled bit) **)
 module IND_CCA2 (S : Scheme, O : Oracles_CCA2i, A : Adv_INDCCA2) = {
   proc main() : bool = {
     var pk : pk_t;
@@ -334,24 +745,273 @@ module IND_CCA2 (S : Scheme, O : Oracles_CCA2i, A : Adv_INDCCA2) = {
   }
 }.
 
+(** IND-CCA2 security game (provided bit) **)
+module IND_CCA2_P (S : Scheme, O : Oracles_CCA2i, A : Adv_INDCCA2) = {
+  proc main(b : bool) : bool = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var b' : bool;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    
+    (pk, sk) <@ S.keygen();
+    O.init1(sk);
+    
+    A(O).scout(pk);
+    
+    (k, c) <@ S.encaps(pk);
+    k' <$ dkey;
+    O.init2(c);
+    
+    b' <@ A(O).distinguish(if b then k' else k, c);
+    
+    return b' = b; 
+  }
+}.
+
 
 (*
-  Binding (Bind)
+  (ciphertext) Non-Malleability under adaptive Chosen-Ciphertext Attacks (NM-CCA2).
+  In a CCA2 setting, given a ciphertext (encapsulating some key K), the adversary is 
+  asked to provide a relation R and a list of ciphertexts such that the (symmetric) keys 
+  resulting from decapsulating the ciphertexts (in the list) are related (through R) with
+  K (significantly) more often than with a (symmetric) key that is independently sampled
+  at random.
 *)
-(**
-  Abbreviation for binding break check.
-  I.e., used to check whether binding sources (bs) are equal while, simultaneously,
-  binding targets (bt) are unequal.
-**)
-abbrev bb (bs : 'a * 'a) (bt : 'b * 'b) : bool =
-  bs.`1 = bs.`2 /\ bt.`1 <> bt.`2.
+(** Adversary class considered for NM-CCA2 **)
+module type Adv_NMCCA2 (O : Oracles_CCA2) = {
+  proc scout(pk : pk_t) : unit { O.decaps1 }
+  proc find(c : ctxt_t) : (key_t -> key_t option list -> bool) * ctxt_t list { O.decaps2 }
+}.
 
-(* Honestly binding *)
+(** NM-CCA2 security game (sampled bit) **)
+module NM_CCA2 (S : Scheme, O : Oracles_CCA2i, A : Adv_NMCCA2) = {
+  proc main() = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    var rel : key_t -> key_t option list -> bool;
+    var cl : ctxt_t list;
+    var ko : key_t option;
+    var kol : key_t option list;
+    var b : bool;
+    
+    (pk, sk) <@ S.keygen();
+    O.init1(sk);
+    
+    A(O).scout(pk);
+    
+    (k, c) <@ S.encaps(pk);
+    k' <$ dkey;
+    O.init2(c);
+    
+    (rel, cl) <@ A(O).find(c);
+    
+    kol <- [];
+    while (size kol < size cl) {
+      ko <@ S.decaps(sk, nth witness cl (size kol));
+      kol <- rcons kol ko;
+    }
+    
+    b <$ {0,1};
+    
+    return !(c \in cl) /\ rel (if b then k' else k) kol;
+  }
+}.
+
+(** NM-CCA2 security game (provided bit) **)
+module NM_CCA2_P (S : Scheme, O : Oracles_CCA2i, A : Adv_NMCCA2) = {
+  proc main(b : bool) = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    var rel : key_t -> key_t option list -> bool;
+    var cl : ctxt_t list;
+    var ko : key_t option;
+    var kol : key_t option list;
+        
+    (pk, sk) <@ S.keygen();
+    O.init1(sk);
+    
+    A(O).scout(pk);
+    
+    (k, c) <@ S.encaps(pk);
+    k' <$ dkey;
+    O.init2(c);
+    
+    (rel, cl) <@ A(O).find(c);
+    
+    kol <- [];
+    while (size kol < size cl) {
+      ko <@ S.decaps(sk, nth witness cl (size kol));
+      kol <- rcons kol ko;
+    }
+    
+    return !(c \in cl) /\ rel (if b then k' else k) kol;
+  }
+}.
+
+
+(*
+  (ciphertext) Strong Non-Malleability under adaptive Chosen-Ciphertext Attacks (SNM-CCA2).
+  As NM-CCA2, but the adversary is additionally given a pair of (symmetric) keys of
+  which one is independently sampled at random, and the other is the one
+  encapsulated by the given ciphertext. (The order in which they appear in the pair
+  is (uniformly) random).
+*)
+(** Adversary class considered for SNM-CCA2 **)
+module type Adv_SNMCCA2 (O : Oracles_CCA2) = {
+  proc scout(pk : pk_t) : unit { O.decaps1 }
+  proc find(c : ctxt_t, kk : key_t * key_t) : (key_t -> key_t option list -> bool) * ctxt_t list { O.decaps2 }
+}.
+
+(** SNM-CCA2 security game **)
+module SNM_CCA2 (S : Scheme, O : Oracles_CCA2i, A : Adv_SNMCCA2) = {
+  proc main() = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    var rel : key_t -> key_t option list -> bool;
+    var cl : ctxt_t list;
+    var ko : key_t option;
+    var kol : key_t option list;
+    var b, o : bool;
+    
+    (pk, sk) <@ S.keygen();
+    O.init1(sk);
+    
+    A(O).scout(pk);
+
+    (k, c) <@ S.encaps(pk);
+    k' <$ dkey;
+
+    o <$ {0,1};
+    (rel, cl) <@ A(O).find(c, if o then (k', k) else (k, k'));
+    
+    kol <- [];
+    while (size kol < size cl) {
+      ko <@ S.decaps(sk, nth witness cl (size kol));
+      kol <- rcons kol ko;
+    }
+    
+    b <$ {0,1};
+    
+    return !(c \in cl) /\ rel (if b then k' else k) kol;
+  }
+}.
+
+
+(** SNM-CCA2 security game (provided bit) **)
+module SNM_CCA2_P (S : Scheme, O : Oracles_CCA2i, A : Adv_SNMCCA2) = {
+  proc main(b : bool) = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    var rel : key_t -> key_t option list -> bool;
+    var cl : ctxt_t list;
+    var ko : key_t option;
+    var kol : key_t option list;
+    var o : bool;
+    
+    (pk, sk) <@ S.keygen();
+    O.init1(sk);
+    
+    A(O).scout(pk);
+
+    (k, c) <@ S.encaps(pk);
+    k' <$ dkey;
+
+    o <$ {0,1};
+    (rel, cl) <@ A(O).find(c, if o then (k', k) else (k, k'));
+    
+    kol <- [];
+    while (size kol < size cl) {
+      ko <@ S.decaps(sk, nth witness cl (size kol));
+      kol <- rcons kol ko;
+    }
+    
+    return !(c \in cl) /\ rel (if b then k' else k) kol;
+  }
+}.
+
+
+
+(*
+  BINDing (BIND).
+  Intuitively, binding properties capture to which extent certain artifacts (in a 
+  a non-failing KEM execution) uniquely determine other artifacts (in that same execution). 
+  That is, given the values of certain artifacts (e.g., the public key and ciphertext) produced
+  by honest execution of the KEM, it is hard to find different
+  values for some other artifact (e.g., the symmetric key) that would all
+  result in non-failing executions. Here, "non-failing" refers to the fact that the decapsulations
+  do not fail (and, hence, return a proper (symmetric) key).
+  For example, if a particular KEM has the property that "the ciphertext binds 
+  the (symmetric) key", this means that whenever a particular ciphertext C is created
+  with this KEM, it is hard to find different symmetric keys K0 and K1 such that C can
+  (validly) decapsulate to K0 *and* K1 (under different secret keys).
+*)
+(* Types *)
+(** Binding configurations considered **)
+type bindconf = [
+    K_Binds_PK
+  | K_Binds_CT
+  | CT_Binds_K
+  | CT_Binds_PK
+  | KCT_Binds_PK
+  | PKK_Binds_CT
+  | PKCT_Binds_K
+].
+
+
+(* Operators *)
+(** 
+  Checks whether binding configuration considers
+  the public key as a binding source element 
+**)
+op is_pkbc (bc : bindconf) =
+  bc = PKK_Binds_CT \/ bc = PKCT_Binds_K.
+
+(** 
+  Checks whether the provided values consitute a binding break w.r.t. the
+  given binding configuration.
+**)
+(** 
+  Specifically, if the configuration is P_Binds_Q, then the provided values consitute
+  a binding break iff the similarly-typed values (for the artifacts) in P are equal 
+  *and* there exist similarly-typed values (for the artifacts) in Q that are unequal. 
+**)
+(**
+  Note that this does not include the check concerning the validity of the (symmetric)
+  keys (i.e., success of the decapsulations); this is delegated to the security games.
+**)
+op is_bindbreak (bc : bindconf) (k0 k1 : key_t) (pk0 pk1 : pk_t) (c0 c1 : ctxt_t) =
+  with bc = K_Binds_PK => k0 = k1 /\ pk0 <> pk1
+  with bc = K_Binds_CT => k0 = k1 /\ c0 <> c1
+  with bc = CT_Binds_K => c0 = c1 /\ k0 <> k1  
+  with bc = CT_Binds_PK => c0 = c1 /\ pk0 <> pk1
+  with bc = KCT_Binds_PK => k0 = k1 /\ c0 = c1 /\ pk0 <> pk1
+  with bc = PKK_Binds_CT => pk0 = pk1 /\ k0 = k1 /\ c0 <> c1
+  with bc = PKCT_Binds_K => pk0 = pk1 /\ c0 = c1 /\ k0 <> k1.
+
+
+(* 
+  HONestly BINDing (HON-BIND).
+  Binding properties where the adversary is given two honestly generated public keys,
+  as well as a decapsulation oracle with which it can decapsulate
+  w.r.t. the corresponding secret keys.
+*)
+(* Oracles *)
+(** Interface for oracles employed in HON-BIND security games **)
 module type Oracles_HONBINDi = {
   proc init(sk0_init : sk_t, sk1_init : sk_t) : unit
   proc decaps(b : bool, c : ctxt_t) : key_t option
 }.
 
+(** A default implementation for the oracles employed in HON-BIND security games **)
 module O_HONBIND_Default (S : Scheme) : Oracles_HONBINDi = {
   var sk0, sk1 : sk_t
   var qs : (bool * ctxt_t * key_t option) list
@@ -373,465 +1033,240 @@ module O_HONBIND_Default (S : Scheme) : Oracles_HONBINDi = {
   }
 }.
 
-module type Oracle_HONBIND = {
+(** Interface for oracles given to the adversary in HON-BIND security games **)
+module type Oracles_HONBIND = {
   include Oracles_HONBINDi [-init]
 }.
 
-module type Adv_HONBIND (O : Oracle_HONBIND) = {
+(** Adversary class considered for HON-BIND **)
+module type Adv_HONBIND (O : Oracles_HONBIND) = {
   proc find(pk0 : pk_t, pk1 : pk_t) : ctxt_t * ctxt_t
 }.
+
+(** HON-BIND security game (specific configuration is passed to the procedure) **)
+module HON_BIND (S : Scheme, O : Oracles_HONBINDi, A : Adv_HONBIND) = {
+  proc main(bc : bindconf) = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+    var no_fail: bool;
+    
+    (pk0, sk0) <@ S.keygen();
+    
+    if (is_pkbc bc) {
+      (pk1, sk1) <@ S.keygen();
+    } else {
+      (pk1, sk1) <- (pk0, sk0);
+    }
+    
+    O.init(sk0, sk1);
+    
+    (c0, c1) <@ A(O).find(pk0, pk1);
+    
+    k0 <@ S.decaps(sk0, c0);
+    k1 <@ S.decaps(sk1, c1);
+    
+    no_fail <- k0 <> None /\ k1 <> None;
+    
+    return no_fail /\ is_bindbreak bc (oget k0) (oget k1) pk0 pk1 c0 c1;
+  }
+}.
+
+
 (*
-module HON_BIND_PK_K (S : Scheme, O : Oracles_HONBINDi, A : Adv_HONBIND) = {
-  proc main() : bool = {
-    var pk : pk_t;
-    var sk : sk_t;
-    var c0, c1 : ctxt_t;
-    var k0, k1 : key_t option;
-    
-    (pk, sk) <@ S.keygen();
-    O.init(sk, sk);
-    
-    (c0, c1) <@ A(O).find(pk, pk);
-    
-    k0 <@ S.decaps(sk, c0);
-    k1 <@ S.decaps(sk, c1);
-    
-    return k0 <> None /\ k1 <> None /\ k0 <> k1;
-  }
-}.
-
-module HON_BIND_PK_CT (S : Scheme, O : Oracles_HONBINDi, A : Adv_HONBIND) = {
-  proc main() : bool = {
-    var pk : pk_t;
-    var sk : sk_t;
-    var c0, c1 : ctxt_t;
-    var k0, k1 : key_t option;
-        
-    (pk, sk) <@ S.keygen();
-    O.init(sk, sk);
-    
-    (c0, c1) <@ A(O).find(pk, pk);
-    
-    k0 <@ S.decaps(sk, c0);
-    k1 <@ S.decaps(sk, c1);
-    
-    return k0 <> None /\ k1 <> None /\ c0 <> c1;
-  }
-}.
+  LEAKingly BINDing (LEAK-BIND).
+  Binding properties where the adversary is given two
+  honestly generated (asymmetric) key pairs.
 *)
-
-module HON_BIND_K_PK (S : Scheme, O : Oracles_HONBINDi, A : Adv_HONBIND) = {
-  proc main() = {
-    var pk0, pk1 : pk_t;
-    var sk0, sk1 : sk_t;
-    var c0, c1 : ctxt_t;
-    var k0, k1 : key_t option;
-    
-    (pk0, sk0) <@ S.keygen();
-    (pk1, sk1) <@ S.keygen();
-    O.init(sk0, sk1);
-    
-    (c0, c1) <@ A(O).find(pk0, pk1);
-    
-    k0 <@ S.decaps(sk0, c0);
-    k1 <@ S.decaps(sk1, c1);
-    
-    return k0 <> None /\ k1 <> None /\ bb (k0, k1) (pk0, pk1);
-  }
-}.
-
-module HON_BIND_K_CT (S : Scheme, O : Oracles_HONBINDi, A : Adv_HONBIND) = {
-  proc main() = {
-    var pk0, pk1 : pk_t;
-    var sk0, sk1 : sk_t;
-    var c0, c1 : ctxt_t;
-    var k0, k1 : key_t option;
-    
-    (pk0, sk0) <@ S.keygen();
-    (pk1, sk1) <@ S.keygen();
-    O.init(sk0, sk1);
-    
-    (c0, c1) <@ A(O).find(pk0, pk1);
-    
-    k0 <@ S.decaps(sk0, c0);
-    k1 <@ S.decaps(sk1, c1);
-    
-    return k0 <> None /\ k1 <> None /\ bb (k0, k1) (c0, c1);
-  }
-}.
-
-module HON_BIND_CT_K (S : Scheme, O : Oracles_HONBINDi, A : Adv_HONBIND) = {
-  proc main() = {
-    var pk0, pk1 : pk_t;
-    var sk0, sk1 : sk_t;
-    var c0, c1 : ctxt_t;
-    var k0, k1 : key_t option;
-    
-    (pk0, sk0) <@ S.keygen();
-    (pk1, sk1) <@ S.keygen();
-    O.init(sk0, sk1);
-    
-    (c0, c1) <@ A(O).find(pk0, pk1);
-    
-    k0 <@ S.decaps(sk0, c0);
-    k1 <@ S.decaps(sk1, c1);
-    
-    return k0 <> None /\ k1 <> None /\ bb (c0, c1) (k0, k1);
-  }
-}.
-
-module HON_BIND_CT_PK (S : Scheme, O : Oracles_HONBINDi, A : Adv_HONBIND) = {
-  proc main() = {
-    var pk0, pk1 : pk_t;
-    var sk0, sk1 : sk_t;
-    var c0, c1 : ctxt_t;
-    var k0, k1 : key_t option;
-    
-    (pk0, sk0) <@ S.keygen();
-    (pk1, sk1) <@ S.keygen();
-    O.init(sk0, sk1);
-    
-    (c0, c1) <@ A(O).find(pk0, pk1);
-    
-    k0 <@ S.decaps(sk0, c0);
-    k1 <@ S.decaps(sk1, c1);
-    
-    return k0 <> None /\ k1 <> None /\ bb (c0, c1) (pk0, pk1);
-  }
-}.
-
-module HON_BIND_KCT_PK (S : Scheme, O : Oracles_HONBINDi, A : Adv_HONBIND) = {
-  proc main() = {
-    var pk0, pk1 : pk_t;
-    var sk0, sk1 : sk_t;
-    var c0, c1 : ctxt_t;
-    var k0, k1 : key_t option;
-    
-    (pk0, sk0) <@ S.keygen();
-    (pk1, sk1) <@ S.keygen();
-    O.init(sk0, sk1);
-    
-    (c0, c1) <@ A(O).find(pk0, pk1);
-    
-    k0 <@ S.decaps(sk0, c0);
-    k1 <@ S.decaps(sk1, c1);
-    
-    return k0 <> None /\ k1 <> None /\ bb ((k0, c0), (k1, c1)) (pk0, pk1);
-  }
-}.
-
-module HON_BIND_KPK_CT (S : Scheme, O : Oracles_HONBINDi, A : Adv_HONBIND) = {
-  proc main() = {
-    var pk : pk_t;
-    var sk : sk_t;
-    var c0, c1 : ctxt_t;
-    var k0, k1 : key_t option;
-    
-    (pk, sk) <@ S.keygen();
-    O.init(sk, sk);
-    
-    (c0, c1) <@ A(O).find(pk, pk);
-    
-    k0 <@ S.decaps(sk, c0);
-    k1 <@ S.decaps(sk, c1);
-    
-    return k0 <> None /\ k1 <> None /\ bb ((k0, pk), (k1, pk)) (c0, c1);
-  }
-}.
-
-(* "Sanity check" *)
-module HON_BIND_PKCT_K (S : Scheme, O : Oracles_HONBINDi, A : Adv_HONBIND) = {
-  proc main() = {
-    var pk, pk1 : pk_t;
-    var sk, sk1 : sk_t;
-    var c0, c1 : ctxt_t;
-    var k0, k1 : key_t option;
-    
-    (pk, sk) <@ S.keygen();
-    O.init(sk, sk);
-    
-    (c0, c1) <@ A(O).find(pk, pk);
-    
-    k0 <@ S.decaps(sk, c0);
-    k1 <@ S.decaps(sk, c1);
-    
-    return k0 <> None /\ k1 <> None /\ bb ((c0, pk), (c1, pk)) (k0, k1);
-  }
-}.
-
-(* Leakingly binding *)
+(** Adversary class considered for LEAK-BIND **)
 module type Adv_LEAKBIND= {
   proc find(pk0 : pk_t, sk0 : sk_t, pk1 : pk_t, sk1 : sk_t) : ctxt_t * ctxt_t
 }.
 
-module LEAK_BIND_K_PK (S : Scheme, A : Adv_LEAKBIND) = {
-  proc main() = {
+(** LEAK-BIND security game (specific configuration is passed to the procedure) **)
+module LEAK_BIND (S : Scheme, A : Adv_LEAKBIND) = {
+  proc main(bc : bindconf) = {
     var pk0, pk1 : pk_t;
     var sk0, sk1 : sk_t;
     var c0, c1 : ctxt_t;
     var k0, k1 : key_t option;
+    var no_fail : bool;
     
     (pk0, sk0) <@ S.keygen();
-    (pk1, sk1) <@ S.keygen();
+    
+    if (is_pkbc bc) {
+      (pk1, sk1) <@ S.keygen();
+    } else {
+      (pk1, sk1) <- (pk0, sk0);
+    }
     
     (c0, c1) <@ A.find(pk0, sk0, pk1, sk1);
     
     k0 <@ S.decaps(sk0, c0);
     k1 <@ S.decaps(sk1, c1);
     
-    return k0 <> None /\ k1 <> None /\ bb (k0, k1) (pk0, pk1);
-  }
-}.
-
-module LEAK_BIND_K_CT (S : Scheme, A : Adv_LEAKBIND) = {
-  proc main() = {
-    var pk0, pk1 : pk_t;
-    var sk0, sk1 : sk_t;
-    var c0, c1 : ctxt_t;
-    var k0, k1 : key_t option;
+    no_fail <- k0 <> None /\ k1 <> None;
     
-    (pk0, sk0) <@ S.keygen();
-    (pk1, sk1) <@ S.keygen();
-    
-    (c0, c1) <@ A.find(pk0, sk0, pk1, sk1);
-    
-    k0 <@ S.decaps(sk0, c0);
-    k1 <@ S.decaps(sk1, c1);
-    
-    return k0 <> None /\ k1 <> None /\ bb (k0, k1) (c0, c1);
-  }
-}.
-
-module LEAK_BIND_CT_K (S : Scheme, A : Adv_LEAKBIND) = {
-  proc main() = {
-    var pk0, pk1 : pk_t;
-    var sk0, sk1 : sk_t;
-    var c0, c1 : ctxt_t;
-    var k0, k1 : key_t option;
-    
-    (pk0, sk0) <@ S.keygen();
-    (pk1, sk1) <@ S.keygen();
-    
-    (c0, c1) <@ A.find(pk0, sk0, pk1, sk1);
-    
-    k0 <@ S.decaps(sk0, c0);
-    k1 <@ S.decaps(sk1, c1);
-    
-    return k0 <> None /\ k1 <> None /\ bb (c0, c1) (k0, k1);
-  }
-}.
-
-module LEAK_BIND_CT_PK (S : Scheme, A : Adv_LEAKBIND) = {
-  proc main() = {
-    var pk0, pk1 : pk_t;
-    var sk0, sk1 : sk_t;
-    var c0, c1 : ctxt_t;
-    var k0, k1 : key_t option;
-    
-    (pk0, sk0) <@ S.keygen();
-    (pk1, sk1) <@ S.keygen();
-    
-    (c0, c1) <@ A.find(pk0, sk0, pk1, sk1);
-    
-    k0 <@ S.decaps(sk0, c0);
-    k1 <@ S.decaps(sk1, c1);
-    
-    return k0 <> None /\ k1 <> None /\ bb (c0, c1) (pk0, pk1);
-  }
-}.
-
-module LEAK_BIND_KCT_PK (S : Scheme, A : Adv_LEAKBIND) = {
-  proc main() = {
-    var pk0, pk1 : pk_t;
-    var sk0, sk1 : sk_t;
-    var c0, c1 : ctxt_t;
-    var k0, k1 : key_t option;
-    
-    (pk0, sk0) <@ S.keygen();
-    (pk1, sk1) <@ S.keygen();
-    
-    (c0, c1) <@ A.find(pk0, sk0, pk1, sk1);
-    
-    k0 <@ S.decaps(sk0, c0);
-    k1 <@ S.decaps(sk1, c1);
-    
-    return k0 <> None /\ k1 <> None /\ bb ((k0, c0), (k1, c1)) (pk0, pk1);
-  }
-}.
-
-module LEAK_BIND_KPK_CT (S : Scheme, A : Adv_LEAKBIND) = {
-  proc main() = {
-    var pk : pk_t;
-    var sk : sk_t;
-    var c0, c1 : ctxt_t;
-    var k0, k1 : key_t option;
-    
-    (pk, sk) <@ S.keygen();
-    
-    (c0, c1) <@ A.find(pk, sk, pk, sk);
-    
-    k0 <@ S.decaps(sk, c0);
-    k1 <@ S.decaps(sk, c1);
-    
-    return k0 <> None /\ k1 <> None /\ bb ((k0, pk), (k1, pk)) (c0, c1);
-  }
-}.
-
-(* "Sanity check" *)
-module LEAK_BIND_PKCT_K (S : Scheme, A : Adv_LEAKBIND) = {
-  proc main() = {
-    var pk, pk1 : pk_t;
-    var sk, sk1 : sk_t;
-    var c0, c1 : ctxt_t;
-    var k0, k1 : key_t option;
-    
-    (pk, sk) <@ S.keygen();
-    
-    (c0, c1) <@ A.find(pk, sk, pk, sk);
-    
-    k0 <@ S.decaps(sk, c0);
-    k1 <@ S.decaps(sk, c1);
-    
-    return k0 <> None /\ k1 <> None /\ bb ((c0, pk), (c1, pk)) (k0, k1);
+    return no_fail /\ is_bindbreak bc (oget k0) (oget k1) pk0 pk1 c0 c1;
   }
 }.
 
 
+(*
+  TODO:
+  Want to split Decaps/Decaps, Encaps/Decaps, Encaps/Encaps cases?
+  Seems cleaner (also cuz it seems to model slightly different scenarios?)
+  However, can combine if better.
+*)
+(**
+  MALiciously BINDing (MAL-BIND).
+  Binding properties where the adversary provides the 
+  considered (asymmetric) key material itself.
+**)
 abstract theory MALBIND.
-
+(* Operators *)
+(** Derives (honestly) the public key corresponding to a secret key **)
+(** 
+  Using this, we can let the adversary (in the MAL-BIND properties) only provide
+  the to-be-considered (asymmetric) secret keys, and then honestly compute
+  the corresponding public key ourselves. This allows
+  us to meaningfully include binding properties involving the public key.
+**)
+(** 
+  Note: for the properties to make sense, this operator 
+  should be instantiated to something that actually derives
+  public keys from (honestly generated) secret keys for the considered KEM. 
+**)
 op sk2pk : sk_t -> pk_t.
 
+
+(* 
+  MALiciously BINDing w.r.t. Decapsulation/Decapsulation (MAL-BIND-DD).
+  In a MAL-BIND setting, the adversary is asked to provide two ciphertext
+  (to be decapsulated) as to induce a binding break (w.r.t. the considered configuration).
+*)
+(** Adversary class considered for MAL-BIND-DD **)
 module type Adv_MALBIND_DD = {
   proc find() : sk_t * sk_t * ctxt_t * ctxt_t
 }.
 
-module MAL_BIND_DD_K_PK (S : Scheme, A : Adv_MALBIND_DD) = {
-  proc main() = {
+(** MAL-BIND-DD security game (specific configuration is passed to the procedure) **)
+module MAL_BIND_DD (S : Scheme, A : Adv_MALBIND_DD) = {
+  proc main(bc : bindconf) : bool = {
     var sk0, sk1 : sk_t;
     var c0, c1 : ctxt_t;
     var k0, k1 : key_t option;
     var pk0, pk1 : pk_t;
+    var no_fail : bool;
     
     (sk0, sk1, c0, c1) <@ A.find();
-    
-    k0 <@ S.decaps(sk0, c0);
-    k1 <@ S.decaps(sk1, c1);
     
     pk0 <- sk2pk sk0;
     pk1 <- sk2pk sk1;
     
-    return k0 <> None /\ k1 <> None /\ bb (k0, k1) (pk0, pk1);
-  }
-}.
-
-module MAL_BIND_DD_K_CT (S : Scheme, A : Adv_MALBIND_DD) = {
-  proc main() = {
-    var sk0, sk1 : sk_t;
-    var c0, c1 : ctxt_t;
-    var k0, k1 : key_t option;
-    var pk0, pk1 : pk_t;
-    
-    (sk0, sk1, c0, c1) <@ A.find();
-    
     k0 <@ S.decaps(sk0, c0);
     k1 <@ S.decaps(sk1, c1);
     
-    return k0 <> None /\ k1 <> None /\ bb (k0, k1) (c0, c1);
+    no_fail <- k0 <> None /\ k1 <> None;
+    
+    return no_fail /\ is_bindbreak bc (oget k0) (oget k1) pk0 pk1 c0 c1;
   }
 }.
 
-module MAL_BIND_DD_CT_K (S : Scheme, A : Adv_MALBIND_DD) = {
-  proc main() = {
-    var sk0, sk1 : sk_t;
-    var c0, c1 : ctxt_t;
-    var k0, k1 : key_t option;
-    var pk0, pk1 : pk_t;
-    
-    (sk0, sk1, c0, c1) <@ A.find();
-    
-    k0 <@ S.decaps(sk0, c0);
-    k1 <@ S.decaps(sk1, c1);
-    
-    return k0 <> None /\ k1 <> None /\ bb (c0, c1) (k0, k1);
-  }
+
+(*
+  In the remaining MAL-BIND properties, the adversary is asked to provide 
+  the randomness used in encapsulation(s). That is, these properties need 
+  to consider "derandomized" encapsulation procedures, taking the randomness 
+  as additional input (instead of generating it on the fly).
+  To this end, we specify a module type for KEMs that is identical to the 
+  original one with an appropriately adjusted encapsulation procedure.
+  Be aware that the following properties only make sense for KEMs of which
+  the encapsulation procedure actually employs the provided randomness.
+  (This is not actually enforced by the module type.)
+*)
+(* Types *)
+(** Randomness (for encapsulation procedure) **)
+type rand_t.
+
+
+(* Module types *)
+(** "Derandomized" KEM (interface) **)
+module type SchemeDerand = {
+  include Scheme [-encaps]
+  proc encaps(pk : pk_t, r : rand_t) : key_t * ctxt_t
 }.
 
-module MAL_BIND_DD_CT_PK (S : Scheme, A : Adv_MALBIND_DD) = {
-  proc main() = {
+
+(*
+  MALiciously BINDing w.r.t. Encapsulation/Decapsulation (MAL-BIND-ED)
+  In a MAL-BIND setting, the adversary is asked to provide 
+  randomness and a ciphertext (to be used in encapsulation and 
+  decapsulation, respectively) as to induce a binding break 
+  (w.r.t. the considered configuration).
+*)
+(** Adversary class considered for MAL-BIND-ED **)
+module type Adv_MALBIND_ED = {
+  proc find() : sk_t * sk_t * rand_t * ctxt_t
+}.
+
+(** MAL-BIND-ED security game (specific configuration is passed to the procedure) **)
+module MAL_BIND_ED (S : SchemeDerand, A : Adv_MALBIND_ED) = {
+  proc main(bc : bindconf) : bool = {
     var sk0, sk1 : sk_t;
+    var r : rand_t;
     var c0, c1 : ctxt_t;
-    var k0, k1 : key_t option;
+    var k0 : key_t;
+    var k1 : key_t option;
     var pk0, pk1 : pk_t;
+    var no_fail : bool;
     
-    (sk0, sk1, c0, c1) <@ A.find();
-    
-    k0 <@ S.decaps(sk0, c0);
-    k1 <@ S.decaps(sk1, c1);
+    (sk0, sk1, r, c1) <@ A.find();
     
     pk0 <- sk2pk sk0;
     pk1 <- sk2pk sk1;
     
-    return k0 <> None /\ k1 <> None /\ bb (c0, c1) (pk0, pk1);
+    (k0, c0) <@ S.encaps(pk0, r);
+    k1 <@ S.decaps(sk1, c1);
+    
+    no_fail <- k1 <> None;
+    
+    return no_fail /\ is_bindbreak bc k0 (oget k1) pk0 pk1 c0 c1;
   }
 }.
 
-module MAL_BIND_DD_KCT_PK (S : Scheme, A : Adv_MALBIND_DD) = {
-  proc main() = {
+
+(*
+  MALiciously BINDing w.r.t. Encapsulation/Encapsulation (MAL-BIND-EE)
+  In a MAL-BIND setting, the adversary is asked to provide
+  randomness (to be used in encapsulations) as to induce a binding break 
+  (w.r.t. the considered configuration).
+*)
+(** Adversary class considered for MAL-BIND-EE **)
+module type Adv_MALBIND_EE = {
+  proc find() : sk_t * sk_t * rand_t * rand_t
+}.
+
+(** MAL-BIND-EE security game (specific configuration is passed to the procedure) **)
+module MAL_BIND_EE (S : SchemeDerand, A : Adv_MALBIND_EE) = {
+  proc main(bc : bindconf) : bool = {
     var sk0, sk1 : sk_t;
+    var r0, r1 : rand_t;
     var c0, c1 : ctxt_t;
-    var k0, k1 : key_t option;
+    var k0, k1 : key_t;
     var pk0, pk1 : pk_t;
     
-    (sk0, sk1, c0, c1) <@ A.find();
-    
-    k0 <@ S.decaps(sk0, c0);
-    k1 <@ S.decaps(sk1, c1);
+    (sk0, sk1, r0, r1) <@ A.find();
     
     pk0 <- sk2pk sk0;
     pk1 <- sk2pk sk1;
     
-    return k0 <> None /\ k1 <> None /\ bb ((k0, c0), (k1, c1)) (pk0, pk1);
+    (k0, c0) <@ S.encaps(pk0, r0);
+    (k1, c1) <@ S.encaps(pk1, r1);
+
+    return is_bindbreak bc k0 k1 pk0 pk1 c0 c1;
   }
 }.
-
-module MAL_BIND_DD_KPK_CT (S : Scheme, A : Adv_MALBIND_DD) = {
-  proc main() = {
-    var sk0, sk1 : sk_t;
-    var c0, c1 : ctxt_t;
-    var k0, k1 : key_t option;
-    var pk0, pk1 : pk_t;
-    
-    (sk0, sk1, c0, c1) <@ A.find();
-    
-    k0 <@ S.decaps(sk0, c0);
-    k1 <@ S.decaps(sk1, c1);
-    
-    pk0 <- sk2pk sk0;
-    pk1 <- sk2pk sk1;
-    
-    return k0 <> None /\ k1 <> None /\ bb ((k0, pk0), (k1, pk1)) (c0, c1);
-  }
-}.
-
-(* "Sanity check" *)
-module MAL_BIND_DD_PKCT_K (S : Scheme, A : Adv_MALBIND_DD) = {
-  proc main() = {
-    var sk0, sk1 : sk_t;
-    var c0, c1 : ctxt_t;
-    var k0, k1 : key_t option;
-    var pk0, pk1 : pk_t;
-    
-    (sk0, sk1, c0, c1) <@ A.find();
-    
-    k0 <@ S.decaps(sk0, c0);
-    k1 <@ S.decaps(sk1, c1);
-    
-    pk0 <- sk2pk sk0;
-    pk1 <- sk2pk sk1;
-    
-    return k0 <> None /\ k1 <> None /\ bb ((k0, pk0), (k1, pk1)) (c0, c1);
-  }
-}.
-
 
 end MALBIND.
