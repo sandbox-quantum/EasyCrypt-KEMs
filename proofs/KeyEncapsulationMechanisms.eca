@@ -1,6 +1,7 @@
 (*^
-  This library aims to generically define Key Encapsulation Mechanisms (KEMs)
+  This library generically defines Key Encapsulation Mechanisms (KEMs)
   and their properties (both correctness and security).
+  For convenience, it also provides some sensible defaults, particularly for oracles.
   Most of the content is based on relevant literature.
   More precisely, (almost) all of the content is extracted from 
   one or more of the following papers (in no particular order):
@@ -64,14 +65,15 @@ module Correctness (S : Scheme) = {
 }.
 
 
-
 (* 
   Chosen-Plaintext Attacks (CPA).
   The adversary is given the considered public key and, hence, 
-  is able to produce ciphertexts corresponding to chosen (symmetric) keys.
+  is able to produce (symmetric) key/ciphertext pairs. 
+  (Typically, this means the adversary can construct ciphetexts
+   corresponding to chosen (symmetric) keys.)
 *)
 (*
-  One-Way under Chosen-Plaintext Attacks (OW-CPA).
+  One-Wayness under Chosen-Plaintext Attacks (OW-CPA).
   In a CPA setting, the adversary is asked to produce the (symmetric) key
   encapsulated by a given ciphertext.
 *)
@@ -306,11 +308,10 @@ module SNM_CPA_P (S : Scheme, A : Adv_SNMCPA) = {
 }.
 
 
-
 (* 
-  (Non-Adaptive) Chosen-Ciphertext Attacks (CCA1)
+  non-adaptive Chosen-Ciphertext Attacks (CCA1)
   The adversary is given the considered public key and access to a decryption oracle
-  *before* the stage in which it is expected to return a break.
+  *before* the stage in which it is expected to distinguish/return a break.
   Hence, the adversary is able to produce ciphertext corresponding to chosen plaintexts
   *and* query for decryptions of chosen ciphertexts.
 *)
@@ -349,7 +350,7 @@ module type Oracles_CCA1 = {
 
 
 (*
-  One-Way under Chosen-Ciphertext Attacks (OW-CCA1).
+  One-Wayness under Chosen-Ciphertext Attacks (OW-CCA1).
   In a CCA1 setting, the adversary is asked to produce the (symmetric) key
   encapsulated by a given ciphertext.
 *)
@@ -617,6 +618,7 @@ module SNM_CCA1_P (S : Scheme, O : Oracles_CCA1i, A : Adv_SNMCCA1) = {
   that are part of the challenge).
 *)
 (* Oracles *)
+(* Combined interface:
 (** Interface for oracles employed in CCA2 security games **)
 module type Oracles_CCA2i = {
   proc init1(sk_init : sk_t) : unit
@@ -624,7 +626,20 @@ module type Oracles_CCA2i = {
   proc decaps1(c : ctxt_t) : key_t option
   proc decaps2(c : ctxt_t) : key_t option
 }.
+*)
+(** Interface for oracles employed in (the first stage of) CCA2 security games **)
+module type Oracles_CCA2i1 = {
+  proc init(sk_init : sk_t) : unit
+  proc decaps(c : ctxt_t) : key_t option
+}.
 
+(** Interface for oracles employed in (the second stage of) CCA2 security games **)
+module type Oracles_CCA2i2 = {
+  proc init(sk_init : sk_t, c : ctxt_t) : unit
+  proc decaps(c : ctxt_t) : key_t option
+}.
+
+(* Combined interface:
 (** A default implementation for the oracles employed in CCA2 security games **)
 module O_CCA2_Default (S : Scheme) : Oracles_CCA2i = {
   var sk : sk_t
@@ -666,22 +681,79 @@ module O_CCA2_Default (S : Scheme) : Oracles_CCA2i = {
     return k;
   }
 }.
+*)
 
+(** A default implementation for the oracles employed in (the first stage of) CCA2 security games **)
+module O_CCA21_Default (S : Scheme) : Oracles_CCA2i1 = {
+  var sk : sk_t
+  var qs : (ctxt_t * key_t option) list
+  
+  proc init(sk_init : sk_t) = {
+    sk <- sk_init;
+    qs <- [];
+  }
+
+  proc decaps(c : ctxt_t) : key_t option = {
+    var k : key_t option;
+    
+    k <@ S.decaps(sk, c);
+    
+    qs <- rcons qs (c, k);
+    
+    return k;
+  }
+}.
+
+(** A default implementation for the oracles employed in (the second stage of) CCA2 security games **)
+module O_CCA22_Default (S : Scheme) : Oracles_CCA2i2 = {
+  var sk : sk_t
+  var c' : ctxt_t 
+  var qs : (ctxt_t * key_t option) list
+  
+  proc init(sk_init : sk_t, c'_init : ctxt_t) = {
+    sk <- sk_init;
+    c' <- c'_init;
+    qs <- [];
+  }
+  
+  proc decaps(c : ctxt_t) : key_t option = {
+    var k : key_t option;
+    
+    if (c <> c') {
+      k <@ S.decaps(sk, c);
+    } else {
+      k <- None;
+    }
+    
+    qs <- rcons qs (c, k);
+        
+    return k;
+  }
+}.
+
+(* Combined inteface:
 (** Interface for oracles given to the adversary in CCA2 security games **)
 module type Oracles_CCA2 = {
   include Oracles_CCA2i [-init1, init2]
 }.
+*)
+
+(** Interface for oracles given to the adversary in CCA2 security games **)
+module type Oracles_CCA2 = {
+  include Oracles_CCA2i2 [-init]
+}.
 
 
 (*
-  One-Way under adaptive Chosen-Ciphertext Attacks (OW-CCA2).
+  One-Wayness under adaptive Chosen-Ciphertext Attacks (OW-CCA2).
   In a CCA1 setting, the adversary is asked to produce the (symmetric) key
   encapsulated by a given ciphertext.
 *)
+(* Combined interface
 (** Adversary class considered for OW-CCA2 **)
 module type Adv_OWCCA2 (O : Oracles_CCA2) = { 
-  proc scout(pk : pk_t) : unit { O.decaps1 } 
-  proc find(c : ctxt_t) : key_t { O.decaps2 }
+  proc scout(pk : pk_t) : unit
+  proc find(c : ctxt_t) : key_t
 }.
 
 (** OW-CCA2 security game **)
@@ -705,6 +777,36 @@ module OW_CCA2 (S : Scheme, O : Oracles_CCA2i, A : Adv_OWCCA2) = {
     return k' = k; 
   }
 }.
+*)
+
+(** Adversary class considered for OW-CCA2 **)
+module type Adv_OWCCA2 (O : Oracles_CCA2) = { 
+  proc scout(pk : pk_t) : unit
+  proc find(c : ctxt_t) : key_t
+}.
+
+
+(** OW-CCA2 security game **)
+module OW_CCA2 (S : Scheme, O1 : Oracles_CCA2i1, O2 : Oracles_CCA2i2, A : Adv_OWCCA2) = {
+  proc main() : bool = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    
+    (pk, sk) <@ S.keygen();
+    O1.init(sk);
+    
+    A(O1).scout(pk);
+    
+    (k, c) <@ S.encaps(pk);
+    O2.init(sk, c);
+    
+    k' <@ A(O2).find(c);
+    
+    return k' = k; 
+  }
+}.
 
 
 (*
@@ -713,11 +815,13 @@ module OW_CCA2 (S : Scheme, O : Oracles_CCA2i, A : Adv_OWCCA2) = {
   (symmetric) key is (1) encapsulated by a given ciphertext or (2) independently
   sampled at random (from dkey).
 *)
+(* Combined interface
 (** Adversary class considered for IND-CCA2 **)
 module type Adv_INDCCA2 (O : Oracles_CCA2) = { 
   proc scout(pk : pk_t) : unit { O.decaps1 } 
   proc distinguish(k : key_t, c : ctxt_t) : bool { O.decaps2 }
 }.
+
 
 (** IND-CCA2 security game (sampled bit) **)
 module IND_CCA2 (S : Scheme, O : Oracles_CCA2i, A : Adv_INDCCA2) = {
@@ -768,7 +872,64 @@ module IND_CCA2_P (S : Scheme, O : Oracles_CCA2i, A : Adv_INDCCA2) = {
     return b' = b; 
   }
 }.
+*)
 
+(** Adversary class considered for IND-CCA2 **)
+module type Adv_INDCCA2 (O : Oracles_CCA2) = { 
+  proc scout(pk : pk_t) : unit
+  proc distinguish(k : key_t, c : ctxt_t) : bool
+}.
+
+
+(** IND-CCA2 security game (sampled bit) **)
+module IND_CCA2 (S : Scheme, O1 : Oracles_CCA2i1, O2 : Oracles_CCA2i2, A : Adv_INDCCA2) = {
+  proc main() : bool = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var b, b' : bool;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    
+    (pk, sk) <@ S.keygen();
+    O1.init(sk);
+    
+    A(O1).scout(pk);
+    
+    (k, c) <@ S.encaps(pk);
+    k' <$ dkey;
+    O2.init(sk, c);
+    
+    b <$ {0,1};
+    
+    b' <@ A(O2).distinguish(if b then k' else k, c);
+    
+    return b' = b; 
+  }
+}.
+
+(** IND-CCA2 security game (provided bit) **)
+module IND_CCA2_P (S : Scheme, O1 : Oracles_CCA2i1, O2 : Oracles_CCA2i2, A : Adv_INDCCA2) = {
+  proc main(b : bool) : bool = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var b' : bool;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    
+    (pk, sk) <@ S.keygen();
+    O1.init(sk);
+    
+    A(O1).scout(pk);
+    
+    (k, c) <@ S.encaps(pk);
+    k' <$ dkey;
+    O2.init(sk, c);
+    
+    b' <@ A(O2).distinguish(if b then k' else k, c);
+    
+    return b' = b; 
+  }
+}.
 
 (*
   (ciphertext) Non-Malleability under adaptive Chosen-Ciphertext Attacks (NM-CCA2).
@@ -778,6 +939,7 @@ module IND_CCA2_P (S : Scheme, O : Oracles_CCA2i, A : Adv_INDCCA2) = {
   K (significantly) more often than with a (symmetric) key that is independently sampled
   at random.
 *)
+(* Combined interface:
 (** Adversary class considered for NM-CCA2 **)
 module type Adv_NMCCA2 (O : Oracles_CCA2) = {
   proc scout(pk : pk_t) : unit { O.decaps1 }
@@ -852,6 +1014,82 @@ module NM_CCA2_P (S : Scheme, O : Oracles_CCA2i, A : Adv_NMCCA2) = {
     return !(c \in cl) /\ rel (if b then k' else k) kol;
   }
 }.
+*)
+
+(** Adversary class considered for NM-CCA2 **)
+module type Adv_NMCCA2 (O : Oracles_CCA2) = {
+  proc scout(pk : pk_t) : unit
+  proc find(c : ctxt_t) : (key_t -> key_t option list -> bool) * ctxt_t list
+}.
+
+(** NM-CCA2 security game (sampled bit) **)
+module NM_CCA2 (S : Scheme, O1 : Oracles_CCA2i1, O2 : Oracles_CCA2i2, A : Adv_NMCCA2) = {
+  proc main() = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    var rel : key_t -> key_t option list -> bool;
+    var cl : ctxt_t list;
+    var ko : key_t option;
+    var kol : key_t option list;
+    var b : bool;
+    
+    (pk, sk) <@ S.keygen();
+    O1.init(sk);
+    
+    A(O1).scout(pk);
+    
+    (k, c) <@ S.encaps(pk);
+    k' <$ dkey;
+    O2.init(sk, c);
+    
+    (rel, cl) <@ A(O1).find(c);
+    
+    kol <- [];
+    while (size kol < size cl) {
+      ko <@ S.decaps(sk, nth witness cl (size kol));
+      kol <- rcons kol ko;
+    }
+    
+    b <$ {0,1};
+    
+    return !(c \in cl) /\ rel (if b then k' else k) kol;
+  }
+}.
+
+(** NM-CCA2 security game (provided bit) **)
+module NM_CCA2_P (S : Scheme, O1 : Oracles_CCA2i1, O2 : Oracles_CCA2i2, A : Adv_NMCCA2) = {
+  proc main(b : bool) = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    var rel : key_t -> key_t option list -> bool;
+    var cl : ctxt_t list;
+    var ko : key_t option;
+    var kol : key_t option list;
+        
+    (pk, sk) <@ S.keygen();
+    O1.init(sk);
+    
+    A(O1).scout(pk);
+    
+    (k, c) <@ S.encaps(pk);
+    k' <$ dkey;
+    O2.init(sk, c);
+    
+    (rel, cl) <@ A(O2).find(c);
+    
+    kol <- [];
+    while (size kol < size cl) {
+      ko <@ S.decaps(sk, nth witness cl (size kol));
+      kol <- rcons kol ko;
+    }
+    
+    return !(c \in cl) /\ rel (if b then k' else k) kol;
+  }
+}.
 
 
 (*
@@ -861,6 +1099,7 @@ module NM_CCA2_P (S : Scheme, O : Oracles_CCA2i, A : Adv_NMCCA2) = {
   encapsulated by the given ciphertext. (The order in which they appear in the pair
   is (uniformly) random).
 *)
+(* Combined interface:
 (** Adversary class considered for SNM-CCA2 **)
 module type Adv_SNMCCA2 (O : Oracles_CCA2) = {
   proc scout(pk : pk_t) : unit { O.decaps1 }
@@ -887,6 +1126,7 @@ module SNM_CCA2 (S : Scheme, O : Oracles_CCA2i, A : Adv_SNMCCA2) = {
 
     (k, c) <@ S.encaps(pk);
     k' <$ dkey;
+    O.init2(c);
 
     o <$ {0,1};
     (rel, cl) <@ A(O).find(c, if o then (k', k) else (k, k'));
@@ -924,6 +1164,7 @@ module SNM_CCA2_P (S : Scheme, O : Oracles_CCA2i, A : Adv_SNMCCA2) = {
 
     (k, c) <@ S.encaps(pk);
     k' <$ dkey;
+    O.init2(c);
 
     o <$ {0,1};
     (rel, cl) <@ A(O).find(c, if o then (k', k) else (k, k'));
@@ -937,7 +1178,85 @@ module SNM_CCA2_P (S : Scheme, O : Oracles_CCA2i, A : Adv_SNMCCA2) = {
     return !(c \in cl) /\ rel (if b then k' else k) kol;
   }
 }.
+*)
 
+(** Adversary class considered for SNM-CCA2 **)
+module type Adv_SNMCCA2 (O : Oracles_CCA2) = {
+  proc scout(pk : pk_t) : unit
+  proc find(c : ctxt_t, kk : key_t * key_t) : (key_t -> key_t option list -> bool) * ctxt_t list
+}.
+
+(** SNM-CCA2 security game **)
+module SNM_CCA2 (S : Scheme, O1 : Oracles_CCA2i1, O2 : Oracles_CCA2i2, A : Adv_SNMCCA2) = {
+  proc main() = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    var rel : key_t -> key_t option list -> bool;
+    var cl : ctxt_t list;
+    var ko : key_t option;
+    var kol : key_t option list;
+    var b, o : bool;
+    
+    (pk, sk) <@ S.keygen();
+    O1.init(sk);
+    
+    A(O1).scout(pk);
+
+    (k, c) <@ S.encaps(pk);
+    k' <$ dkey;
+    O2.init(sk, c);
+
+    o <$ {0,1};
+    (rel, cl) <@ A(O2).find(c, if o then (k', k) else (k, k'));
+    
+    kol <- [];
+    while (size kol < size cl) {
+      ko <@ S.decaps(sk, nth witness cl (size kol));
+      kol <- rcons kol ko;
+    }
+    
+    b <$ {0,1};
+    
+    return !(c \in cl) /\ rel (if b then k' else k) kol;
+  }
+}.
+
+(** SNM-CCA2 security game (provided bit) **)
+module SNM_CCA2_P (S : Scheme, O1 : Oracles_CCA2i1, O2 : Oracles_CCA2i2, A : Adv_SNMCCA2) = {
+  proc main(b : bool) = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var k, k' : key_t;
+    var c : ctxt_t;
+    var rel : key_t -> key_t option list -> bool;
+    var cl : ctxt_t list;
+    var ko : key_t option;
+    var kol : key_t option list;
+    var o : bool;
+    
+    (pk, sk) <@ S.keygen();
+    O1.init(sk);
+    
+    A(O1).scout(pk);
+
+    (k, c) <@ S.encaps(pk);
+    k' <$ dkey;
+    O2.init(sk, c);
+
+    o <$ {0,1};
+    (rel, cl) <@ A(O2).find(c, if o then (k', k) else (k, k'));
+    
+    kol <- [];
+    while (size kol < size cl) {
+      ko <@ S.decaps(sk, nth witness cl (size kol));
+      kol <- rcons kol ko;
+    }
+    
+    return !(c \in cl) /\ rel (if b then k' else k) kol;
+  }
+}.
 
 
 (*
@@ -1054,10 +1373,10 @@ module HON_BIND (S : Scheme, O : Oracles_HONBINDi, A : Adv_HONBIND) = {
     
     (pk0, sk0) <@ S.keygen();
     
-    if (is_pkbc bc) {
-      (pk1, sk1) <@ S.keygen();
-    } else {
+    if (is_pkbc bc) { 
       (pk1, sk1) <- (pk0, sk0);
+    } else {
+      (pk1, sk1) <@ S.keygen();
     }
     
     O.init(sk0, sk1);
@@ -1095,10 +1414,10 @@ module LEAK_BIND (S : Scheme, A : Adv_LEAKBIND) = {
     
     (pk0, sk0) <@ S.keygen();
     
-    if (is_pkbc bc) {
-      (pk1, sk1) <@ S.keygen();
-    } else {
+    if (is_pkbc bc) { 
       (pk1, sk1) <- (pk0, sk0);
+    } else {
+      (pk1, sk1) <@ S.keygen();
     }
     
     (c0, c1) <@ A.find(pk0, sk0, pk1, sk1);
@@ -1116,7 +1435,7 @@ module LEAK_BIND (S : Scheme, A : Adv_LEAKBIND) = {
 (*
   TODO:
   Want to split Decaps/Decaps, Encaps/Decaps, Encaps/Encaps cases?
-  Seems cleaner (also cuz it seems to model slightly different scenarios?)
+  Seems cleaner (also because it seems to model slightly different scenarios?)
   However, can combine if better.
 *)
 (**
