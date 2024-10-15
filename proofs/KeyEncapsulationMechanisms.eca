@@ -68,7 +68,7 @@ module Correctness (S : Scheme) = {
 (* 
   Chosen-Plaintext Attacks (CPA).
   The adversary is given the considered public key and, hence, 
-  is able to produce (symmetric) key/ciphertext pairs. 
+  is able to produce encapsulations, i.e., (symmetric) key/ciphertext pairs. 
   (Typically, this means the adversary can construct ciphetexts
    corresponding to chosen (symmetric) keys.)
 *)
@@ -312,7 +312,7 @@ module SNM_CPA_P (S : Scheme, A : Adv_SNMCPA) = {
   non-adaptive Chosen-Ciphertext Attacks (CCA1)
   The adversary is given the considered public key and access to a decryption oracle
   *before* the stage in which it is expected to distinguish/return a break.
-  Hence, the adversary is able to produce ciphertext corresponding to chosen plaintexts
+  Hence, the adversary is able to is able to produce encapsulations
   *and* query for decryptions of chosen ciphertexts.
 *)
 (* Oracles *)
@@ -350,7 +350,7 @@ module type Oracles_CCA1 = {
 
 
 (*
-  One-Wayness under Chosen-Ciphertext Attacks (OW-CCA1).
+  One-Wayness under non-adaptive Chosen-Ciphertext Attacks (OW-CCA1).
   In a CCA1 setting, the adversary is asked to produce the (symmetric) key
   encapsulated by a given ciphertext.
 *)
@@ -383,7 +383,7 @@ module OW_CCA1 (S : Scheme, O : Oracles_CCA1i, A : Adv_OWCCA1) = {
 
 
 (*
-  (ciphertext) INDistinguishability under Chosen-Ciphertext Attacks (IND-CCA1).
+  (ciphertext) INDistinguishability under non-adaptive Chosen-Ciphertext Attacks (IND-CCA1).
   In a CCA1 setting, the adversary is asked to determine whether a given
   (symmetric) key is (1) encapsulated by a given ciphertext or (2) independently
   sampled at random (from dkey).
@@ -444,7 +444,7 @@ module IND_CCA_P (S : Scheme, O : Oracles_CCA1i, A : Adv_INDCCA1) = {
 
 
 (*
-  (ciphertext) Non-Malleability under Chosen-Ciphertext Attacks (NM-CCA1).
+  (ciphertext) Non-Malleability under non-adaptive Chosen-Ciphertext Attacks (NM-CCA1).
   In a CCA1 setting, given a ciphertext (encapsulating some key K), the adversary is 
   asked to provide a relation R and a list of ciphertexts such that the (symmetric) keys 
   resulting from decapsulating the ciphertexts (in the list) are related (through R) with
@@ -526,7 +526,7 @@ module NM_CCA1_P (S : Scheme, O : Oracles_CCA1i, A : Adv_NMCCA1) = {
 
 
 (*
-  (ciphertext) Strong Non-Malleability under Chosen-Ciphertext Attacks (SNM-CCA1).
+  (ciphertext) Strong Non-Malleability under non-adaptive Chosen-Ciphertext Attacks (SNM-CCA1).
   As NM-CCA1, but the adversary is additionally given a pair of (symmetric) keys of
   which one is independently sampled at random, and the other is the one
   encapsulated by the given ciphertext. (The order in which they appear in the pair
@@ -613,7 +613,7 @@ module SNM_CCA1_P (S : Scheme, O : Oracles_CCA1i, A : Adv_SNMCCA1) = {
 (* 
   adaptive Chosen-Ciphertext Attacks (CCA2) 
   The adversary is given the considered public key and access to a decryption oracle throughout.  
-  Hence, the adversary is able to produce ciphertext corresponding to chosen plaintexts
+  Hence, the adversary is able to produce encapsulations
   *and* query for decryptions of chosen ciphertexts (potentially barring ciphertexts
   that are part of the challenge).
 *)
@@ -635,7 +635,7 @@ module type Oracles_CCA2i1 = {
 
 (** Interface for oracles employed in (the second stage of) CCA2 security games **)
 module type Oracles_CCA2i2 = {
-  proc init(sk_init : sk_t, c : ctxt_t) : unit
+  proc init(sk_init : sk_t, c'_init : ctxt_t) : unit
   proc decaps(c : ctxt_t) : key_t option
 }.
 
