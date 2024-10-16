@@ -6,6 +6,7 @@
   More precisely, (almost) all of the content is extracted from 
   one or more of the following papers (in no particular order):
   - [Relations Among Notions of Security for Public-Key Encryption Schemes](https://eprint.iacr.org/1998/021)
+  - [KEM/DEM: Necessary and Sufficient Conditions for Secure Hybrid Encryption](https://eprint.iacr.org/2006/265.pdf)
   - [Robust Encryption, Revisited](https://eprint.iacr.org/2012/673)
   - [A Modular Analysis of the Fujisaki-Okamoto Transformation](https://eprint.iacr.org/2017/604.pdf)
   - [Completely Non-Malleable Encryption Revisited](https://iacr.org/archive/pkc2008/49390068/49390068.pdf)
@@ -153,6 +154,111 @@ module IND_CPA_P (S : Scheme, A : Adv_INDCPA) = {
 }.
 
 
+(*
+  Non-Malleability under Chosen-Plaintext Attacks (NM-CPA)
+  In a CPA setting, the adversary is asked to provide a relation (say R) and
+  a list of ciphertexts such that the plaintexts obtained from decrypting these
+  ciphertexts are related (under R) to the plaintext corresponding to a given ciphertext.
+*)
+(** Adversary class considered for NM-CPA **)
+module type Adv_NMCPA = {
+  proc choose(pk : pk_t) : ptxt_t distr
+  proc find(c : ctxt_t) : (ptxt_t -> ptxt_t option list -> bool) * ctxt_t list
+}.
+
+(** NM-CPA security game (sampled bit) **)
+(** 
+  Note that this does not enforce "validity" of the 
+  plaintext distribution output by (the first stage of) the adversary,
+  contrary to what the pen-and-paper definitions from the literature "insist" on.
+  If the type with which ptxt_t is instantiated (in combination with the considered scheme)
+  allows for differences in plaintexts that are not (supposed to be) hidden by the ciphertexts (e.g., length),
+  you might want to restrict the adversary class you consider in your proofs by requiring 
+  A.choose to return a distribution that only gives non-zero probability to plaintexts where this
+  public information is the same.
+ **)
+module NM_CPA (S : Scheme, A : Adv_NMCPA) = {
+  proc main() : bool = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var dp : ptxt_t distr;
+    var b : bool;
+    var p, p' : ptxt_t;
+    var c : ctxt_t;
+    var rel : ptxt_t -> ptxt_t option list -> bool;
+    var cl : ctxt_t list;
+    var po : ptxt_t option;
+    var pol : ptxt_t option list;
+    
+    (pk, sk) <@ S.keygen();
+    
+    dp <@ A.choose(pk);
+    
+    p <$ dp;
+    p' <$ dp;
+    
+    c <@ S.enc(pk, p);
+    
+    (rel, cl) <@ A.find(c);
+    
+    pol <- [];
+    while (size pol < size cl) {
+      po <@ S.dec(sk, nth witness cl (size pol));
+      pol <- rcons pol po;
+    }
+    
+    b <$ {0,1};
+    
+    return !(c \in cl) /\ rel (if b then p' else p) pol;
+  }
+}.
+
+
+(** NM-CPA security game (provided bit) **)
+(** 
+  Note that this does not enforce "validity" of the 
+  plaintext distribution output by (the first stage of) the adversary,
+  contrary to what the pen-and-paper definitions from the literature "insist" on.
+  If the type with which ptxt_t is instantiated (in combination with the considered scheme)
+  allows for differences in plaintexts that are not (supposed to be) hidden by the ciphertexts (e.g., length),
+  you might want to restrict the adversary class you consider in your proofs by requiring 
+  A.choose to return a distribution that only gives non-zero probability to plaintexts where this
+  public information is the same.
+ **)
+module NM_CPA_P (S : Scheme, A : Adv_NMCPA) = {
+  proc main(b : bool) : bool = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var dp : ptxt_t distr;
+    var p, p' : ptxt_t;
+    var c : ctxt_t;
+    var rel : ptxt_t -> ptxt_t option list -> bool;
+    var cl : ctxt_t list;
+    var po : ptxt_t option;
+    var pol : ptxt_t option list;
+    
+    (pk, sk) <@ S.keygen();
+    
+    dp <@ A.choose(pk);
+    
+    p <$ dp;
+    p' <$ dp;
+    
+    c <@ S.enc(pk, p);
+    
+    (rel, cl) <@ A.find(c);
+    
+    pol <- [];
+    while (size pol < size cl) {
+      po <@ S.dec(sk, nth witness cl (size pol));
+      pol <- rcons pol po;
+    }
+    
+    return !(c \in cl) /\ rel (if b then p' else p) pol;
+  }
+}.
+
+
 (* 
   non-adaptive Chosen-Ciphertext Attacks (CCA1)
   The adversary is given the considered public key and access to a decryption oracle
@@ -287,6 +393,112 @@ module IND_CCA1_P (S : Scheme, O : Oracles_CCA1i, A : Adv_INDCCA1) = {
 }.
 
 
+(*
+  Non-Malleability under non-adaptive Chosen-Plaintext Attacks (NM-CCA1)
+  In a CCA1 setting, the adversary is asked to provide a relation (say R) and
+  a list of ciphertexts such that the plaintexts obtained from decrypting these
+  ciphertexts are related (under R) to the plaintext corresponding to a given ciphertext.
+*)
+(** Adversary class considered for NM-CCA1 **)
+module type Adv_NMCCA1 (O : Oracles_CCA1) = {
+  proc choose(pk : pk_t) : ptxt_t distr { O.dec }
+  proc find(c : ctxt_t) : (ptxt_t -> ptxt_t option list -> bool) * ctxt_t list { }
+}.
+
+(** NM-CCA1 security game (sampled bit) **)
+(** 
+  Note that this does not enforce "validity" of the 
+  plaintext distribution output by (the first stage of) the adversary,
+  contrary to what the pen-and-paper definitions from the literature "insist" on.
+  If the type with which ptxt_t is instantiated (in combination with the considered scheme)
+  allows for differences in plaintexts that are not (supposed to be) hidden by the ciphertexts (e.g., length),
+  you might want to restrict the adversary class you consider in your proofs by requiring 
+  A.choose to return a distribution that only gives non-zero probability to plaintexts where this
+  public information is the same.
+ **)
+module NM_CCA1 (S : Scheme, O : Oracles_CCA1i, A : Adv_NMCCA1) = {
+  proc main() : bool = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var dp : ptxt_t distr;
+    var b : bool;
+    var p, p' : ptxt_t;
+    var c : ctxt_t;
+    var rel : ptxt_t -> ptxt_t option list -> bool;
+    var cl : ctxt_t list;
+    var po : ptxt_t option;
+    var pol : ptxt_t option list;
+    
+    (pk, sk) <@ S.keygen();
+    O.init(sk);
+    
+    dp <@ A(O).choose(pk);
+    
+    p <$ dp;
+    p' <$ dp;
+    
+    c <@ S.enc(pk, p);
+    
+    (rel, cl) <@ A(O).find(c);
+    
+    pol <- [];
+    while (size pol < size cl) {
+      po <@ S.dec(sk, nth witness cl (size pol));
+      pol <- rcons pol po;
+    }
+    
+    b <$ {0,1};
+    
+    return !(c \in cl) /\ rel (if b then p' else p) pol;
+  }
+}.
+
+(** NM-CCA1 security game (provided bit) **)
+(** 
+  Note that this does not enforce "validity" of the 
+  plaintext distribution output by (the first stage of) the adversary,
+  contrary to what the pen-and-paper definitions from the literature "insist" on.
+  If the type with which ptxt_t is instantiated (in combination with the considered scheme)
+  allows for differences in plaintexts that are not (supposed to be) hidden by the ciphertexts (e.g., length),
+  you might want to restrict the adversary class you consider in your proofs by requiring 
+  A.choose to return a distribution that only gives non-zero probability to plaintexts where this
+  public information is the same.
+ **)
+module NM_CCA1_P (S : Scheme, O : Oracles_CCA1i, A : Adv_NMCCA1) = {
+  proc main(b : bool) : bool = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var dp : ptxt_t distr;
+    var p, p' : ptxt_t;
+    var c : ctxt_t;
+    var rel : ptxt_t -> ptxt_t option list -> bool;
+    var cl : ctxt_t list;
+    var po : ptxt_t option;
+    var pol : ptxt_t option list;
+    
+    (pk, sk) <@ S.keygen();
+    O.init(sk);
+    
+    dp <@ A(O).choose(pk);
+    
+    p <$ dp;
+    p' <$ dp;
+    
+    c <@ S.enc(pk, p);
+    
+    (rel, cl) <@ A(O).find(c);
+    
+    pol <- [];
+    while (size pol < size cl) {
+      po <@ S.dec(sk, nth witness cl (size pol));
+      pol <- rcons pol po;
+    }
+    
+    return !(c \in cl) /\ rel (if b then p' else p) pol;
+  }
+}.
+
+
 (* 
   adaptive Chosen-Ciphertext Attacks (CCA2)
   The adversary is given the considered public key and access to a decryption oracle throughout.  
@@ -295,19 +507,19 @@ module IND_CCA1_P (S : Scheme, O : Oracles_CCA1i, A : Adv_INDCCA1) = {
   that are part of the challenge).
 *)
 (* Oracles *)
-(** Interface for oracles employed in (the first stage of) CCA1 security games **)
+(** Interface for oracles employed in (the first stage of) CCA2 security games **)
 module type Oracles_CCA2i1 = {
   proc init(sk_init : sk_t) : unit
   proc dec(c : ctxt_t) : ptxt_t option
 }.
 
-(** Interface for oracles employed in (the second stage of) CCA1 security games **)
+(** Interface for oracles employed in (the second stage of) CCA2 security games **)
 module type Oracles_CCA2i2 = {
   proc init(sk_init : sk_t, c'_init : ctxt_t) : unit
   proc dec(c : ctxt_t) : ptxt_t option
 }.
 
-(** A default implementation for the oracles employed in (the first stage of) CCA1 security games **)
+(** A default implementation for the oracles employed in (the first stage of) CCA2 security games **)
 module O_CCA21_Default (S : Scheme) : Oracles_CCA2i1 = {
   var sk : sk_t
   var qs : (ctxt_t * ptxt_t option) list
@@ -328,7 +540,7 @@ module O_CCA21_Default (S : Scheme) : Oracles_CCA2i1 = {
   }
 }.
 
-(** A default implementation for the oracles employed in (the second stage of) CCA1 security games **)
+(** A default implementation for the oracles employed in (the second stage of) CCA2 security games **)
 module O_CCA22_Default (S : Scheme) : Oracles_CCA2i2 = {
   var sk : sk_t
   var c' : ctxt_t
@@ -355,11 +567,10 @@ module O_CCA22_Default (S : Scheme) : Oracles_CCA2i2 = {
   }
 }.
 
-(** Interface for oracles given to the adversary in CCA1 security games **)
+(** Interface for oracles given to the adversary in CCA2 security games **)
 module type Oracles_CCA2 = {
   include Oracles_CCA2i2 [-init]
 }.
-
 
 
 (*
@@ -367,13 +578,13 @@ module type Oracles_CCA2 = {
   In a CCA2 setting, the adversary is asked to produce the message/plaintext 
   encrypted by a given ciphertext.
 *)
-(** Adversary class considered for OW-CCA1 **)
+(** Adversary class considered for OW-CCA2 **)
 module type Adv_OWCCA2 (O : Oracles_CCA2) = { 
   proc scout(pk : pk_t) : unit
   proc find(c : ctxt_t) : ptxt_t
 }.
 
-(** OW-CCA1 security game **)
+(** OW-CCA2 security game **)
 module OW_CCA2 (S : Scheme, O1 : Oracles_CCA2i1, O2 : Oracles_CCA2i2, A : Adv_OWCCA1) = {
   proc main() : bool = {
     var pk : pk_t;
@@ -396,7 +607,6 @@ module OW_CCA2 (S : Scheme, O1 : Oracles_CCA2i1, O2 : Oracles_CCA2i2, A : Adv_OW
     return p' = p; 
   }
 }.
-
 
 
 (*
@@ -435,7 +645,7 @@ module IND_CCA2 (S : Scheme, O1 : Oracles_CCA2i1, O2 : Oracles_CCA2i2, A : Adv_I
   }
 }.
 
-(** IND-CCA1 security game (provided bit) **)
+(** IND-CCA2 security game (provided bit) **)
 module IND_CCA2_P (S : Scheme, O1 : Oracles_CCA2i1, O2 : Oracles_CCA2i2, A : Adv_INDCCA1) = {
   proc main(b : bool) : bool = {
     var pk : pk_t;
@@ -459,8 +669,112 @@ module IND_CCA2_P (S : Scheme, O1 : Oracles_CCA2i1, O2 : Oracles_CCA2i2, A : Adv
 }.
 
 
+(*
+  Non-Malleability under adaptive Chosen-Plaintext Attacks (NM-CCA2)
+  In a CCA2 setting, the adversary is asked to provide a relation (say R) and
+  a list of ciphertexts such that the plaintexts obtained from decrypting these
+  ciphertexts are related (under R) to the plaintext corresponding to a given ciphertext.
+*)
+(** Adversary class considered for NM-CCA2 **)
+module type Adv_NMCCA2 (O : Oracles_CCA2) = {
+  proc choose(pk : pk_t) : ptxt_t distr
+  proc find(c : ctxt_t) : (ptxt_t -> ptxt_t option list -> bool) * ctxt_t list
+}.
 
+(** NM-CCA2 security game (sampled bit) **)
+(** 
+  Note that this does not enforce "validity" of the 
+  plaintext distribution output by (the first stage of) the adversary,
+  contrary to what the pen-and-paper definitions from the literature "insist" on.
+  If the type with which ptxt_t is instantiated (in combination with the considered scheme)
+  allows for differences in plaintexts that are not (supposed to be) hidden by the ciphertexts (e.g., length),
+  you might want to restrict the adversary class you consider in your proofs by requiring 
+  A.choose to return a distribution that only gives non-zero probability to plaintexts where this
+  public information is the same.
+ **)
+module NM_CCA2 (S : Scheme, O1 : Oracles_CCA2i1, O2 : Oracles_CCA2i2, A : Adv_NMCCA1) = {
+  proc main() : bool = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var dp : ptxt_t distr;
+    var b : bool;
+    var p, p' : ptxt_t;
+    var c : ctxt_t;
+    var rel : ptxt_t -> ptxt_t option list -> bool;
+    var cl : ctxt_t list;
+    var po : ptxt_t option;
+    var pol : ptxt_t option list;
+    
+    (pk, sk) <@ S.keygen();
+    O1.init(sk);
+    
+    dp <@ A(O1).choose(pk);
+    
+    p <$ dp;
+    p' <$ dp;
+    
+    c <@ S.enc(pk, p);
+    O2.init(sk, c);
+    
+    (rel, cl) <@ A(O2).find(c);
+    
+    pol <- [];
+    while (size pol < size cl) {
+      po <@ S.dec(sk, nth witness cl (size pol));
+      pol <- rcons pol po;
+    }
+    
+    b <$ {0,1};
+    
+    return !(c \in cl) /\ rel (if b then p' else p) pol;
+  }
+}.
 
+(** NM-CCA2 security game (provided bit) **)
+(** 
+  Note that this does not enforce "validity" of the 
+  plaintext distribution output by (the first stage of) the adversary,
+  contrary to what the pen-and-paper definitions from the literature "insist" on.
+  If the type with which ptxt_t is instantiated (in combination with the considered scheme)
+  allows for differences in plaintexts that are not (supposed to be) hidden by the ciphertexts (e.g., length),
+  you might want to restrict the adversary class you consider in your proofs by requiring 
+  A.choose to return a distribution that only gives non-zero probability to plaintexts where this
+  public information is the same.
+**)
+module NM_CCA2_P (S : Scheme, O1 : Oracles_CCA2i1, O2 : Oracles_CCA2i2, A : Adv_NMCCA1) = {
+  proc main(b : bool) : bool = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var dp : ptxt_t distr;
+    var p, p' : ptxt_t;
+    var c : ctxt_t;
+    var rel : ptxt_t -> ptxt_t option list -> bool;
+    var cl : ctxt_t list;
+    var po : ptxt_t option;
+    var pol : ptxt_t option list;
+    
+    (pk, sk) <@ S.keygen();
+    O1.init(sk);
+    
+    dp <@ A(O1).choose(pk);
+    
+    p <$ dp;
+    p' <$ dp;
+    
+    c <@ S.enc(pk, p);
+    O2.init(sk, c);
+    
+    (rel, cl) <@ A(O2).find(c);
+    
+    pol <- [];
+    while (size pol < size cl) {
+      po <@ S.dec(sk, nth witness cl (size pol));
+      pol <- rcons pol po;
+    }
+    
+    return !(c \in cl) /\ rel (if b then p' else p) pol;
+  }
+}.
 
 
 (* Properties (variants, e.g., for delta-correct schemes) *)
