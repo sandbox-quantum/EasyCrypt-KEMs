@@ -5,12 +5,12 @@
   Most of the content is based on relevant literature.
   More precisely, (almost) all of the content is extracted from 
   one or more of the following papers (in no particular order):
-  - [Design and Analysis of Practical Public-Key Encryption Schemes Secure against Adaptive Chosen Ciphertext Attack](https://eprint.iacr.org/2001/108.pdf)
-  - [On the Equivalence of Several Security Notions of Key Encapsulation Mechanism](https://eprint.iacr.org/2006/268.pdf)
-  - [KEM/DEM: Necessary and Sufficient Conditions for Secure Hybrid Encryption](https://eprint.iacr.org/2006/265.pdf)
-  - [Keeping Up with the KEMs: Stronger Security Notions for KEMs and Automated Analysis of KEM-based Protocols](https://eprint.iacr.org/2023/1933.pdf)
-  - [Unbindable Kemmy Schmidt: ML-KEM is neither MAL-BIND-K-CT nor MAL-BIND-K-PK](https://eprint.iacr.org/2024/523.pdf)
-  - [On the Complete Non-Malleability of the Fujisaki-Okamoto Transform](https://eprint.iacr.org/2022/1654.pdf)
+  - [Design and Analysis of Practical Public-Key Encryption Schemes Secure against Adaptive Chosen Ciphertext Attack](https://eprint.iacr.org/2001/108)
+  - [On the Equivalence of Several Security Notions of Key Encapsulation Mechanism](https://eprint.iacr.org/2006/268)
+  - [KEM/DEM: Necessary and Sufficient Conditions for Secure Hybrid Encryption](https://eprint.iacr.org/2006/265)
+  - [Keeping Up with the KEMs: Stronger Security Notions for KEMs and Automated Analysis of KEM-based Protocols](https://eprint.iacr.org/2023/1933)
+  - [Unbindable Kemmy Schmidt: ML-KEM is neither MAL-BIND-K-CT nor MAL-BIND-K-PK](https://eprint.iacr.org/2024/523)
+  - [On the Complete Non-Malleability of the Fujisaki-Okamoto Transform](https://eprint.iacr.org/2022/1654)
     (TODO: Add complete non-malleability)
 ^*)
 
