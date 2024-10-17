@@ -949,6 +949,201 @@ module SNM_CCA2_P (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_S
 end NM.
 
 
+(* 
+  ANOnymity (ANO).
+  The adversary is given two (honestly generated) public keys and an encapsulation 
+  (i.e., ciphertext/key pair), and asked to determine which public key was used to
+  create the encapsulation.
+*)
+(*
+  ANOnymity under Chosen-Plaintext attack (ANO-CPA).
+  In a CPA setting, The adversary is given two (honestly generated) public keys 
+  and an encapsulation (i.e., key/ciphertext pair), and asked to determine which 
+  public key was used to create the encapsulation.
+*)
+(** Adversary class considerd for ANO-CPA **)
+module type Adv_ANOCPA = {
+  proc distinguish(pk0 : pk_t, pk1 : pk_t, kc : key_t * ctxt_t) : bool
+}.
+
+(** ANO-CPA security game (sampled bit) **)
+module ANO_CPA (S : Scheme, A : Adv_ANOCPA) = {
+  proc main() = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var b, b' : bool;
+    var kc : key_t * ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    
+    b <$ {0,1};
+    
+    kc <@ S.encaps(if b then pk1 else pk0);
+    
+    b' <@ A.distinguish(pk0, pk1, kc);
+    
+    return b' = b;
+  }
+}.
+
+(** ANO-CPA security game (provided bit) **)
+module ANO_CPA_P (S : Scheme, A : Adv_ANOCPA) = {
+  proc main(b : bool) = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var b' : bool;
+    var kc : key_t * ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    
+    kc <@ S.encaps(if b then pk1 else pk0);
+    
+    b' <@ A.distinguish(pk0, pk1, kc);
+    
+    return b';
+  }
+}.
+
+
+(*
+  ANOnymity under non-adaptive Chosen-Plaintext attack (ANO-CCA1).
+  In a CCA1 setting, the adversary is given (in the first stage) two (honestly generated) public keys 
+  and (in the second stage) an encapsulation (i.e., key/ciphertext pair), and is 
+  asked to determine which public key was used to create the encapsulation.
+*)
+(** Adversary class considerd for ANO-CCA1 **)
+module type Adv_ANOCCA1 (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  proc scout(pk0 : pk_t, pk1 : pk_t) : unit{ O0.decaps, O1.decaps }
+  proc distinguish(kc : key_t * ctxt_t) : bool { }
+}.
+
+(** ANO-CCA1 security game (sampled bit) **)
+module ANO_CCA1 (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_ANOCCA1) = {
+  proc main() = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var b, b' : bool;
+    var c : ctxt_t;
+    var kc : key_t * ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    O0.init(sk0);
+    O1.init(sk1);
+    
+    A(O0, O1).scout(pk0, pk1);
+    
+    b <$ {0,1};
+    
+    kc <@ S.encaps(if b then pk1 else pk0);
+    
+    b' <@ A(O0, O1).distinguish(kc);
+    
+    return b' = b;
+  }
+}.
+
+(** ANO-CCA1 security game (provided bit) **)
+module ANO_CCA1_P (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_ANOCCA1) = {
+  proc main(b : bool) = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var b' : bool;
+    var c : ctxt_t;
+    var kc : key_t * ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    O0.init(sk0);
+    O1.init(sk1);
+    
+    A(O0, O1).scout(pk0, pk1);
+    
+    kc <@ S.encaps(if b then pk1 else pk0);
+    
+    b' <@ A(O0, O1).distinguish(kc);
+    
+    return b';
+  }
+}.
+
+
+
+(*
+  ANOnymity under adaptive Chosen-Plaintext attack (ANO-CCA2).
+  In a CCA2 setting, the adversary is given (in the first stage) two (honestly generated) public keys 
+  and (in the second stage) an encapsulation (i.e., key/ciphertext pair), and is 
+  asked to determine which public key was used to create the encapsulation.
+*)
+(** Adversary class considerd for ANO-CCA2 **)
+module type Adv_ANOCCA2 (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  proc scout(pk0 : pk_t, pk1 : pk_t) : unit
+  proc distinguish(kc : key_t * ctxt_t) : bool
+}.
+
+(** ANO-CCA2 security game (sampled bit) **)
+module ANO_CCA2 (S : Scheme)
+                (O01 : Oracles_CCA1i, O11 : Oracles_CCA1i)
+                (O02 : Oracles_CCA2i, O12 : Oracles_CCA2i)
+                (A : Adv_ANOCCA2) = {
+  proc main() = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var b, b' : bool;
+    var k : key_t;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    O01.init(sk0);
+    O11.init(sk1);
+    
+    A(O01, O11).scout(pk0, pk1);
+    
+    b <$ {0,1};
+    
+    (k, c) <@ S.encaps(if b then pk1 else pk0);
+    O02.init(sk0, c);
+    O12.init(sk1, c);
+    
+    b' <@ A(O02, O12).distinguish((k, c));
+    
+    return b' = b;
+  }
+}.
+
+(** ANO-CCA2 security game (sampled bit) **)
+module ANO_CCA2_P (S : Scheme)
+                  (O01 : Oracles_CCA1i, O11 : Oracles_CCA1i)
+                  (O02 : Oracles_CCA2i, O12 : Oracles_CCA2i)
+                  (A : Adv_ANOCCA2) = {
+  proc main(b : bool) = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var b' : bool;
+    var k : key_t;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    O01.init(sk0);
+    O11.init(sk1);
+    
+    A(O01, O11).scout(pk0, pk1);
+    
+    (k, c) <@ S.encaps(if b then pk1 else pk0);
+    O02.init(sk0, c);
+    O12.init(sk1, c);
+    
+    b' <@ A(O02, O12).distinguish((k, c));
+    
+    return b';
+  }
+}.
+
+
 (*
   BINDing (BIND).
   Intuitively, binding properties capture to which extent certain artifacts (in a 

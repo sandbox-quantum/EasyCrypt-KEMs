@@ -11,7 +11,7 @@
   - [Anonymous, Robust Post-Quantum Public Key Encryption](https://eprint.iacr.org/2021/708)
   - [A Modular Analysis of the Fujisaki-Okamoto Transformation](https://eprint.iacr.org/2017/604)
   - [Completely Non-Malleable Encryption Revisited](https://iacr.org/archive/pkc2008/49390068/49390068.pdf)
-    (TODO: Add more niche properties (complete non-malleability, key indistinguishability, plaintext awareness)))
+    (TODO: Add more niche properties (complete non-malleability, plaintext awareness)))
 ^*)
 
 (* Require/Import libraries *)
@@ -865,7 +865,7 @@ module ANO_CCA1_P (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_A
   the aforementioned public keys) of the plaintext it provided and asked to determine which
   public key was used for the encryption.
 *)
-(** Adversary class considerd for ANO-CCA1 **)
+(** Adversary class considerd for ANO-CCA2 **)
 module type Adv_ANOCCA2 (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
   proc choose(pk0 : pk_t, pk1 : pk_t) : ptxt_t
   proc distinguish(c : ctxt_t) : bool
