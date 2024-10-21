@@ -1708,12 +1708,12 @@ module WANO_CCA_P (S : Scheme)
 
 
 (*
-  Strong ROBustness (SROB)
+  Strong ROBustness (SROB).
   The adversary is given two (honestly generated) public keys and is asked to
   provide a (single) ciphertext that decapsulates to valid symmetric keys under both 
   of the secret keys (corresponding to the provided public keys).
   
-  Weak ROBustness (WROB)
+  Weak ROBustness (WROB).
   The adversary is given two (honestly generated) public keys and is asked to choose
   which one to use for encapsulation and which one to use (the corresponding secret key of)
   for decapsulation. Here, the goal is that the decapsulation (with the key appointed for
@@ -1758,7 +1758,7 @@ module SROB_CPA (S : Scheme, A : Adv_SROBCPA) = {
 
 (*
   Weak ROBustness under Chosen-Plaintext Attacks (WROB-CPA).
-  In a CPa setting, the adversary is given two (honestly generated) public keys and is asked to choose
+  In a CPA setting, the adversary is given two (honestly generated) public keys and is asked to choose
   which one to use for encapsulation and which one to use (the corresponding secret key of)
   for decapsulation. Here, the goal is that the decapsulation (with the key appointed for
   decapsulation) of the encapsulation (created with the key appointed for encapsulation) succeeds 
@@ -1858,7 +1858,154 @@ module WROB_CCA (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_WRO
     (k, c) <@ S.encaps(if b then pk1 else pk0);
     k' <@ S.decaps(if b then sk0 else sk1, c);
     
-    return k' <>  None;
+    return k' <> None;
+  }
+}.
+
+
+(*
+  Strong Collision-FReeness (SCFR).
+  As SROB, but additionally requires the resulting symmetric keys to be
+  equal to eachother (instead of only requiring these keys to be valid).
+  
+  Weak Collision-FReeness (WCFR).
+  As WROB, but additionally requires the resulting symmetric keys to be
+  equal to eachother (instead of only requiring the final decapsulated key to be valid).
+*)
+(*
+  Strong Collision-FReeness under Chosen-Plaintext Attacks (SCFR-CPA).
+  In a CPA setting, the adversary is given two (honestly generated) public keys and is asked to
+  provide a (single) ciphertext that decapsulates to the same valid symmetric key under both 
+  of the secret keys (corresponding to the provided public keys).
+*)
+(** Adversary class considered for SCFR-CPA **)
+module type Adv_SCFRCPA = {
+  proc find(pk0 : pk_t, pk1 : pk_t) : ctxt_t
+}.
+
+(** SCFR-CPA security game **)
+module SCFR_CPA (S : Scheme, A : Adv_SCFRCPA) = {
+  proc main() : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var k0, k1 : key_t option;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    
+    c <@ A.find(pk0, pk1);
+    
+    k0 <@ S.decaps(sk0, c);
+    k1 <@ S.decaps(sk1, c);
+    
+    return k0 <> None /\ k1 <> None /\ k0 = k1;
+  }
+}.
+
+(*
+  Weak Collision-FReeness under Chosen-Plaintext Attacks (WCFR-CPA).
+  In a CPA setting, the adversary is given two (honestly generated) public keys and is asked to choose
+  which one to use for encapsulation and which one to use (the corresponding secret key of)
+  for decapsulation. Here, the goal is that the decapsulation (with the key appointed for
+  decapsulation) of the encapsulation (created with the key appointed for encapsulation) returns
+  a valid symmetric key that is equal to the encapsulated one.
+*)
+(** Adversary class considered for WCFR-CPA **)
+module type Adv_WCFRCPA = {
+  proc choose(pk0 : pk_t, pk1 : pk_t) : bool
+}.
+
+(** WCFR-CPA security game **)
+module WCFR_CPA (S : Scheme, A : Adv_WCFRCPA) = {
+  proc main() : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var k : key_t;
+    var k' : key_t option;
+    var b : bool;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+
+    b <@ A.choose(pk0, pk1);
+    
+    (k, c) <@ S.encaps(if b then pk1 else pk0);
+    k' <@ S.decaps(if b then sk0 else sk1, c);
+    
+    return k' = Some k;
+  }
+}.
+
+
+(*
+  Strong Collision-FReeness under Chosen-Ciphertext Attacks (SCFR-CCA).
+  In a CCA setting, the adversary is given two (honestly generated) public keys and is asked to
+  provide a (single) ciphertext that decapsulates to the same valid symmetric key under both 
+  of the secret keys (corresponding to the provided public keys).
+*)
+(** Adversary class considered for SCFR-CCA **)
+module type Adv_SCFRCCA (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  proc find(pk0 : pk_t, pk1 : pk_t) : ctxt_t
+}.
+
+(** SCFR-CCA security game **)
+module SCFR_CCA (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_SCFRCCA) = {
+  proc main() : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var k0, k1 : key_t option;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    O0.init(sk0);
+    O1.init(sk1);
+    
+    c <@ A(O0, O1).find(pk0, pk1);
+    
+    k0 <@ S.decaps(sk0, c);
+    k1 <@ S.decaps(sk1, c);
+    
+    return k0 <> None /\ k1 <> None /\ k0 = k1;
+  }
+}.
+
+(*
+  Weak ROBustness under Chosen-Ciphertext Attacks (WCFR-CCA).
+  In a CCA setting, the adversary is given two (honestly generated) public keys and is asked to choose
+  which one to use for encapsulation and which one to use (the corresponding secret key of)
+  for decapsulation. Here, the goal is that the decapsulation (with the key appointed for
+  decapsulation) of the encapsulation (created with the key appointed for encapsulation) returns
+  a valid symmetric key that is equal to the encapsulated one.
+*)
+(** Adversary class considered for WCFR-CCA **)
+module type Adv_WCFRCCA (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  proc choose(pk0 : pk_t, pk1 : pk_t) : bool
+}.
+
+(** WCFR-CCA security game **)
+module WCFR_CCA (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_WCFRCCA) = {
+  proc main() : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var k : key_t;
+    var k' : key_t option;
+    var b : bool;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    O0.init(sk0);
+    O1.init(sk1);
+    
+    b <@ A(O0, O1).choose(pk0, pk1);
+    
+    (k, c) <@ S.encaps(if b then pk1 else pk0);
+    k' <@ S.decaps(if b then sk0 else sk1, c);
+    
+    return k' <> Some k;
   }
 }.
 
