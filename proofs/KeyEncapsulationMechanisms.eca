@@ -8,6 +8,7 @@
   - [Design and Analysis of Practical Public-Key Encryption Schemes Secure against Adaptive Chosen Ciphertext Attack](https://eprint.iacr.org/2001/108)
   - [On the Equivalence of Several Security Notions of Key Encapsulation Mechanism](https://eprint.iacr.org/2006/268)
   - [KEM/DEM: Necessary and Sufficient Conditions for Secure Hybrid Encryption](https://eprint.iacr.org/2006/265)
+  - [Anonymous, Robuse Post-Quantum Public Key Encryption](https://eprint.iacr.org/2021/708)
   - [Keeping Up with the KEMs: Stronger Security Notions for KEMs and Automated Analysis of KEM-based Protocols](https://eprint.iacr.org/2023/1933)
   - [Unbindable Kemmy Schmidt: ML-KEM is neither MAL-BIND-K-CT nor MAL-BIND-K-PK](https://eprint.iacr.org/2024/523)
   - [On the Complete Non-Malleability of the Fujisaki-Okamoto Transform](https://eprint.iacr.org/2022/1654)
@@ -1206,6 +1207,10 @@ end NM.
   The adversary is given two (honestly generated) public keys and an encapsulation 
   (i.e., ciphertext/key pair), and asked to determine which public key was used to
   create the encapsulation.
+  
+  Weak ANOnymity (WANO).
+  As ANO, but the adversary is only given the ciphertext of the encapsulation 
+  (i.e., not the key).
 *)
 (*
   ANOnymity under Chosen-Plaintext attack (ANO-CPA).
@@ -1258,6 +1263,58 @@ module ANO_CPA_P (S : Scheme, A : Adv_ANOCPA) = {
   }
 }.
 
+(*
+  Weak ANOnymity under Chosen-Plaintext attack (WANO-CPA).
+  As ANO-CPA, but the adversary is only given the ciphertext of the encapsulation 
+  (i.e., not the key).
+*)
+(** Adversary class considerd for WANO-CPA **)
+module type Adv_WANOCPA = {
+  proc distinguish(pk0 : pk_t, pk1 : pk_t, c : ctxt_t) : bool
+}.
+
+(** WANO-CPA security game (sampled bit) **)
+module WANO_CPA (S : Scheme, A : Adv_WANOCPA) = {
+  proc main() = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var b, b' : bool;
+    var k : key_t;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    
+    b <$ {0,1};
+    
+    (k, c) <@ S.encaps(if b then pk1 else pk0);
+    
+    b' <@ A.distinguish(pk0, pk1, c);
+    
+    return b' = b;
+  }
+}.
+
+(** WANO-CPA security game (provided bit) **)
+module WANO_CPA_P (S : Scheme, A : Adv_WANOCPA) = {
+  proc main(b : bool) = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var b' : bool;
+    var k : key_t;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    
+    (k, c) <@ S.encaps(if b then pk1 else pk0);
+    
+    b' <@ A.distinguish(pk0, pk1, c);
+    
+    return b' = b;
+  }
+}.
+
 
 (*
   ANOnymity under non-adaptive Chosen-Plaintext attack (ANO-CCA1).
@@ -1277,7 +1334,6 @@ module ANO_CCA1 (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_ANO
     var pk0, pk1 : pk_t;
     var sk0, sk1 : sk_t;
     var b, b' : bool;
-    var c : ctxt_t;
     var kc : key_t * ctxt_t;
     
     (pk0, sk0) <@ S.keygen();
@@ -1303,7 +1359,6 @@ module ANO_CCA1_P (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_A
     var pk0, pk1 : pk_t;
     var sk0, sk1 : sk_t;
     var b' : bool;
-    var c : ctxt_t;
     var kc : key_t * ctxt_t;
     
     (pk0, sk0) <@ S.keygen();
@@ -1318,6 +1373,68 @@ module ANO_CCA1_P (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_A
     b' <@ A(O0, O1).distinguish(kc);
     
     return b';
+  }
+}.
+
+
+(*
+  Weak ANOnymity under non-adaptive Chosen-Plaintext attack (WANO-CCA1).
+  As ANO-CCA1, but the adversary is only given the ciphertext of the encapsulation 
+  (i.e., not the key).
+*)
+(** Adversary class considerd for WANO-CCA1 **)
+module type Adv_WANOCCA1 (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  proc scout(pk0 : pk_t, pk1 : pk_t) : unit{ O0.decaps, O1.decaps }
+  proc distinguish(c : ctxt_t) : bool { }
+}.
+
+(** WANO-CCA1 security game (sampled bit) **)
+module WANO_CCA1 (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_WANOCCA1) = {
+  proc main() = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var b, b' : bool;
+    var k : key_t;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    O0.init(sk0);
+    O1.init(sk1);
+    
+    A(O0, O1).scout(pk0, pk1);
+    
+    b <$ {0,1};
+    
+    (k, c) <@ S.encaps(if b then pk1 else pk0);
+    
+    b' <@ A(O0, O1).distinguish(c);
+    
+    return b' = b;
+  }
+}.
+
+(** WANO-CCA1 security game (provided bit) **)
+module WANO_CCA1_P (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_WANOCCA1) = {
+  proc main(b : bool) = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var b' : bool;
+    var k : key_t;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    O0.init(sk0);
+    O1.init(sk1);
+    
+    A(O0, O1).scout(pk0, pk1);
+    
+    (k, c) <@ S.encaps(if b then pk1 else pk0);
+    
+    b' <@ A(O0, O1).distinguish(c);
+    
+    return b' = b;
   }
 }.
 
@@ -1395,6 +1512,77 @@ module ANO_CCA2_P (S : Scheme)
   }
 }.
 
+(*
+  Weak ANOnymity under (traditional) adaptive Chosen-Plaintext attack (WANO-CCA2).
+  As ANO-CCA2, but the adversary is only given the ciphertext of the encapsulation 
+  (i.e., not the key).
+*)
+(** Adversary class considerd for WANO-CCA2 **)
+module type Adv_WANOCCA2 (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  proc scout(pk0 : pk_t, pk1 : pk_t) : unit
+  proc distinguish(c : ctxt_t) : bool
+}.
+
+(** WANO-CCA2 security game (sampled bit) **)
+module WANO_CCA2 (S : Scheme)
+                 (O01 : Oracles_CCA1i, O11 : Oracles_CCA1i)
+                 (O02 : Oracles_CCA2i, O12 : Oracles_CCA2i)
+                 (A : Adv_WANOCCA2) = {
+  proc main() = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var b, b' : bool;
+    var k : key_t;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    O01.init(sk0);
+    O11.init(sk1);
+    
+    A(O01, O11).scout(pk0, pk1);
+    
+    b <$ {0,1};
+    
+    (k, c) <@ S.encaps(if b then pk1 else pk0);
+    O02.init(sk0, c);
+    O12.init(sk1, c);
+    
+    b' <@ A(O02, O12).distinguish(c);
+    
+    return b' = b;
+  }
+}.
+
+(** WANO-CCA2 security game (provided bit) **)
+module WANO_CCA2_P (S : Scheme)
+                   (O01 : Oracles_CCA1i, O11 : Oracles_CCA1i)
+                   (O02 : Oracles_CCA2i, O12 : Oracles_CCA2i)
+                   (A : Adv_WANOCCA2) = {
+  proc main(b : bool) = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var b' : bool;
+    var k : key_t;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    O01.init(sk0);
+    O11.init(sk1);
+    
+    A(O01, O11).scout(pk0, pk1);
+    
+    (k, c) <@ S.encaps(if b then pk1 else pk0);
+    O02.init(sk0, c);
+    O12.init(sk1, c);
+    
+    b' <@ A(O02, O12).distinguish(c);
+    
+    return b';
+  }
+}.
+
 
 (*
   ANOnymity under (modern) adaptive Chosen-Plaintext attack (ANO-CCA).
@@ -1455,6 +1643,222 @@ module ANO_CCA_P (S : Scheme)
     b' <@ A(O0, O1).distinguish(pk0, pk1, (k, c));
     
     return b' = b;
+  }
+}.
+
+(*
+  Weak ANOnymity under (modern) adaptive Chosen-Plaintext attack (WANO-CCA).
+  As ANO-CCA2, but the adversary is only given the ciphertext of the encapsulation 
+  (i.e., not the key).
+*)
+(** Adversary class considerd for ANO-CCA (i.e., modern ANO-CCA2) **)
+module type Adv_WANOCCA (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  proc distinguish(pk0 : pk_t, pk1 : pk_t, c : ctxt_t) : bool
+}.
+
+(** WANO-CCA (i.e., modern WANO-CCA2) security game (sampled bit) **)
+module WANO_CCA (S : Scheme)
+                (O0 : Oracles_CCA2i, O1 : Oracles_CCA2i)
+                (A : Adv_WANOCCA) = {
+  proc main() = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var b, b' : bool;
+    var k : key_t;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    
+    b <$ {0,1};
+    
+    (k, c) <@ S.encaps(if b then pk1 else pk0);
+    O0.init(sk0, c);
+    O1.init(sk1, c);
+    
+    b' <@ A(O0, O1).distinguish(pk0, pk1, c);
+    
+    return b' = b;
+  }
+}.
+
+(** WANO-CCA (i.e., modern WANO-CCA2) security game (provided bit) **)
+module WANO_CCA_P (S : Scheme)
+                  (O0 : Oracles_CCA2i, O1 : Oracles_CCA2i)
+                  (A : Adv_WANOCCA) = {
+  proc main(b : bool) = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var b' : bool;
+    var k : key_t;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    
+    (k, c) <@ S.encaps(if b then pk1 else pk0);
+    O0.init(sk0, c);
+    O1.init(sk1, c);
+    
+    b' <@ A(O0, O1).distinguish(pk0, pk1, c);
+    
+    return b' = b;
+  }
+}.
+
+
+(*
+  Strong ROBustness (SROB)
+  The adversary is given two (honestly generated) public keys and is asked to
+  provide a (single) ciphertext that decapsulates to valid symmetric keys under both 
+  of the secret keys (corresponding to the provided public keys).
+  
+  Weak ROBustness (WROB)
+  The adversary is given two (honestly generated) public keys and is asked to choose
+  which one to use for encapsulation and which one to use (the corresponding secret key of)
+  for decapsulation. Here, the goal is that the decapsulation (with the key appointed for
+  decapsulation) of the encapsulation (created with the key appointed for encapsulation) succeeds 
+  (i.e., returns a valid symmetric key).
+  
+  Note, as there is no stage in which the adversary is given a distinct challenge artifact, it does
+  not make sense to have different CCA1/CCA2 settings for these properties. Instead,
+  we only consider a CPA setting (no decapsulation oracle) and a CCA setting (a decapsulation
+  oracle like in CCA1, i.e., no considered challenge).
+*)
+(*
+  Strong ROBustness under Chosen-Plaintext Attacks (SROB-CPA).
+  In a CPA setting, the adversary is given two (honestly generated) public keys and is asked to
+  provide a (single) ciphertext that decapsulates to valid symmetric keys under both 
+  of the secret keys (corresponding to the provided public keys).
+*)
+(** Adversary class considered for SROB-CPA **)
+module type Adv_SROBCPA = {
+  proc find(pk0 : pk_t, pk1 : pk_t) : ctxt_t
+}.
+
+(** SROB-CPA security game **)
+module SROB_CPA (S : Scheme, A : Adv_SROBCPA) = {
+  proc main() : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var k0, k1 : key_t option;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    
+    c <@ A.find(pk0, pk1);
+    
+    k0 <@ S.decaps(sk0, c);
+    k1 <@ S.decaps(sk1, c);
+    
+    return k0 <> None /\ k1 <> None;
+  }
+}.
+
+(*
+  Weak ROBustness under Chosen-Plaintext Attacks (WROB-CPA).
+  In a CPa setting, the adversary is given two (honestly generated) public keys and is asked to choose
+  which one to use for encapsulation and which one to use (the corresponding secret key of)
+  for decapsulation. Here, the goal is that the decapsulation (with the key appointed for
+  decapsulation) of the encapsulation (created with the key appointed for encapsulation) succeeds 
+  (i.e., returns a valid symmetric key).
+*)
+(** Adversary class considered for WROB-CPA **)
+module type Adv_WROBCPA = {
+  proc choose(pk0 : pk_t, pk1 : pk_t) : bool
+}.
+
+(** WROB-CPA security game **)
+module WROB_CPA (S : Scheme, A : Adv_WROBCPA) = {
+  proc main() : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var k : key_t;
+    var k' : key_t option;
+    var b : bool;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+
+    b <@ A.choose(pk0, pk1);
+    
+    (k, c) <@ S.encaps(if b then pk1 else pk0);
+    k' <@ S.decaps(if b then sk0 else sk1, c);
+    
+    return k' <> None;
+  }
+}.
+
+
+(*
+  Strong ROBustness under Chosen-Ciphertext Attacks (SROB-CCA).
+  In a CCA setting, the adversary is given two (honestly generated) public keys and is asked to
+  provide a (single) ciphertext that decapsulates to valid symmetric keys under both 
+  of the secret keys (corresponding to the provided public keys).
+*)
+(** Adversary class considered for SROB-CCA **)
+module type Adv_SROBCCA (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  proc find(pk0 : pk_t, pk1 : pk_t) : ctxt_t
+}.
+
+(** SROB-CCA security game **)
+module SROB_CCA (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_SROBCCA) = {
+  proc main() : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var k0, k1 : key_t option;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    O0.init(sk0);
+    O1.init(sk1);
+    
+    c <@ A(O0, O1).find(pk0, pk1);
+    
+    k0 <@ S.decaps(sk0, c);
+    k1 <@ S.decaps(sk1, c);
+    
+    return k0 <> None /\ k1 <> None;
+  }
+}.
+
+(*
+  Weak ROBustness under Chosen-Ciphertext Attacks (WROB-CCA).
+  In a CCA setting, the adversary is given two (honestly generated) public keys and is asked to choose
+  which one to use for encapsulation and which one to use (the corresponding secret key of)
+  for decapsulation. Here, the goal is that the decapsulation (with the key appointed for
+  decapsulation) of the encapsulation (created with the key appointed for encapsulation) succeeds 
+  (i.e., returns a valid symmetric key).
+*)
+(** Adversary class considered for WROB-CCA **)
+module type Adv_WROBCCA (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  proc choose(pk0 : pk_t, pk1 : pk_t) : bool
+}.
+
+(** WROB-CCA security game **)
+module WROB_CCA (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_WROBCCA) = {
+  proc main() : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var k : key_t;
+    var k' : key_t option;
+    var b : bool;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    O0.init(sk0);
+    O1.init(sk1);
+    
+    b <@ A(O0, O1).choose(pk0, pk1);
+    
+    (k, c) <@ S.encaps(if b then pk1 else pk0);
+    k' <@ S.decaps(if b then sk0 else sk1, c);
+    
+    return k' <>  None;
   }
 }.
 
