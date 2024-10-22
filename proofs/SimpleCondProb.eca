@@ -1,0 +1,87 @@
+require import AllCore Distr List.
+require import Finite.
+require (*--*) StdBigop.
+(*---*) import StdBigop.Bigreal.BRA.
+
+type in_t.
+type out_t.
+
+op din : in_t distr.
+
+
+module type Provided = {
+  proc main(x : in_t) : out_t
+}.
+
+module Sampler (P : Provided) = {
+  var x : in_t
+  
+  proc main() : out_t = {
+    var y : out_t;
+    
+    x <$ din;
+    y <@ P.main(x);
+    
+    return y;
+  }
+}.
+
+
+section.
+
+declare module P <: Provided {-Sampler}.
+declare op prop : in_t -> glob P -> out_t -> bool.
+
+lemma EqPr_SamplerConj_ProvidedCond &m (v : in_t):
+  Pr[Sampler(P).main() @ &m : Sampler.x = v /\ prop (Sampler.x) (glob P) res] 
+  = 
+  (mu1 din v) *  Pr[P.main(v) @ &m : prop v (glob P) res].
+proof. 
+byphoare (: glob P = (glob P){m} ==> _ ) => //.
+pose prPCond := Pr[P.main(v) @ &m : prop v (glob P) res].
+proc.
+seq 1 : (Sampler.x = v) (mu1 din v) prPCond _ 0%r (glob P = (glob P){m}) => //; 1,2: by rnd.
++ call (: glob P = (glob P){m} /\ arg = v ==> prop v (glob P) res) => //.
+  rewrite /prPCond; bypr=> /> &m' eqGl ->.
+  by byequiv => //; proc true.
+by hoare; call(: true); skip => />. 
+qed.
+
+lemma EqPr_SamplerConj_ProvidedCond_FinBig &m :
+  is_finite (support din) 
+  => Pr[Sampler(P).main() @ &m : prop (Sampler.x) (glob P) res] 
+     = 
+     big predT (fun (v : in_t) => (mu1 din v) * Pr[P.main(v) @ &m : prop v (glob P) res]) 
+               (to_seq (support din)).
+proof.
+move=> finsup; rewrite Pr[mu_split (Sampler.x \in to_seq (support din))].
+have -> /=:
+  Pr[Sampler(P).main() @ &m : prop Sampler.x (glob P) res /\ ! (Sampler.x \in to_seq (support din))]
+  =
+  0%r.
++ byphoare => //=.
+  hoare => /=.
+  proc.
+  call (: true).
+  rnd; skip => /> x.
+  by rewrite (mem_to_seq _ _ finsup) => ->.
+elim: (to_seq (support din)) (uniq_to_seq (support din)) => /= [| x l ih /= [nxinl uql]].
++ by rewrite big_nil; byphoare.
+rewrite big_cons /predT /= -/predT.
+by rewrite andb_orr Pr[mu_disjoint] 1:/# ih 1:// -EqPr_SamplerConj_ProvidedCond andbC.
+qed.
+
+lemma EqPr_SamplerConj_ProvidedCond_UniBig &m :
+  is_uniform din 
+  => Pr[Sampler(P).main() @ &m : prop (Sampler.x) (glob P) res] 
+     = 
+     weight din / (size (to_seq (support din)))%r
+     * big predT (fun (v : in_t) => Pr[P.main(v) @ &m : prop v (glob P) res]) (to_seq (support din)).
+proof.
+move=> ^ /uniform_finite finsup unidin.
+rewrite mulr_sumr /= (EqPr_SamplerConj_ProvidedCond_FinBig &m finsup).
+apply eq_big_seq => x /=.
+by rewrite (mem_to_seq _ _ finsup) (mu1_uni _ _ unidin) => ->.
+qed.
+
+end section.

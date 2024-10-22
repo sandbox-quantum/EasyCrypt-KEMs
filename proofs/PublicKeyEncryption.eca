@@ -1238,6 +1238,15 @@ module WCFR_CCA (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_WCF
 }.
 
 
+(*
+  BINDing (BIND)
+  
+  
+
+*)
+
+
+
 (** Delta-correct (i.e., partially-correct) PKE schemes. **)
 theory DeltaCorrect.
 (* Correctness *)
