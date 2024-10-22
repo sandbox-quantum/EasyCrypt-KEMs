@@ -934,6 +934,310 @@ module ANO_CCA2_P (S : Scheme)
 }.
 
 
+(*
+  Strong ROBustness (SROB).
+  The adversary is given two (honestly generated) public keys and is asked to
+  provide a (single) ciphertext that decrypts to valid plaintexts under both 
+  of the secret keys (corresponding to the provided public keys).
+  
+  Weak ROBustness (WROB).
+  The adversary is given two (honestly generated) public keys and is asked to choose
+  which one to use for encryption and which one to use (the corresponding secret key of)
+  for decryption. Here, the goal is that the decryption (with the key appointed for
+  decryption) of the encryption (created with the key appointed for encryption) succeeds 
+  (i.e., returns a valid plaintext).
+  
+  Note, as there is no stage in which the adversary is given a distinct challenge artifact, it does
+  not make sense to have different CCA1/CCA2 settings for these properties. Instead,
+  we only consider a CPA setting (no decryption oracle) and a CCA setting (a decryption
+  oracle like in CCA1, i.e., no considered challenge).
+*)
+(*
+  Strong ROBustness under Chosen-Plaintext Attacks (SROB-CPA).
+  In a CPA setting, the adversary is given two (honestly generated) public keys and is asked to
+  provide a (single) ciphertext that decrypts to valid plaintexts under both 
+  of the secret keys (corresponding to the provided public keys).
+*)
+(** Adversary class considered for SROB-CPA **)
+module type Adv_SROBCPA = {
+  proc find(pk0 : pk_t, pk1 : pk_t) : ctxt_t
+}.
+
+(** SROB-CPA security game **)
+module SROB_CPA (S : Scheme, A : Adv_SROBCPA) = {
+  proc main() : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var p0, p1 : ptxt_t option;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    
+    c <@ A.find(pk0, pk1);
+    
+    p0 <@ S.dec(sk0, c);
+    p1 <@ S.dec(sk1, c);
+    
+    return p0 <> None /\ p1 <> None;
+  }
+}.
+
+(*
+  Weak ROBustness under Chosen-Plaintext Attacks (WROB-CPA).
+  In a CPA setting, the adversary is given two (honestly generated) public keys and is asked to choose
+  which one to use for encryption and which one to use (the corresponding secret key of)
+  for decryption. Here, the goal is that the decryption (with the key appointed for
+  decryption) of the encryption (created with the key appointed for encryption) succeeds 
+  (i.e., returns a valid plaintext).
+*)
+(** Adversary class considered for WROB-CPA **)
+module type Adv_WROBCPA = {
+  proc choose(pk0 : pk_t, pk1 : pk_t) : bool * ptxt_t
+}.
+
+(** WROB-CPA security game **)
+module WROB_CPA (S : Scheme, A : Adv_WROBCPA) = {
+  proc main() : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var p : ptxt_t;
+    var p' : ptxt_t option;
+    var b : bool;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+
+    (b, p) <@ A.choose(pk0, pk1);
+    
+    c <@ S.enc(if b then pk1 else pk0, p);
+    p' <@ S.dec(if b then sk0 else sk1, c);
+    
+    return p' <> None;
+  }
+}.
+
+
+(*
+  Strong ROBustness under Chosen-Ciphertext Attacks (SROB-CCA).
+  In a CCA setting, the adversary is given two (honestly generated) public keys and is asked to
+  provide a (single) ciphertext that decrypts to valid plaintexts under both 
+  of the secret keys (corresponding to the provided public keys).
+*)
+(** Adversary class considered for SROB-CCA **)
+module type Adv_SROBCCA (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  proc find(pk0 : pk_t, pk1 : pk_t) : ctxt_t
+}.
+
+(** SROB-CCA security game **)
+module SROB_CCA (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_SROBCCA) = {
+  proc main() : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var p0, p1 : ptxt_t option;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    O0.init(sk0);
+    O1.init(sk1);
+    
+    c <@ A(O0, O1).find(pk0, pk1);
+    
+    p0 <@ S.dec(sk0, c);
+    p1 <@ S.dec(sk1, c);
+    
+    return p0 <> None /\ p1 <> None;
+  }
+}.
+
+(*
+  Weak ROBustness under Chosen-Ciphertext Attacks (WROB-CCA).
+  In a CCA setting, the adversary is given two (honestly generated) public keys and is asked to choose
+  which one to use for encryption and which one to use (the corresponding secret key of)
+  for decryption. Here, the goal is that the decryption (with the key appointed for
+  decryption) of the encryption (created with the key appointed for encryption) succeeds 
+  (i.e., returns a valid plaintext).
+*)
+(** Adversary class considered for WROB-CCA **)
+module type Adv_WROBCCA (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  proc choose(pk0 : pk_t, pk1 : pk_t) : bool * ptxt_t
+}.
+
+(** WROB-CCA security game **)
+module WROB_CCA (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_WROBCCA) = {
+  proc main() : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var p : ptxt_t;
+    var p' : ptxt_t option;
+    var b : bool;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    O0.init(sk0);
+    O1.init(sk1);
+    
+    (b, p) <@ A(O0, O1).choose(pk0, pk1);
+    
+    c <@ S.enc(if b then pk1 else pk0, p);
+    p' <@ S.dec(if b then sk0 else sk1, c);
+    
+    return p' <> None;
+  }
+}.
+
+
+(*
+  Strong Collision-FReeness (SCFR).
+  As SROB, but additionally requires the resulting plaintexts to be
+  equal to eachother (instead of only requiring them to be valid).
+  
+  Weak Collision-FReeness (WCFR).
+  As WROB, but additionally requires the resulting plaintexts to be
+  equal to eachother (instead of only requiring the final plaintext to be valid).
+*)
+(*
+  Strong Collision-FReeness under Chosen-Plaintext Attacks (SCFR-CPA).
+  In a CPA setting, the adversary is given two (honestly generated) public keys and is asked to
+  provide a (single) ciphertext that decrypts to the same valid plaintext under both 
+  of the secret keys (corresponding to the provided public keys).
+*)
+(** Adversary class considered for SCFR-CPA **)
+module type Adv_SCFRCPA = {
+  proc find(pk0 : pk_t, pk1 : pk_t) : ctxt_t
+}.
+
+(** SCFR-CPA security game **)
+module SCFR_CPA (S : Scheme, A : Adv_SCFRCPA) = {
+  proc main() : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var p0, p1 : ptxt_t option;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    
+    c <@ A.find(pk0, pk1);
+    
+    p0 <@ S.dec(sk0, c);
+    p1 <@ S.dec(sk1, c);
+    
+    return p0 <> None /\ p1 <> None /\ p0 = p1;
+  }
+}.
+
+(*
+  Weak Collision-FReeness under Chosen-Plaintext Attacks (WCFR-CPA).
+  In a CPA setting, the adversary is given two (honestly generated) public keys and is asked to choose
+  which one to use for encryption and which one to use (the corresponding secret key of)
+  for decryption. Here, the goal is that the decryption (with the key appointed for
+  decryption) of the encryption (created with the key appointed for decryption) returns
+  a valid plaintext that is equal to the encrypted one.
+*)
+(** Adversary class considered for WCFR-CPA **)
+module type Adv_WCFRCPA = {
+  proc choose(pk0 : pk_t, pk1 : pk_t) : bool * ptxt_t
+}.
+
+(** WCFR-CPA security game **)
+module WCFR_CPA (S : Scheme, A : Adv_WCFRCPA) = {
+  proc main() : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var p : ptxt_t;
+    var p' : ptxt_t option;
+    var b : bool;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+
+    
+    (b, p) <@ A.choose(pk0, pk1);
+    
+    c <@ S.enc(if b then pk1 else pk0, p);
+    p' <@ S.dec(if b then sk0 else sk1, c);
+    
+    return p' = Some p;
+  }
+}.
+
+
+(*
+  Strong Collision-FReeness under Chosen-Ciphertext Attacks (SCFR-CCA).
+  In a CCA setting, the adversary is given two (honestly generated) public keys and is asked to
+  provide a (single) ciphertext that decrypts to the same valid plaintext under both 
+  of the secret keys (corresponding to the provided public keys).
+*)
+(** Adversary class considered for SCFR-CCA **)
+module type Adv_SCFRCCA (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  proc find(pk0 : pk_t, pk1 : pk_t) : ctxt_t
+}.
+
+(** SCFR-CCA security game **)
+module SCFR_CCA (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_SCFRCCA) = {
+  proc main() : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var p0, p1 : ptxt_t option;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    O0.init(sk0);
+    O1.init(sk1);
+    
+    c <@ A(O0, O1).find(pk0, pk1);
+    
+    p0 <@ S.dec(sk0, c);
+    p1 <@ S.dec(sk1, c);
+    
+    return p0 <> None /\ p1 <> None /\ p0 = p1;
+  }
+}.
+
+(*
+  Weak ROBustness under Chosen-Ciphertext Attacks (WCFR-CCA).
+  In a CCA setting, the adversary is given two (honestly generated) public keys and is asked to choose
+  which one to use for encryption and which one to use (the corresponding secret key of)
+  for decryption. Here, the goal is that the decryption (with the key appointed for
+  decryption) of the encryption (created with the key appointed for decryption) returns
+  a valid plaintext that is equal to the encrypted one.
+*)
+(** Adversary class considered for WCFR-CCA **)
+module type Adv_WCFRCCA (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  proc choose(pk0 : pk_t, pk1 : pk_t) : bool * ptxt_t
+}.
+
+(** WCFR-CCA security game **)
+module WCFR_CCA (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_WCFRCCA) = {
+  proc main() : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var p : ptxt_t;
+    var p' : ptxt_t option;
+    var b : bool;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    O0.init(sk0);
+    O1.init(sk1);
+    
+    (b, p) <@ A(O0, O1).choose(pk0, pk1);
+    
+    c <@ S.enc(if b then pk1 else pk0, p);
+    p' <@ S.dec(if b then sk0 else sk1, c);
+    
+    return p' <> Some p;
+  }
+}.
+
+
 (** Delta-correct (i.e., partially-correct) PKE schemes. **)
 theory DeltaCorrect.
 (* Correctness *)
