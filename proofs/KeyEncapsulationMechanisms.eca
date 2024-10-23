@@ -2013,16 +2013,13 @@ module WCFR_CCA (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_WCF
 (*
   BINDing (BIND).
   Intuitively, binding properties capture to which extent certain artifacts (in a 
-  a non-failing KEM execution) uniquely determine other artifacts (in that same execution). 
-  That is, given the values of certain artifacts (e.g., the public key and ciphertext) produced
-  by honest execution of the KEM, it is hard to find different
-  values for some other artifact (e.g., the symmetric key) that would all
-  result in non-failing executions. Here, "non-failing" refers to the fact that the decapsulations
-  do not fail (and, hence, return a proper (symmetric) key).
-  For example, if a particular KEM has the property that "the ciphertext binds 
-  the (symmetric) key", this means that whenever a particular ciphertext C is created
-  with this KEM, it is hard to find different symmetric keys K0 and K1 such that C can
-  (validly) decapsulate to K0 *and* K1 (under different secret keys).
+  a non-failing KEM execution) determine other artifacts (in that same execution).
+  That is, informally, an artifact (e.g., symmetric key) binds another artifact (e.g., a ciphertext)
+  if seeing a certain value for the symmetric key (without failing) implies that the ciphertext is actually
+  the one corresponding to this symmetric key (because it is hard to find another one that decapsulates to the
+  same symmetric key without failing).
+  Depending on the adversarial model, the artifacts used as input to the KEM's procedures
+  are either honestly or maliciously generated.
 *)
 (* Types *)
 (** Binding configurations considered **)
@@ -2155,6 +2152,9 @@ module LEAK_BIND (S : Scheme, A : Adv_LEAKBIND) = {
   Want to split Decaps/Decaps, Encaps/Decaps, Encaps/Encaps cases?
   Seems cleaner (also because it seems to model slightly different scenarios?)
   However, can combine if better.
+  
+  Also, perhaps not necessary to have sk2pk operator if we let adversary
+  return public key (instead of secret key) for all encaps operations?
 *)
 (**
   MALiciously BINDing (MAL-BIND).
