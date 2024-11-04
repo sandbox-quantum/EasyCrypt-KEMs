@@ -297,19 +297,24 @@ module OW_CCA (S : Scheme, O : Oracles_CCA2i, A : Adv_OWCCA) = {
   (ciphertext) INDistinguishability (IND). 
   The adversary is asked to determine whether a given
   (symmetric) key is (1) encapsulated by a given ciphertext or (2) independently
-  sampled at random (from dkey).
+  sampled at random.
 **)
 abstract theory IND.
 (* Distributions *)
-(** (Sub-)Distribution over (symmetric) keys **)
-op dkey : key_t distr.
+(** (Sub-)Distribution over (symmetric) keys (may depend on public key) **)
+(** 
+  Dependence on public key may be used to, e.g., model cases where the key space
+  depends on the public key (like in the case of RSA). Instead of having the actual type
+  change depending on the public key (which, at the time of writing, is not possible in EC).
+**)
+op dkeym : pk_t -> key_t distr.
 
 
 (*
   (ciphertext) INDistinguishability under Chosen-Plaintext Attacks (IND-CPA).
   In a CPA setting, the adversary is asked to determine whether a given
   (symmetric) key is (1) encapsulated by a given ciphertext or (2) independently
-  sampled at random (from dkey).
+  sampled at random (from dkeym).
 *)
 (** Adversary class considered for IND-CPA **)
 module type Adv_INDCPA = { 
@@ -328,7 +333,7 @@ module IND_CPA (S : Scheme, A : Adv_INDCPA) = {
     (pk, sk) <@ S.keygen();
     
     (k, c) <@ S.encaps(pk);
-    k' <$ dkey;
+    k' <$ dkeym pk;
     
     b <$ {0,1};
     
@@ -350,7 +355,7 @@ module IND_CPA_P (S : Scheme, A : Adv_INDCPA) = {
     (pk, sk) <@ S.keygen();
     
     (k, c) <@ S.encaps(pk);
-    k' <$ dkey;
+    k' <$ dkeym pk;
     
     b' <@ A.distinguish(pk, if b then k' else k, c);
     
@@ -363,7 +368,7 @@ module IND_CPA_P (S : Scheme, A : Adv_INDCPA) = {
   (ciphertext) INDistinguishability under non-adaptive Chosen-Ciphertext Attacks (IND-CCA1).
   In a CCA1 setting, the adversary is asked to determine whether a given
   (symmetric) key is (1) encapsulated by a given ciphertext or (2) independently
-  sampled at random (from dkey).
+  sampled at random (from dkeym).
 *)
 (** Adversary class considered for IND-CCA1 **)
 module type Adv_INDCCA1 (O : Oracles_CCA) = { 
@@ -386,7 +391,7 @@ module IND_CCA1 (S : Scheme, O : Oracles_CCA1i, A : Adv_INDCCA1) = {
     A(O).scout(pk);
     
     (k, c) <@ S.encaps(pk);
-    k' <$ dkey;
+    k' <$ dkeym pk;
     
     b <$ {0,1};
     
@@ -411,7 +416,7 @@ module IND_CCA1_P (S : Scheme, O : Oracles_CCA1i, A : Adv_INDCCA1) = {
     A(O).scout(pk);
     
     (k, c) <@ S.encaps(pk);
-    k' <$ dkey;
+    k' <$ dkeym pk;
     
     b' <@ A(O).distinguish(if b then k' else k, c);
     
@@ -424,7 +429,7 @@ module IND_CCA1_P (S : Scheme, O : Oracles_CCA1i, A : Adv_INDCCA1) = {
   (ciphertext) INDistinguishability under (traditional) adaptive Chosen-Ciphertext Attacks (IND-CCA2).
   In a (traditional) CCA2 setting, the adversary is asked to determine whether a given
   (symmetric) key is (1) encapsulated by a given ciphertext or (2) independently
-  sampled at random (from dkey).
+  sampled at random (from dkeym).
 *)
 (** Adversary class considered for IND-CCA2 **)
 module type Adv_INDCCA2 (O : Oracles_CCA) = { 
@@ -447,7 +452,7 @@ module IND_CCA2 (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_IND
     A(O1).scout(pk);
     
     (k, c) <@ S.encaps(pk);
-    k' <$ dkey;
+    k' <$ dkeym pk;
     O2.init(sk, c);
     
     b <$ {0,1};
@@ -473,7 +478,7 @@ module IND_CCA2_P (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_I
     A(O1).scout(pk);
     
     (k, c) <@ S.encaps(pk);
-    k' <$ dkey;
+    k' <$ dkeym pk;
     O2.init(sk, c);
     
     b' <@ A(O2).distinguish(if b then k' else k, c);
@@ -487,7 +492,7 @@ module IND_CCA2_P (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_I
   (ciphertext) INDistinguishability under (modern) adaptive Chosen-Ciphertext Attacks (IND-CCA2).
   In a (modern) CCA2 setting, the adversary is asked to determine whether a given
   (symmetric) key is (1) encapsulated by a given ciphertext or (2) independently
-  sampled at random (from dkey).
+  sampled at random (from dkeym).
 *)
 (** Adversary class considered for IND-CCA (i.e., modern IND-CCA2) **)
 module type Adv_INDCCA (O : Oracles_CCA) = {
@@ -506,7 +511,7 @@ module IND_CCA (S : Scheme, O : Oracles_CCA2i, A : Adv_INDCCA) = {
     (pk, sk) <@ S.keygen();
     
     (k, c) <@ S.encaps(pk);
-    k' <$ dkey;
+    k' <$ dkeym pk;
     O.init(sk, c);
     
     b <$ {0,1};
@@ -529,7 +534,7 @@ module IND_CCA_P (S : Scheme, O : Oracles_CCA2i, A : Adv_INDCCA) = {
     (pk, sk) <@ S.keygen();
     
     (k, c) <@ S.encaps(pk);
-    k' <$ dkey;
+    k' <$ dkeym pk;
     O.init(sk, c);
     
     b' <@ A(O).distinguish(pk, if b then k' else k, c);
@@ -557,8 +562,13 @@ end IND.
 **)
 abstract theory NM.
 (* Distributions *)
-(** (Sub-)Distribution over (symmetric) keys **)
-op dkey : key_t distr.
+(** (Sub-)Distribution over (symmetric) keys (may depend on public key) **)
+(** 
+  Dependence on public key may be used to, e.g., model cases where the key space
+  depends on the public key (like in the case of RSA). Instead of having the actual type
+  change depending on the public key (which, at the time of writing, is not possible in EC).
+**)
+op dkeym : pk_t -> key_t distr.
 
 (*
   (ciphertext) Non-Malleability under Chosen-Plaintext Attacks (NM-CPA).
@@ -589,7 +599,7 @@ module NM_CPA (S : Scheme, A : Adv_NMCPA) = {
     (pk, sk) <@ S.keygen();
     
     (k, c) <@ S.encaps(pk);
-    k' <$ dkey;
+    k' <$ dkeym pk;
     
     (rel, cl) <@ A.find(pk, c);
     
@@ -620,7 +630,7 @@ module NM_CPA_P (S : Scheme, A : Adv_NMCPA) = {
     (pk, sk) <@ S.keygen();
     
     (k, c) <@ S.encaps(pk);
-    k' <$ dkey;
+    k' <$ dkeym pk;
     
     (rel, cl) <@ A.find(pk, c);
     
@@ -662,7 +672,7 @@ module SNM_CPA (S : Scheme, A : Adv_SNMCPA) = {
     (pk, sk) <@ S.keygen();
     
     (k, c) <@ S.encaps(pk);
-    k' <$ dkey;
+    k' <$ dkeym pk;
     
     o <$ {0,1};
     (rel, cl) <@ A.find(pk, c, if o then (k', k) else (k, k'));
@@ -695,7 +705,7 @@ module SNM_CPA_P (S : Scheme, A : Adv_SNMCPA) = {
     (pk, sk) <@ S.keygen();
     
     (k, c) <@ S.encaps(pk);
-    k' <$ dkey;
+    k' <$ dkeym pk;
     
     o <$ {0,1};
     (rel, cl) <@ A.find(pk, c, if o then (k', k) else (k, k'));
@@ -744,7 +754,7 @@ module NM_CCA1 (S : Scheme, O : Oracles_CCA1i, A : Adv_NMCCA1) = {
     A(O).scout(pk);
     
     (k, c) <@ S.encaps(pk);
-    k' <$ dkey;
+    k' <$ dkeym pk;
     
     (rel, cl) <@ A(O).find(c);
     
@@ -778,7 +788,7 @@ module NM_CCA1_P (S : Scheme, O : Oracles_CCA1i, A : Adv_NMCCA1) = {
     A(O).scout(pk);
     
     (k, c) <@ S.encaps(pk);
-    k' <$ dkey;
+    k' <$ dkeym pk;
     
     (rel, cl) <@ A(O).find(c);
     
@@ -824,7 +834,7 @@ module SNM_CCA1 (S : Scheme, O : Oracles_CCA1i, A : Adv_SNMCCA1) = {
     A(O).scout(pk);
         
     (k, c) <@ S.encaps(pk);
-    k' <$ dkey;
+    k' <$ dkeym pk;
 
     o <$ {0,1};
     (rel, cl) <@ A(O).find(c, if o then (k', k) else (k, k'));
@@ -860,7 +870,7 @@ module SNM_CCA1_P (S : Scheme, O : Oracles_CCA1i, A : Adv_SNMCCA1) = {
     A(O).scout(pk);
         
     (k, c) <@ S.encaps(pk);
-    k' <$ dkey;
+    k' <$ dkeym pk;
 
     o <$ {0,1};
     (rel, cl) <@ A(O).find(c, if o then (k', k) else (k, k'));
@@ -909,7 +919,7 @@ module NM_CCA2 (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_NMCC
     A(O1).scout(pk);
     
     (k, c) <@ S.encaps(pk);
-    k' <$ dkey;
+    k' <$ dkeym pk;
     O2.init(sk, c);
     
     (rel, cl) <@ A(O2).find(c);
@@ -944,7 +954,7 @@ module NM_CCA2_P (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_NM
     A(O1).scout(pk);
     
     (k, c) <@ S.encaps(pk);
-    k' <$ dkey;
+    k' <$ dkeym pk;
     O2.init(sk, c);
     
     (rel, cl) <@ A(O2).find(c);
@@ -991,7 +1001,7 @@ module SNM_CCA2 (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_SNM
     A(O1).scout(pk);
 
     (k, c) <@ S.encaps(pk);
-    k' <$ dkey;
+    k' <$ dkeym pk;
     O2.init(sk, c);
 
     o <$ {0,1};
@@ -1028,7 +1038,7 @@ module SNM_CCA2_P (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_S
     A(O1).scout(pk);
 
     (k, c) <@ S.encaps(pk);
-    k' <$ dkey;
+    k' <$ dkeym pk;
     O2.init(sk, c);
 
     o <$ {0,1};
@@ -1074,7 +1084,7 @@ module NM_CCA (S : Scheme, O : Oracles_CCA2i, A : Adv_NMCCA) = {
     (pk, sk) <@ S.keygen();
     
     (k, c) <@ S.encaps(pk);
-    k' <$ dkey;
+    k' <$ dkeym pk;
     O.init(sk, c);
     
     (rel, cl) <@ A(O).find(pk, c);
@@ -1106,7 +1116,7 @@ module NM_CCA_P (S : Scheme, O : Oracles_CCA2i, A : Adv_NMCCA) = {
     (pk, sk) <@ S.keygen();
     
     (k, c) <@ S.encaps(pk);
-    k' <$ dkey;
+    k' <$ dkeym pk;
     O.init(sk, c);
     
     (rel, cl) <@ A(O).find(pk, c);
@@ -1149,7 +1159,7 @@ module SNM_CCA (S : Scheme, O : Oracles_CCA2i, A : Adv_SNMCCA) = {
     (pk, sk) <@ S.keygen();
     
     (k, c) <@ S.encaps(pk);
-    k' <$ dkey;
+    k' <$ dkeym pk;
     O.init(sk, c);
 
     o <$ {0,1};
@@ -1183,7 +1193,7 @@ module SNM_CCA_P (S : Scheme, O : Oracles_CCA2i, A : Adv_SNMCCA) = {
     (pk, sk) <@ S.keygen();
     
     (k, c) <@ S.encaps(pk);
-    k' <$ dkey;
+    k' <$ dkeym pk;
     O.init(sk, c);
 
     o <$ {0,1};
@@ -2147,15 +2157,6 @@ module LEAK_BIND (S : Scheme, A : Adv_LEAKBIND) = {
 }.
 
 
-(*
-  TODO:
-  Want to split Decaps/Decaps, Encaps/Decaps, Encaps/Encaps cases?
-  Seems cleaner (also because it seems to model slightly different scenarios?)
-  However, can combine if better.
-  
-  Also, perhaps not necessary to have sk2pk operator if we let adversary
-  return public key (instead of secret key) for all encaps operations?
-*)
 (**
   MALiciously BINDing (MAL-BIND).
   Binding properties where the adversary provides the 
@@ -2306,4 +2307,81 @@ module MAL_BIND_EE (S : SchemeDerand, A : Adv_MALBIND_EE) = {
   }
 }.
 
+
+(*
+  MALiciously BINDing w.r.t. any of DD, ED, or EE (MAL-BIND).
+  The adversary is asked to choose any of the MAL-BIND scenarios (DD, DE, or EE) 
+  and provide values that induce a binding break
+  (w.r.t. the considered configuration) for that scenario.
+*)
+(* Types *)
+(** Malicious binding scenarios **)
+type malbind_scenario = [
+    DECAPS_DECAPS
+  | ENCAPS_DECAPS
+  | ENCAPS_ENCAPS
+].
+
+(** Adversary class considered for MAL-BIND **)
+module type Adv_MALBIND = {
+  proc choose() : malbind_scenario
+  proc find_dd() : sk_t * sk_t * ctxt_t * ctxt_t
+  proc find_de() : sk_t * sk_t * rand_t * ctxt_t
+  proc find_ee() : sk_t * sk_t * rand_t * rand_t
+}.
+
+(** MAL-BIND security game (specific configuration is passed to the procedure) **)
+module MAL_BIND (S : SchemeDerand, A : Adv_MALBIND) = {
+  proc main(bc : bindconf) : bool = {
+    var mbs : malbind_scenario;
+    var sk0, sk1 : sk_t;
+    var r0, r1 : rand_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t;
+    var k0o, k1o : key_t option;
+    var pk0, pk1 : pk_t;
+    var no_fail, is_bb : bool;
+        
+    mbs <@ A.choose();
+    
+    if (mbs = DECAPS_DECAPS) {
+      (sk0, sk1, c0, c1) <@ A.find_dd();
+    
+      pk0 <- sk2pk sk0;
+      pk1 <- sk2pk sk1;
+
+      k0o <@ S.decaps(sk0, c0);
+      k1o <@ S.decaps(sk1, c1);
+
+      no_fail <- k0o <> None /\ k1o <> None;
+      is_bb <- is_bindbreak bc (oget k0o) (oget k1o) pk0 pk1 c0 c1;
+    } elif (mbs = ENCAPS_DECAPS) {
+      (sk0, sk1, r0, c1) <@ A.find_de();
+
+      pk0 <- sk2pk sk0;
+      pk1 <- sk2pk sk1;
+
+      (k0, c0) <@ S.encaps(pk0, r0);
+      k1o <@ S.decaps(sk1, c1);
+      
+      no_fail <- k1o <> None;
+      is_bb <- is_bindbreak bc k0 (oget k1o) pk0 pk1 c0 c1;
+    } else { (* mbs = ENCAPS_ENCAPS *)
+      (sk0, sk1, r0, r1) <@ A.find_ee();
+    
+      pk0 <- sk2pk sk0;
+      pk1 <- sk2pk sk1;
+
+      (k0, c0) <@ S.encaps(pk0, r0);
+      (k1, c1) <@ S.encaps(pk1, r1);
+      
+      no_fail <- true;
+      is_bb <- is_bindbreak bc k0 k1 pk0 pk1 c0 c1;
+    }
+
+    return no_fail /\ is_bb;
+  }
+}.
+
 end MALBIND.
+(* Can potentially reuse games specific to MALBIND scenarios in general MALBIND game by tweaking interfaces, but may hurt readability quite a bit *)

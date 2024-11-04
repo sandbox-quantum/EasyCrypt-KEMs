@@ -154,8 +154,13 @@ module type Oracles_CCA = {
 **)
 abstract theory OW.
 (* Distributions *)
-(** (Sub-)Distribution over plaintexts **)
-op dptxt : ptxt_t distr.
+(** (Sub-)Distribution over plaintexts (may depend on public key) **)
+(** 
+  Dependence on public key may be used to, e.g., model cases where the message space
+  depends on the public key (like in the case of RSA). Instead of having the actual type
+  change depending on the public key (which, at the time of writing, is not possible in EC).
+**)
+op dptxtm : pk_t -> ptxt_t distr.
 
 
 (*
@@ -178,7 +183,7 @@ module OW_CPA (S : Scheme, A : Adv_OWCPA) = {
     
     (pk, sk) <@ S.keygen();
     
-    p <$ dptxt;
+    p <$ dptxtm pk;
     c <@ S.enc(pk, p);
     
     p' <@ A.find(pk, c);
@@ -211,7 +216,7 @@ module OW_CCA1 (S : Scheme, O : Oracles_CCA1i, A : Adv_OWCCA1) = {
     
     A(O).scout(pk);
     
-    p <$ dptxt;
+    p <$ dptxtm pk;
     
     c <@ S.enc(pk, p);
     
@@ -247,7 +252,7 @@ module OW_CCA2 (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_OWCC
     
     A(O1).scout(pk);
     
-    p <$ dptxt;
+    p <$ dptxtm pk;
     
     c <@ S.enc(pk, p);
     O2.init(sk, c);
@@ -1357,7 +1362,12 @@ module type Oracles_CV = {
 abstract theory OW.
 (* Distributions *)
 (** (Sub-)Distribution over plaintexts **)
-op dptxt : ptxt_t distr.
+(** 
+  Dependence on public key may be used to, e.g., model cases where the message space
+  depends on the public key (like in the case of RSA). Instead of having the actual type
+  change depending on the public key (which, at the time of writing, is not possible in EC).
+**)
+op dptxtm : pk_t -> ptxt_t distr.
 
 
 (* One-Wayness under Chosen-Plaintext Attack (OW-CPA) *)
@@ -1378,7 +1388,7 @@ module OW_CPA (S : Scheme, O : Oracles_PCi, A : Adv_OWCPA) = {
     (pk, sk) <@ S.keygen();
     O.init(sk);
     
-    p <$ dptxt;
+    p <$ dptxtm pk;
     c <@ S.enc(pk, p);
     
     p' <@ A.find(pk, c);
@@ -1408,7 +1418,7 @@ module OW_PCA (S : Scheme, O : Oracles_PCi, A : Adv_OWPCA) = {
     (pk, sk) <@ S.keygen();
     O.init(sk);
     
-    p <$ dptxt;
+    p <$ dptxtm pk;
     c <@ S.enc(pk, p);
     
     p' <@ A(O).find(pk, c);
@@ -1438,7 +1448,7 @@ module OW_VCA (S : Scheme, OPC : Oracles_PCi, OCV : Oracles_CVi, A : Adv_OWVCA) 
     (pk, sk) <@ S.keygen();
     OPC.init(sk);
     
-    p <$ dptxt;
+    p <$ dptxtm pk;
     c <@ S.enc(pk, p);
     OCV.init(sk, c);
     
@@ -1469,7 +1479,7 @@ module OW_PVCA (S : Scheme, OPC : Oracles_PCi, OCV : Oracles_CVi, A : Adv_OWPVCA
     (pk, sk) <@ S.keygen();
     OPC.init(sk);
     
-    p <$ dptxt;
+    p <$ dptxtm pk;
     c <@ S.enc(pk, p);
     OCV.init(sk, c);
     
