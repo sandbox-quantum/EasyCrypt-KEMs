@@ -85,7 +85,10 @@ module type Oracles_CCA1i = {
   proc decaps(c : ctxt_t) : key_t option
 }.
 
-(** A default implementation for the oracles employed in CCA1 security games **)
+(** 
+  A default implementation for the oracles employed in CCA1 security games 
+  (as well as the first stage of CCA2 games).
+**)
 module O_CCA1_Default (S : Scheme) : Oracles_CCA1i = {
   var sk : sk_t
   var qs : (ctxt_t * key_t option) list
@@ -105,6 +108,32 @@ module O_CCA1_Default (S : Scheme) : Oracles_CCA1i = {
     return k;
   }
 }.
+
+(** 
+  A duplication of the default implementation for the oracles employed in CCA1 security games 
+  (as well as the first stage of CCA2 games). May be useful for security notions considering two
+  such (sets of) oracles.
+**)
+module O_CCA1_DDefault (S : Scheme) : Oracles_CCA1i = {
+  var sk : sk_t
+  var qs : (ctxt_t * key_t option) list
+  
+  proc init(sk_init : sk_t) = {
+    sk <- sk_init;
+    qs <- [];
+  }
+  
+  proc decaps(c : ctxt_t) : key_t option = {
+    var k : key_t option;
+    
+    k <@ S.decaps(sk, c);
+    
+    qs <- rcons qs (c, k);
+    
+    return k;
+  }
+}.
+
 
 (* 
   adaptive Chosen-Ciphertext Attacks (Traditional: CCA2, Modern : CCA)
@@ -152,6 +181,38 @@ module O_CCA2_Default (S : Scheme) : Oracles_CCA2i = {
     return k;
   }
 }.
+
+(** 
+  A duplication of the default implementation for the oracles employed in 
+  (the second stage of) CCA2 (CCA) security games. May be useful for security notions 
+  considering two such (sets of) oracles.
+**)
+module O_CCA2_DDefault (S : Scheme) : Oracles_CCA2i = {
+  var sk : sk_t
+  var c' : ctxt_t 
+  var qs : (ctxt_t * key_t option) list
+  
+  proc init(sk_init : sk_t, c'_init : ctxt_t) = {
+    sk <- sk_init;
+    c' <- c'_init;
+    qs <- [];
+  }
+  
+  proc decaps(c : ctxt_t) : key_t option = {
+    var k : key_t option;
+    
+    if (c <> c') {
+      k <@ S.decaps(sk, c);
+    } else {
+      k <- None;
+    }
+    
+    qs <- rcons qs (c, k);
+        
+    return k;
+  }
+}.
+
 
 (**
   Interface for oracles given to the adversary in any CCA security games 
@@ -2499,7 +2560,7 @@ module (R_INDCCA1_INDCPA (A : Adv_INDCPA) : Adv_INDCCA1) (O : Oracles_CCA) = {
   (with above reduction adverary) for an IND_CCA1 adversary (shows IND_CCA1 --> IND_CPA).
 **)
 equiv Eqv_INDCPA_INDCCA1 (S <: Scheme{-R_INDCCA1_INDCPA, -O_CCA1_Default}) 
-                       (A <: Adv_INDCPA{-R_INDCCA1_INDCPA, -O_CCA1_Default, -S}) :
+                         (A <: Adv_INDCPA{-R_INDCCA1_INDCPA, -O_CCA1_Default, -S}) :
   IND_CPA(S, A).main ~ IND_CCA1(S, O_CCA1_Default(S), R_INDCCA1_INDCPA(A)).main :
     ={glob S, glob A} ==> ={res}.
 proof. 
@@ -2547,7 +2608,7 @@ clone import NM.
   oracle in second stage.
 **)  
 equiv Eqv_NMCCA1_NMCCA2 (S <: Scheme{-O_CCA1_Default}) 
-                          (A <: Adv_NMCCA1{-O_CCA1_Default, -S}) :
+                        (A <: Adv_NMCCA1{-O_CCA1_Default, -S}) :
   NM_CCA1(S, O_CCA1_Default(S), A).main ~ NM_CCA2(S, O_CCA1_Default(S), O_CCA2_Default(S), A).main : 
     ={glob S, glob A} ==> ={res}.
 proof. by proc; inline *; sim. qed.
@@ -2640,7 +2701,7 @@ module (R_SNMCCA1_SNMCPA (A : Adv_SNMCPA) : Adv_SNMCCA1) (O : Oracles_CCA) = {
   (with above reduction adverary) for an SNM_CCA1 adversary (shows SNM_CCA1 --> SNM_CPA).
 **)
 equiv Eqv_SNMCPA_SNMCCA1 (S <: Scheme{-O_CCA1_Default, -R_SNMCCA1_SNMCPA}) 
-                       (A <: Adv_SNMCPA{-O_CCA1_Default, -R_SNMCCA1_SNMCPA, -S}) :
+                         (A <: Adv_SNMCPA{-O_CCA1_Default, -R_SNMCCA1_SNMCPA, -S}) :
   SNM_CPA(S, A).main ~ SNM_CCA1(S, O_CCA1_Default(S), R_SNMCCA1_SNMCPA(A)).main :
     ={glob S, glob A} ==> ={res}.
 proof. 
@@ -2679,5 +2740,82 @@ call (: true); wp.
 rnd; wp; rnd.
 by call (: true); call (: true); skip. 
 qed. 
+
+
+(* Security goal: Anonymity (Key-indistinguishability) *)
+(** 
+  Equivalence between ANO_CCA1 and ANO_CCA2 for an ANO_CCA1 adversary 
+  (shows ANO_CCA2 --> ANO_CCA1). No reduction needed, because ANO_CCA1 adversary satisfies
+  interface expected from ANO_CCA2 adversaries, but simply does not gain access to
+  oracle in second stage.
+**)  
+equiv Eqv_ANOCCA1_ANOCCA2 (S <: Scheme{-O_CCA1_Default, -O_CCA1_DDefault}) 
+                          (A <: Adv_ANOCCA1{-O_CCA1_Default, -O_CCA1_DDefault, -O_CCA2_Default, -O_CCA2_DDefault, -S}) :
+  ANO_CCA1(S, O_CCA1_Default(S), O_CCA1_DDefault(S), A).main 
+  ~ 
+  ANO_CCA2(S, O_CCA1_Default(S), O_CCA1_DDefault(S), O_CCA2_Default(S), O_CCA2_DDefault(S), A).main : 
+    ={glob S, glob A} ==> ={res}.
+proof. 
+proc; inline *.
+call (: true); wp; call (: true); rnd.
+call (: ={glob S, glob O_CCA1_Default, glob O_CCA1_DDefault}); 1,2: by sim.
+by wp; call (: true); call (: true); skip => /> b _ -[]. 
+qed.
+
+
+(** Reduction adversary reducing ANO-CCA1 to ANO-CPA **)
+module (R_ANOCCA1_ANOCPA (A : Adv_ANOCPA) : Adv_ANOCCA1) (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  var pkc0, pkc1 : pk_t
+  
+  proc scout(pk0 : pk_t, pk1 : pk_t) : unit = {
+    pkc0 <- pk0;
+    pkc1 <- pk1;
+  }
+    
+  proc distinguish(kc : key_t * ctxt_t) : bool = {
+    var b : bool;
+    
+    b <@ A.distinguish(pkc0, pkc1, kc);
+    
+    return b;
+  }
+}.
+
+(** 
+  Equivalence between ANO_CPA (for arbitrary adversary) and ANO_CCA1 
+  (with above reduction adverary) for an ANO_CCA1 adversary (shows ANO_CCA1 --> ANO_CPA).
+**)
+equiv Eqv_ANOCPA_ANOCCA1 (S <: Scheme{-R_ANOCCA1_ANOCPA}) 
+                       (A <: Adv_ANOCPA{-S}) :
+  ANO_CPA(S, A).main ~ ANO_CCA1(S, O_CCA1_Default(S), O_CCA1_DDefault(S), R_ANOCCA1_ANOCPA(A)).main :
+    ={glob S, glob A} ==> ={res}.
+proof. by proc; inline *; sim. qed.
+
+
+(** Reduction adversary reducing ANO-CCA to ANO-CPA **)
+module (R_ANOCCA_ANOCPA (A : Adv_ANOCPA) : Adv_ANOCCA) (O0 : Oracles_CCA, O1 : Oracles_CCA) = { 
+  proc distinguish(pk0 : pk_t, pk1 : pk_t, kc : key_t * ctxt_t) : bool = {
+    var b : bool;
+    
+    b <@ A.distinguish(pk0, pk1, kc);
+    
+    return b;
+  }
+}.
+
+(** 
+  Equivalence between ANO_CPA (for arbitrary adversary) and ANO_CCA
+  (with above reduction adverary) for an ANO_CCA adversary (shows ANO_CCA --> ANO_CPA).
+**)
+equiv Eqv_ANOCPA_ANOCCA (S <: Scheme) 
+                        (A <: Adv_ANOCPA{-O_CCA2_Default, -O_CCA2_DDefault, -S}) :
+  ANO_CPA(S, A).main ~ ANO_CCA(S, O_CCA2_Default(S), O_CCA2_DDefault(S), R_ANOCCA_ANOCPA(A)).main :
+    ={glob S, glob A} ==> ={res}.
+proof. 
+proc; inline *. 
+wp; call (: true); wp; call (: true).
+by rnd; call (: true); call (: true); skip => /> b _ -[]. 
+qed. 
+
 
 end Relations.
