@@ -106,20 +106,24 @@ section.
 declare module P <: Provided {-Sampler}.
 declare axiom P_main_ll : islossless P.main.
 
-lemma Eq_Ind_Formalizations &m :
-  2%r * `| Pr[Sampler(P).main() @ &m : res = Sampler.x] - 1%r/2%r |
+lemma RelPr_IndSampler_IndProvided &m :
+  2%r * Pr[Sampler(P).main() @ &m : res = Sampler.x] - 1%r
   =
-  `| Pr[P.main(false, tt) @ &m : res] - Pr[P.main(true, tt) @ &m : res] |.
+  Pr[P.main(true, tt) @ &m : res] - Pr[P.main(false, tt) @ &m : res].
 proof.
-rewrite -StdOrder.RealOrder.normrZ 1:// RField.mulrBr /=.
-rewrite (StdOrder.RealOrder.distrC Pr[P.main(false, tt) @ &m : res]); congr.
 rewrite (EqPr_SamplerConj_ProvidedCond_UniBig P (fun a v g b => b = v) &m tt dbool_uni) /=.
 rewrite (: support {0,1} = predT); 1: by rewrite fun_ext => b; rewrite supp_dbool.
-rewrite -Support.card_size_to_seq dboolE -(eq_big_perm predT _ _ _  Support.perm_eq_enum_to_seq).
+rewrite -Support.card_size_to_seq dboolE -(eq_big_perm predT _ _ _  Support.perm_eq_enum_to_seq). 
 rewrite 2!big_cons big_nil /predT /= -/predT.
 rewrite -[_ = false]negbK Pr[mu_not] (: Pr[P.main(false, tt) @ &m : true] = 1%r) 2:/#.
 by byphoare P_main_ll.
 qed.
+
+lemma Rel_Ind_Formalizations &m :
+  2%r * `| Pr[Sampler(P).main() @ &m : res = Sampler.x] - 1%r/2%r |
+  =
+  `| Pr[P.main(false, tt) @ &m : res] - Pr[P.main(true, tt) @ &m : res] |.
+proof. smt(RelPr_IndSampler_IndProvided). qed.
 
 end section.
 

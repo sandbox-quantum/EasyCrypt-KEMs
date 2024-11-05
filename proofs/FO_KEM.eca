@@ -1,0 +1,22 @@
+require import AllCore.
+require KeyEncapsulationMechanisms PublicKeyEncryption.
+
+
+(* Types *)
+(** Public keys (asymmetric) **)
+type pk_t.
+
+(** Secret keys (asymmetric) **)
+type sk_t.
+
+(** Shared/session keys (symmetric) **)
+type key_t.
+
+(** Ciphertexts/Encapsulations **)
+type ctxt_t.
+
+
+
+(** Import basic PKE and KEM definitions **)
+clone import PublicKeyEncryption as PKE with
+  type pk_t <- 

@@ -8,7 +8,7 @@
   - [Design and Analysis of Practical Public-Key Encryption Schemes Secure against Adaptive Chosen Ciphertext Attack](https://eprint.iacr.org/2001/108)
   - [On the Equivalence of Several Security Notions of Key Encapsulation Mechanism](https://eprint.iacr.org/2006/268)
   - [KEM/DEM: Necessary and Sufficient Conditions for Secure Hybrid Encryption](https://eprint.iacr.org/2006/265)
-  - [Anonymous, Robuse Post-Quantum Public Key Encryption](https://eprint.iacr.org/2021/708)
+  - [Anonymous, Robust Post-Quantum Public Key Encryption](https://eprint.iacr.org/2021/708)
   - [Keeping Up with the KEMs: Stronger Security Notions for KEMs and Automated Analysis of KEM-based Protocols](https://eprint.iacr.org/2023/1933)
   - [Unbindable Kemmy Schmidt: ML-KEM is neither MAL-BIND-K-CT nor MAL-BIND-K-PK](https://eprint.iacr.org/2024/523)
   - [On the Complete Non-Malleability of the Fujisaki-Okamoto Transform](https://eprint.iacr.org/2022/1654)
@@ -2322,6 +2322,7 @@ type malbind_scenario = [
   | ENCAPS_ENCAPS
 ].
 
+(* Can potentially reuse things specific to MALBIND scenarios in general MALBIND game by tweaking interfaces, but may hurt readability quite a bit *)
 (** Adversary class considered for MAL-BIND **)
 module type Adv_MALBIND = {
   proc choose() : malbind_scenario
@@ -2384,4 +2385,299 @@ module MAL_BIND (S : SchemeDerand, A : Adv_MALBIND) = {
 }.
 
 end MALBIND.
-(* Can potentially reuse games specific to MALBIND scenarios in general MALBIND game by tweaking interfaces, but may hurt readability quite a bit *)
+
+
+
+
+(** 
+  Generic relations between properties of KEMs.
+**)
+theory Relations.
+(* 
+  Hierarchy concerning (traditional) CCA2, (traditional) CCA1, and CPA.
+  (CCA2 --> CCA1 --> CPA), as well as (modern) CCA and CPA (CCA --> CPA).
+*)
+(* Security goal: One-wayness *)
+(** 
+  Equivalence between OW_CCA1 and OW_CCA2 for an OW_CCA1 adversary 
+  (shows OW_CCA2 --> OW_CCA1). No reduction needed, because OW_CCA1 adversary satisfies
+  interface expected from OW_CCA2 adversaries, but simply does not gain access to
+  oracle in second stage.
+**)  
+equiv Eqv_OWCCA1_OWCCA2 (S <: Scheme{-O_CCA1_Default}) 
+                        (A <: Adv_OWCCA1{-O_CCA1_Default, -S}) :
+  OW_CCA1(S, O_CCA1_Default(S), A).main ~ OW_CCA2(S, O_CCA1_Default(S), O_CCA2_Default(S), A).main : 
+    ={glob S, glob A} ==> ={res}.
+proof. by proc; inline *; sim. qed.
+
+
+(** Reduction adversary reducing OW-CCA1 to OW-CPA **)
+module (R_OWCCA1_OWCPA (A : Adv_OWCPA) : Adv_OWCCA1) (O : Oracles_CCA) = { 
+  var pkc : pk_t
+  
+  proc scout(pk : pk_t) : unit = {
+    pkc <- pk;
+  }
+  
+  proc find(c : ctxt_t) : key_t = {
+    var k : key_t;
+    
+    k <@ A.find(pkc, c);
+    
+    return k;
+  }
+}.
+
+(** 
+  Equivalence between OW_CPA (for arbitrary adversary) and OW_CCA1 
+  (with above reduction adverary) for an OW_CCA1 adversary (shows OW_CCA1 --> OW_CPA).
+**)
+equiv Eqv_OWCPA_OWCCA1 (S <: Scheme{-R_OWCCA1_OWCPA}) 
+                       (A <: Adv_OWCPA{-S}) :
+  OW_CPA(S, A).main ~ OW_CCA1(S, O_CCA1_Default(S), R_OWCCA1_OWCPA(A)).main :
+    ={glob S, glob A} ==> ={res}.
+proof. by proc; inline *; sim. qed.
+
+
+(** Reduction adversary reducing OW-CCA to OW-CPA **)
+module (R_OWCCA_OWCPA (A : Adv_OWCPA) : Adv_OWCCA) (O : Oracles_CCA) = { 
+  proc find(pk : pk_t, c : ctxt_t) : key_t = {
+    var k : key_t;
+    
+    k <@ A.find(pk, c);
+    
+    return k;
+  }
+}.
+
+(** 
+  Equivalence between OW_CPA (for arbitrary adversary) and OW_CCA
+  (with above reduction adverary) for an OW_CCA adversary (shows OW_CCA --> OW_CPA).
+**)
+equiv Eqv_OWCPA_OWCCA (S <: Scheme) 
+                      (A <: Adv_OWCPA{-S}) :
+  OW_CPA(S, A).main ~ OW_CCA(S, O_CCA2_Default(S), R_OWCCA_OWCPA(A)).main :
+    ={glob S, glob A} ==> ={res}.
+proof. by proc; inline *; sim. qed.
+
+
+(* Security goal: Indistinguishability *)
+clone import IND.
+
+(** 
+  Equivalence between IND_CCA1 and IND_CCA2 for an IND_CCA1 adversary 
+  (shows IND_CCA2 --> IND_CCA1). No reduction needed, because IND_CCA1 adversary satisfies
+  interface expected from IND_CCA2 adversaries, but simply does not gain access to
+  oracle in second stage.
+**)  
+equiv Eqv_INDCCA1_INDCCA2 (S <: Scheme{-O_CCA1_Default}) 
+                          (A <: Adv_INDCCA1{-O_CCA1_Default, -S}) :
+  IND_CCA1(S, O_CCA1_Default(S), A).main ~ IND_CCA2(S, O_CCA1_Default(S), O_CCA2_Default(S), A).main : 
+    ={glob S, glob A} ==> ={res}.
+proof. by proc; inline *; sim. qed.
+
+
+(** Reduction adversary reducing IND-CCA1 to IND-CPA **)
+module (R_INDCCA1_INDCPA (A : Adv_INDCPA) : Adv_INDCCA1) (O : Oracles_CCA) = {
+  var pkc : pk_t
+  
+  proc scout(pk : pk_t) : unit = {
+    pkc <- pk;
+  }
+    
+  proc distinguish(k : key_t, c : ctxt_t) : bool = {
+    var b : bool;
+    
+    b <@ A.distinguish(pkc, k, c);
+    
+    return b;
+  }
+}.
+
+(** 
+  Equivalence between IND_CPA (for arbitrary adversary) and IND_CCA1 
+  (with above reduction adverary) for an IND_CCA1 adversary (shows IND_CCA1 --> IND_CPA).
+**)
+equiv Eqv_INDCPA_INDCCA1 (S <: Scheme{-R_INDCCA1_INDCPA, -O_CCA1_Default}) 
+                       (A <: Adv_INDCPA{-R_INDCCA1_INDCPA, -O_CCA1_Default, -S}) :
+  IND_CPA(S, A).main ~ IND_CCA1(S, O_CCA1_Default(S), R_INDCCA1_INDCPA(A)).main :
+    ={glob S, glob A} ==> ={res}.
+proof. 
+proc; inline *.
+wp; call (: true); wp.
+rnd; rnd.
+by call (: true); wp; call (: true); skip.
+qed.
+
+
+(** Reduction adversary reducing IND-CCA to IND-CPA **)
+module (R_INDCCA_INDCPA (A : Adv_INDCPA) : Adv_INDCCA) (O : Oracles_CCA) = { 
+  proc distinguish(pk : pk_t, k : key_t, c : ctxt_t) : bool = {
+    var b : bool;
+    
+    b <@ A.distinguish(pk, k, c);
+    
+    return b;
+  }
+}.
+
+(** 
+  Equivalence between IND_CPA (for arbitrary adversary) and IND_CCA
+  (with above reduction adverary) for an IND_CCA adversary (shows IND_CCA --> IND_CPA).
+**)
+equiv Eqv_INDCPA_INDCCA (S <: Scheme) 
+                        (A <: Adv_INDCPA{-O_CCA2_Default, -S}) :
+  IND_CPA(S, A).main ~ IND_CCA(S, O_CCA2_Default(S), R_INDCCA_INDCPA(A)).main :
+    ={glob S, glob A} ==> ={res}.
+proof. 
+proc; inline *.
+wp; call (: true); wp.
+rnd; wp; rnd.
+by call (: true); call (: true); skip.
+qed.
+
+
+(* Security goal: Non-malleability *)
+clone import NM.
+
+(** 
+  Equivalence between NM_CCA1 and NM_CCA2 for an NM_CCA1 adversary 
+  (shows NM_CCA2 --> NM_CCA1). No reduction needed, because NM_CCA1 adversary satisfies
+  interface expected from NM_CCA2 adversaries, but simply does not gain access to
+  oracle in second stage.
+**)  
+equiv Eqv_NMCCA1_NMCCA2 (S <: Scheme{-O_CCA1_Default}) 
+                          (A <: Adv_NMCCA1{-O_CCA1_Default, -S}) :
+  NM_CCA1(S, O_CCA1_Default(S), A).main ~ NM_CCA2(S, O_CCA1_Default(S), O_CCA2_Default(S), A).main : 
+    ={glob S, glob A} ==> ={res}.
+proof. by proc; inline *; sim. qed.
+
+(** Reduction adversary reducing NM-CCA1 to NM-CPA **)
+module (R_NMCCA1_NMCPA (A : Adv_NMCPA) : Adv_NMCCA1) (O : Oracles_CCA) = {
+  var pkc : pk_t
+  
+  proc scout(pk : pk_t) : unit = {
+    pkc <- pk;
+  }
+    
+  proc find(c : ctxt_t) : (key_t -> key_t option list -> bool) * ctxt_t list = {
+    var rel : (key_t -> key_t option list -> bool);
+    var cl : ctxt_t list;
+    
+    (rel, cl) <@ A.find(pkc, c);
+    
+    return (rel, cl);
+  }
+}.
+
+(** 
+  Equivalence between NM_CPA (for arbitrary adversary) and NM_CCA1 
+  (with above reduction adverary) for an NM_CCA1 adversary (shows NM_CCA1 --> NM_CPA).
+**)
+equiv Eqv_NMCPA_NMCCA1 (S <: Scheme{-R_NMCCA1_NMCPA}) 
+                       (A <: Adv_NMCPA{-S}) :
+  NM_CPA(S, A).main ~ NM_CCA1(S, O_CCA1_Default(S), R_NMCCA1_NMCPA(A)).main :
+    ={glob S, glob A} ==> ={res}.
+proof. by proc; inline *; sim. qed.
+
+
+(** Reduction adversary reducing NM-CCA to NM-CPA **)
+module (R_NMCCA_NMCPA (A : Adv_NMCPA) : Adv_NMCCA) (O : Oracles_CCA) = { 
+  proc find(pk : pk_t, c : ctxt_t) : (key_t -> key_t option list -> bool) * ctxt_t list = {
+    var rel : (key_t -> key_t option list -> bool);
+    var cl : ctxt_t list;
+    
+    (rel, cl) <@ A.find(pk, c);
+    
+    return (rel, cl);
+  }
+}.
+
+(** 
+  Equivalence between NM_CPA (for arbitrary adversary) and NM_CCA
+  (with above reduction adverary) for an NM_CCA adversary (shows NM_CCA --> NM_CPA).
+**)
+equiv Eqv_NMCPA_NMCCA (S <: Scheme) 
+                        (A <: Adv_NMCPA{-S}) :
+  NM_CPA(S, A).main ~ NM_CCA(S, O_CCA2_Default(S), R_NMCCA_NMCPA(A)).main :
+    ={glob S, glob A} ==> ={res}.
+proof. by proc; inline *; sim. qed.
+
+
+(** 
+  Equivalence between SNM_CCA1 and SNM_CCA2 for an SNM_CCA1 adversary 
+  (shows SNM_CCA2 --> SNM_CCA1). No reduction needed, because SNM_CCA1 adversary satisfies
+  interface expected from SNM_CCA2 adversaries, but simply does not gain access to
+  oracle in second stage.
+**)  
+equiv Eqv_SNMCCA1_SNMCCA2 (S <: Scheme{-O_CCA1_Default}) 
+                          (A <: Adv_SNMCCA1{-O_CCA1_Default, -S}) :
+  SNM_CCA1(S, O_CCA1_Default(S), A).main ~ SNM_CCA2(S, O_CCA1_Default(S), O_CCA2_Default(S), A).main : 
+    ={glob S, glob A} ==> ={res}.
+proof. by proc; inline *; sim. qed.
+
+
+(** Reduction adversary reducing SNM-CCA1 to SNM-CPA **)
+module (R_SNMCCA1_SNMCPA (A : Adv_SNMCPA) : Adv_SNMCCA1) (O : Oracles_CCA) = {
+  var pkc : pk_t
+  
+  proc scout(pk : pk_t) : unit = {
+    pkc <- pk;
+  }
+    
+  proc find(c : ctxt_t, kk : key_t * key_t) : (key_t -> key_t option list -> bool) * ctxt_t list = {
+    var rel : (key_t -> key_t option list -> bool);
+    var cl : ctxt_t list;
+    
+    (rel, cl) <@ A.find(pkc, c, kk);
+    
+    return (rel, cl);
+  }
+}.
+
+(** 
+  Equivalence between SNM_CPA (for arbitrary adversary) and SNM_CCA1 
+  (with above reduction adverary) for an SNM_CCA1 adversary (shows SNM_CCA1 --> SNM_CPA).
+**)
+equiv Eqv_SNMCPA_SNMCCA1 (S <: Scheme{-O_CCA1_Default, -R_SNMCCA1_SNMCPA}) 
+                       (A <: Adv_SNMCPA{-O_CCA1_Default, -R_SNMCCA1_SNMCPA, -S}) :
+  SNM_CPA(S, A).main ~ SNM_CCA1(S, O_CCA1_Default(S), R_SNMCCA1_SNMCPA(A)).main :
+    ={glob S, glob A} ==> ={res}.
+proof. 
+proc; inline *. 
+seq 5 12 : (={glob S, sk, k, c, k'} /\ rel{1} = rel0{2} /\ cl{1} = cl0{2}); 2: by sim. 
+call (: true); wp. 
+rnd; rnd.
+by call (: true); wp; call (: true); skip. 
+qed.
+
+
+(** Reduction adversary reducing SNM-CCA to SNM-CPA **)
+module (R_SNMCCA_SNMCPA (A : Adv_SNMCPA) : Adv_SNMCCA) (O : Oracles_CCA) = { 
+  proc find(pk : pk_t, c : ctxt_t, kk : key_t * key_t) : (key_t -> key_t option list -> bool) * ctxt_t list = {
+    var rel : (key_t -> key_t option list -> bool);
+    var cl : ctxt_t list;
+    
+    (rel, cl) <@ A.find(pk, c, kk);
+    
+    return (rel, cl);
+  }
+}.
+
+(** 
+  Equivalence between SNM_CPA (for arbitrary adversary) and SNM_CCA
+  (with above reduction adverary) for an SNM_CCA adversary (shows SNM_CCA --> SNM_CPA).
+**)
+equiv Eqv_SNMCPA_SNMCCA (S <: Scheme{-O_CCA2_Default}) 
+                        (A <: Adv_SNMCPA{-O_CCA2_Default, -S}) :
+  SNM_CPA(S, A).main ~ SNM_CCA(S, O_CCA2_Default(S), R_SNMCCA_SNMCPA(A)).main :
+    ={glob S, glob A} ==> ={res}.
+proof.
+proc; inline *. 
+seq 5 13 : (={glob S, sk, k, c, k'} /\ rel{1} = rel0{2} /\ cl{1} = cl0{2}); 2: by sim. 
+call (: true); wp. 
+rnd; wp; rnd.
+by call (: true); call (: true); skip. 
+qed. 
+
+end Relations.
