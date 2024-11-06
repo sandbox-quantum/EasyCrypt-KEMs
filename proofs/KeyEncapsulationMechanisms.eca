@@ -2076,7 +2076,7 @@ module WCFR_CCA (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_WCF
     (k, c) <@ S.encaps(if b then pk1 else pk0);
     k' <@ S.decaps(if b then sk0 else sk1, c);
     
-    return k' <> Some k;
+    return k' = Some k;
   }
 }.
 
@@ -2786,7 +2786,7 @@ module (R_ANOCCA1_ANOCPA (A : Adv_ANOCPA) : Adv_ANOCCA1) (O0 : Oracles_CCA, O1 :
   (with above reduction adverary) for an ANO_CCA1 adversary (shows ANO_CCA1 --> ANO_CPA).
 **)
 equiv Eqv_ANOCPA_ANOCCA1 (S <: Scheme{-R_ANOCCA1_ANOCPA}) 
-                       (A <: Adv_ANOCPA{-S}) :
+                         (A <: Adv_ANOCPA{-S}) :
   ANO_CPA(S, A).main ~ ANO_CCA1(S, O_CCA1_Default(S), O_CCA1_DDefault(S), R_ANOCCA1_ANOCPA(A)).main :
     ={glob S, glob A} ==> ={res}.
 proof. by proc; inline *; sim. qed.
@@ -2817,5 +2817,160 @@ wp; call (: true); wp; call (: true).
 by rnd; call (: true); call (: true); skip => /> b _ -[]. 
 qed. 
 
+
+(** 
+  Equivalence between WANO_CCA1 and WANO_CCA2 for an WANO_CCA1 adversary 
+  (shows WANO_CCA2 --> WANO_CCA1). No reduction needed, because WANO_CCA1 adversary satisfies
+  interface expected from WANO_CCA2 adversaries, but simply does not gain access to
+  oracle in second stage.
+**)  
+equiv Eqv_WANOCCA1_WANOCCA2 (S <: Scheme{-O_CCA1_Default, -O_CCA1_DDefault}) 
+                            (A <: Adv_WANOCCA1{-O_CCA1_Default, -O_CCA1_DDefault, -S}) :
+  WANO_CCA1(S, O_CCA1_Default(S), O_CCA1_DDefault(S), A).main 
+  ~ 
+  WANO_CCA2(S, O_CCA1_Default(S), O_CCA1_DDefault(S), O_CCA2_Default(S), O_CCA2_DDefault(S), A).main : 
+    ={glob S, glob A} ==> ={res}.
+proof. by proc; inline *; sim. qed.
+
+
+(** Reduction adversary reducing WANO-CCA1 to WANO-CPA **)
+module (R_WANOCCA1_WANOCPA (A : Adv_WANOCPA) : Adv_WANOCCA1) (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  var pkc0, pkc1 : pk_t
+  
+  proc scout(pk0 : pk_t, pk1 : pk_t) : unit = {
+    pkc0 <- pk0;
+    pkc1 <- pk1;
+  }
+    
+  proc distinguish(c : ctxt_t) : bool = {
+    var b : bool;
+    
+    b <@ A.distinguish(pkc0, pkc1, c);
+    
+    return b;
+  }
+}.
+
+(** 
+  Equivalence between WANO_CPA (for arbitrary adversary) and WANO_CCA1 
+  (with above reduction adverary) for an WANO_CCA1 adversary (shows WANO_CCA1 --> WANO_CPA).
+**)
+equiv Eqv_WANOCPA_WANOCCA1 (S <: Scheme{-R_WANOCCA1_WANOCPA}) 
+                           (A <: Adv_WANOCPA{-S}) :
+  WANO_CPA(S, A).main ~ WANO_CCA1(S, O_CCA1_Default(S), O_CCA1_DDefault(S), R_WANOCCA1_WANOCPA(A)).main :
+    ={glob S, glob A} ==> ={res}.
+proof. by proc; inline *; sim. qed.
+
+
+(** Reduction adversary reducing WANO-CCA to WANO-CPA **)
+module (R_WANOCCA_WANOCPA (A : Adv_WANOCPA) : Adv_WANOCCA) (O0 : Oracles_CCA, O1 : Oracles_CCA) = { 
+  proc distinguish(pk0 : pk_t, pk1 : pk_t, c : ctxt_t) : bool = {
+    var b : bool;
+    
+    b <@ A.distinguish(pk0, pk1, c);
+    
+    return b;
+  }
+}.
+
+(** 
+  Equivalence between WANO_CPA (for arbitrary adversary) and WANO_CCA
+  (with above reduction adverary) for an WANO_CCA adversary (shows WANO_CCA --> WANO_CPA).
+**)
+equiv Eqv_WANOCPA_WANOCCA (S <: Scheme) 
+                          (A <: Adv_WANOCPA{-S}) :
+  WANO_CPA(S, A).main ~ WANO_CCA(S, O_CCA2_Default(S), O_CCA2_DDefault(S), R_WANOCCA_WANOCPA(A)).main :
+    ={glob S, glob A} ==> ={res}.
+proof. by proc; inline *; sim. qed.
+
+
+(* Security goal: Robustness *)
+(** Reduction adversary reducing SROB-CCA to SROB-CPA **)
+module (R_SROBCCA_SROBCPA (A : Adv_SROBCPA) : Adv_SROBCCA) (O0 : Oracles_CCA, O1 : Oracles_CCA) = { 
+  proc find(pk0 : pk_t, pk1 : pk_t) : ctxt_t = {
+    var c : ctxt_t;
+    
+    c <@ A.find(pk0, pk1);
+    
+    return c;
+  }
+}.
+
+(** 
+  Equivalence between SROB_CPA (for arbitrary adversary) and SROB_CCA
+  (with above reduction adverary) for an SROB_CCA adversary (shows SROB_CCA --> SROB_CPA).
+**)
+equiv Eqv_SROBCPA_SROBCCA (S <: Scheme) 
+                          (A <: Adv_SROBCPA{-S}) :
+  SROB_CPA(S, A).main ~ SROB_CCA(S, O_CCA1_Default(S), O_CCA1_DDefault(S), R_SROBCCA_SROBCPA(A)).main :
+    ={glob S, glob A} ==> ={res}.
+proof. by proc; inline *; sim. qed.
+
+
+(** Reduction adversary reducing WROB-CCA to WROB-CPA **)
+module (R_WROBCCA_WROBCPA (A : Adv_WROBCPA) : Adv_WROBCCA) (O0 : Oracles_CCA, O1 : Oracles_CCA) = { 
+  proc choose(pk0 : pk_t, pk1 : pk_t) : bool = {
+    var b : bool;
+    
+    b <@ A.choose(pk0, pk1);
+    
+    return b;
+  }
+}.
+
+(** 
+  Equivalence between WROB_CPA (for arbitrary adversary) and WROB_CCA
+  (with above reduction adverary) for an WROB_CCA adversary (shows WROB_CCA --> WROB_CPA).
+**)
+equiv Eqv_WROBCPA_WROBCCA (S <: Scheme) 
+                          (A <: Adv_WROBCPA{-S}) :
+  WROB_CPA(S, A).main ~ WROB_CCA(S, O_CCA1_Default(S), O_CCA1_DDefault(S), R_WROBCCA_WROBCPA(A)).main :
+    ={glob S, glob A} ==> ={res}.
+proof. by proc; inline *; sim. qed.
+
+
+(* Security goal: Collision-freeness *)
+(** Reduction adversary reducing SCFR-CCA to SCFR-CPA **)
+module (R_SCFRCCA_SCFRCPA (A : Adv_SCFRCPA) : Adv_SCFRCCA) (O0 : Oracles_CCA, O1 : Oracles_CCA) = { 
+  proc find(pk0 : pk_t, pk1 : pk_t) : ctxt_t = {
+    var c : ctxt_t;
+    
+    c <@ A.find(pk0, pk1);
+    
+    return c;
+  }
+}.
+
+(** 
+  Equivalence between SCFR_CPA (for arbitrary adversary) and SCFR_CCA
+  (with above reduction adverary) for an SCFR_CCA adversary (shows SCFR_CCA --> SCFR_CPA).
+**)
+equiv Eqv_SCFRCPA_SCFRCCA (S <: Scheme) 
+                          (A <: Adv_SCFRCPA{-S}) :
+  SCFR_CPA(S, A).main ~ SCFR_CCA(S, O_CCA1_Default(S), O_CCA1_DDefault(S), R_SCFRCCA_SCFRCPA(A)).main :
+    ={glob S, glob A} ==> ={res}.
+proof. by proc; inline *; sim. qed.
+
+
+(** Reduction adversary reducing WCFR-CCA to WCFR-CPA **)
+module (R_WCFRCCA_WCFRCPA (A : Adv_WCFRCPA) : Adv_WCFRCCA) (O0 : Oracles_CCA, O1 : Oracles_CCA) = { 
+  proc choose(pk0 : pk_t, pk1 : pk_t) : bool = {
+    var b : bool;
+    
+    b <@ A.choose(pk0, pk1);
+    
+    return b;
+  }
+}.
+
+(** 
+  Equivalence between WCFR_CPA (for arbitrary adversary) and WCFR_CCA
+  (with above reduction adverary) for an WCFR_CCA adversary (shows WCFR_CCA --> WCFR_CPA).
+**)
+equiv Eqv_WCFRCPA_WCFRCCA (S <: Scheme) 
+                          (A <: Adv_WCFRCPA{-S}) :
+  WCFR_CPA(S, A).main ~ WCFR_CCA(S, O_CCA1_Default(S), O_CCA1_DDefault(S), R_WCFRCCA_WCFRCPA(A)).main :
+    ={glob S, glob A} ==> ={res}.
+proof. by proc; inline *; sim. qed.
 
 end Relations.
