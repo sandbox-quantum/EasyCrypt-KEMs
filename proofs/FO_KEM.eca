@@ -18,5 +18,4 @@ type ctxt_t.
 
 
 (** Import basic PKE and KEM definitions **)
-clone import PublicKeyEncryption as PKE with
-  type pk_t <- 
+clone import PublicKeyEncryption as PKE.
