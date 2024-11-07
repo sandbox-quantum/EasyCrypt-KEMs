@@ -2505,7 +2505,7 @@ module (R_OWCCA1_OWCPA (A : Adv_OWCPA) : Adv_OWCCA1) (O : Oracles_CCA) = {
 
 (** 
   Equivalence between OW_CPA (for arbitrary adversary) and OW_CCA1 
-  (with above reduction adverary) for an OW_CCA1 adversary (shows OW_CCA1 --> OW_CPA).
+  (with above reduction adverary). (Shows OW_CCA1 --> OW_CPA).
 **)
 lemma Eqv_OWCPA_OWCCA1 (S <: Scheme{-R_OWCCA1_OWCPA}) (O <: Oracles_CCA1i{-S})
                        (A <: Adv_OWCPA{-R_OWCCA1_OWCPA, -S, -O}) :
@@ -2533,7 +2533,7 @@ module (R_OWCCA_OWCPA (A : Adv_OWCPA) : Adv_OWCCA) (O : Oracles_CCA) = {
 
 (** 
   Equivalence between OW_CPA (for arbitrary adversary) and OW_CCA
-  (with above reduction adverary) for an OW_CCA adversary (shows OW_CCA --> OW_CPA).
+  (with above reduction adverary). (Shows OW_CCA --> OW_CPA).
 **)
 lemma Eqv_OWCPA_OWCCA (S <: Scheme) (O <: Oracles_CCA2i)
                       (A <: Adv_OWCPA{-S, -O}) :
@@ -2589,7 +2589,7 @@ module (R_INDCCA1_INDCPA (A : Adv_INDCPA) : Adv_INDCCA1) (O : Oracles_CCA) = {
 
 (** 
   Equivalence between IND_CPA (for arbitrary adversary) and IND_CCA1 
-  (with above reduction adverary) for an IND_CCA1 adversary (shows IND_CCA1 --> IND_CPA).
+  (with above reduction adverary). (Shows IND_CCA1 --> IND_CPA).
 **)
 lemma Eqv_INDCPA_INDCCA1 (S <: Scheme{-R_INDCCA1_INDCPA}) (O <: Oracles_CCA1i{-S})
                          (A <: Adv_INDCPA{-R_INDCCA1_INDCPA, -S, -O}) :
@@ -2618,7 +2618,7 @@ module (R_INDCCA_INDCPA (A : Adv_INDCPA) : Adv_INDCCA) (O : Oracles_CCA) = {
 
 (** 
   Equivalence between IND_CPA (for arbitrary adversary) and IND_CCA
-  (with above reduction adverary) for an IND_CCA adversary (shows IND_CCA --> IND_CPA).
+  (with above reduction adverary). (Shows IND_CCA --> IND_CPA).
 **)
 lemma Eqv_INDCPA_INDCCA (S <: Scheme) (O <: Oracles_CCA2i)
                         (A <: Adv_INDCPA{-S, -O}) :
@@ -2677,7 +2677,7 @@ module (R_NMCCA1_NMCPA (A : Adv_NMCPA) : Adv_NMCCA1) (O : Oracles_CCA) = {
 
 (** 
   Equivalence between NM_CPA (for arbitrary adversary) and NM_CCA1 
-  (with above reduction adverary) for an NM_CCA1 adversary (shows NM_CCA1 --> NM_CPA).
+  (with above reduction adverary). (Shows NM_CCA1 --> NM_CPA).
 **)
 lemma Eqv_NMCPA_NMCCA1 (S <: Scheme{-R_NMCCA1_NMCPA}) (O <: Oracles_CCA1i{-S})
                        (A <: Adv_NMCPA{-S, -O}) :
@@ -2706,7 +2706,7 @@ module (R_NMCCA_NMCPA (A : Adv_NMCPA) : Adv_NMCCA) (O : Oracles_CCA) = {
 
 (** 
   Equivalence between NM_CPA (for arbitrary adversary) and NM_CCA
-  (with above reduction adverary) for an NM_CCA adversary (shows NM_CCA --> NM_CPA).
+  (with above reduction adverary). (Shows NM_CCA --> NM_CPA).
 **)
 lemma Eqv_NMCPA_NMCCA (S <: Scheme) (O <: Oracles_CCA2i{-S})
                       (A <: Adv_NMCPA{-S, -O}) :
@@ -2763,7 +2763,7 @@ module (R_SNMCCA1_SNMCPA (A : Adv_SNMCPA) : Adv_SNMCCA1) (O : Oracles_CCA) = {
 
 (** 
   Equivalence between SNM_CPA (for arbitrary adversary) and SNM_CCA1 
-  (with above reduction adverary) for an SNM_CCA1 adversary (shows SNM_CCA1 --> SNM_CPA).
+  (with above reduction adverary). (Shows SNM_CCA1 --> SNM_CPA).
 **)
 lemma Eqv_SNMCPA_SNMCCA1 (S <: Scheme{-R_SNMCCA1_SNMCPA}) (O <: Oracles_CCA1i{-S})
                          (A <: Adv_SNMCPA{-R_SNMCCA1_SNMCPA, -S, -O}) :
@@ -2856,7 +2856,7 @@ module (R_ANOCCA1_ANOCPA (A : Adv_ANOCPA) : Adv_ANOCCA1) (O0 : Oracles_CCA, O1 :
 
 (** 
   Equivalence between ANO_CPA (for arbitrary adversary) and ANO_CCA1 
-  (with above reduction adverary) for an ANO_CCA1 adversary (shows ANO_CCA1 --> ANO_CPA).
+  (with above reduction adverary). (Shows ANO_CCA1 --> ANO_CPA).
 **)
 lemma Eqv_ANOCPA_ANOCCA1 (S <: Scheme{-R_ANOCCA1_ANOCPA}) 
                          (O0 <: Oracles_CCA1i{-S}) (O1 <: Oracles_CCA1i{-S})
@@ -2886,7 +2886,7 @@ module (R_ANOCCA_ANOCPA (A : Adv_ANOCPA) : Adv_ANOCCA) (O0 : Oracles_CCA, O1 : O
 
 (** 
   Equivalence between ANO_CPA (for arbitrary adversary) and ANO_CCA
-  (with above reduction adverary) for an ANO_CCA adversary (shows ANO_CCA --> ANO_CPA).
+  (with above reduction adverary). (Shows ANO_CCA --> ANO_CPA).
 **)
 lemma Eqv_ANOCPA_ANOCCA (S <: Scheme) 
                         (O0 <: Oracles_CCA2i) (O1 <: Oracles_CCA2i)
@@ -2948,7 +2948,7 @@ module (R_WANOCCA1_WANOCPA (A : Adv_WANOCPA) : Adv_WANOCCA1) (O0 : Oracles_CCA, 
 
 (** 
   Equivalence between WANO_CPA (for arbitrary adversary) and WANO_CCA1 
-  (with above reduction adverary) for an WANO_CCA1 adversary (shows WANO_CCA1 --> WANO_CPA).
+  (with above reduction adverary). (Shows WANO_CCA1 --> WANO_CPA).
 **)
 lemma Eqv_WANOCPA_WANOCCA1 (S <: Scheme{-R_WANOCCA1_WANOCPA}) 
                            (O0 <: Oracles_CCA1i{-S}) (O1 <: Oracles_CCA1i{-S})
@@ -2978,7 +2978,7 @@ module (R_WANOCCA_WANOCPA (A : Adv_WANOCPA) : Adv_WANOCCA) (O0 : Oracles_CCA, O1
 
 (** 
   Equivalence between WANO_CPA (for arbitrary adversary) and WANO_CCA
-  (with above reduction adverary) for an WANO_CCA adversary (shows WANO_CCA --> WANO_CPA).
+  (with above reduction adverary). (Shows WANO_CCA --> WANO_CPA).
 **)
 lemma Eqv_WANOCPA_WANOCCA (S <: Scheme) 
                           (O0 <: Oracles_CCA2i) (O1 <: Oracles_CCA2i)
@@ -3009,7 +3009,7 @@ module (R_SROBCCA_SROBCPA (A : Adv_SROBCPA) : Adv_SROBCCA) (O0 : Oracles_CCA, O1
 
 (** 
   Equivalence between SROB_CPA (for arbitrary adversary) and SROB_CCA
-  (with above reduction adverary) for an SROB_CCA adversary (shows SROB_CCA --> SROB_CPA).
+  (with above reduction adverary). (Shows SROB_CCA --> SROB_CPA).
 **)
 lemma Eqv_SROBCPA_SROBCCA (S <: Scheme) (O0 <: Oracles_CCA1i{-S}) (O1 <: Oracles_CCA1i{-S})
                           (A <: Adv_SROBCPA{-S, -O0, -O1}) :
@@ -3038,7 +3038,7 @@ module (R_WROBCCA_WROBCPA (A : Adv_WROBCPA) : Adv_WROBCCA) (O0 : Oracles_CCA, O1
 
 (** 
   Equivalence between WROB_CPA (for arbitrary adversary) and WROB_CCA
-  (with above reduction adverary) for an WROB_CCA adversary (shows WROB_CCA --> WROB_CPA).
+  (with above reduction adverary). (Shows WROB_CCA --> WROB_CPA).
 **)
 lemma Eqv_WROBCPA_WROBCCA (S <: Scheme) (O0 <: Oracles_CCA1i{-S}) (O1 <: Oracles_CCA1i{-S})
                           (A <: Adv_WROBCPA{-S, -O0, -O1}) :
@@ -3134,7 +3134,7 @@ module R_SNMCPA_NMCPA (A : Adv_NMCPA) : Adv_SNMCPA = {
 
 (** 
   Equivalence between NM_CPA (for arbitrary adversary) and SNM_CPA
-  (with above reduction adverary). (Shows SNM_CCA --> SNM_CPA.)
+  (with above reduction adverary). (Shows SNM_CPA --> SNM_CPA.)
 **)
 equiv Eqv_NMCPA_SNMCPA (S <: Scheme) 
                        (A <: Adv_NMCPA{-S}) :
@@ -3250,7 +3250,7 @@ qed.
 
 
 (* Security goal: Anonymity (Key-indistinguishability) *)
-(** Reduction adversary reducing ANO-CPA to WANO-CPA **) print WANO_CPA.
+(** Reduction adversary reducing ANO-CPA to WANO-CPA **)
 module R_ANOCPA_WANOCPA (A : Adv_WANOCPA) : Adv_ANOCPA = {
   proc distinguish(pk0 : pk_t, pk1 : pk_t, kc : key_t * ctxt_t) : bool = {
     var b : bool;
@@ -3263,7 +3263,7 @@ module R_ANOCPA_WANOCPA (A : Adv_WANOCPA) : Adv_ANOCPA = {
 
 (** 
   Equivalence between WANO_CPA (for arbitrary adversary) and ANO_CPA
-  (with above reduction adverary). (Shows ANO_CCA --> ANO_CPA.)
+  (with above reduction adverary). (Shows ANO_CPA --> ANO_CPA.)
 **)
 equiv Eqv_WANOCPA_ANOCPA (S <: Scheme) 
                          (A <: Adv_WANOCPA{-S}) :
@@ -3382,4 +3382,299 @@ call (: true); rnd.
 by do 2! call (: true).
 qed.
 
+
+(* Security goal: Robustness *)
+(** Reduction adversary reducing SROB-CPA to WROB-CPA **)
+module R_SROBCPA_WROBCPA (S : Scheme) (A : Adv_WROBCPA) : Adv_SROBCPA = {
+  proc find(pk0 : pk_t, pk1 : pk_t) : ctxt_t = {
+    var b : bool;
+    var k : key_t;
+    var c : ctxt_t;
+    
+    b <@ A.choose(pk0, pk1);
+    
+    (k, c) <@ S.encaps(if b then pk1 else pk0);
+    
+    return c;
+  }
+}.
+
+section.
+
+declare module S <: Scheme.
+declare module A <: Adv_WROBCPA{-S}.
+
+declare axiom S_keygen_ll : islossless S.keygen.
+declare axiom S_encaps_ll : islossless S.encaps.
+declare axiom S_decaps_ll : islossless S.decaps.
+declare axiom A_choose_ll : islossless A.choose.
+
+declare axiom S_keygen_sl (GS : glob S) :
+  phoare[S.keygen : glob S = GS ==> glob S = GS] = 1%r. 
+
+declare axiom S_decaps_sl (GS : glob S) :
+  phoare[S.decaps : glob S = GS ==> glob S = GS] = 1%r. 
+
+local module DD = {
+  proc main(sk, sk', c, c') : key_t option * key_t option = {
+    var k, k' : key_t option;
+    
+    k <@ S.decaps(sk, c);
+    k' <@ S.decaps(sk', c');
+    
+    return (k, k');
+  }
+}.
+
+local lemma testph skt skt' ct ct' kt kt' &m :
+  Pr[DD.main(skt, skt', ct, ct') @ &m : (res.`1, res.`2) = (kt, kt')]
+  =
+  Pr[S.decaps(skt, ct) @ &m : res = kt] * 
+  Pr[S.decaps(skt', ct') @ &m : res = kt'].
+proof.
+pose pr_dec_skc := Pr[S.decaps(skt, ct) @ &m : res = kt]. 
+pose pr_dec_skcp := Pr[S.decaps(skt', ct') @ &m : res = kt']. 
+byphoare (: glob S = (glob S){m} /\ arg = (skt, skt', ct, ct') ==> _) => //.
+proc.
+seq 1 : (k = kt) pr_dec_skc pr_dec_skcp _ 0%r (#pre). 
+conseq />.
+call (: (glob S) = (glob S){m} ==> (glob S) = (glob S){m}). 
+bypr. move=> /> &m' glS. rewrite Pr[mu_not].
+rewrite (: Pr[S.decaps(sk{m'}, c{m'}) @ &m' : true] = 1%r).
+byphoare S_decaps_ll => //.
+rewrite RField.subr_eq0 eq_sym.
+byphoare (S_decaps_sl (glob S){m}) => //. by skip.
+call (: glob S = (glob S){m} /\ arg = (skt, ct) ==> res = kt).
+rewrite /pr_dec_skc. bypr => /> &m' glS ->.
+byequiv => //. by proc true. by skip.
+call (: glob S = (glob S){m} /\ arg = (skt', ct') ==> res = kt').
+rewrite /pr_dec_skcp. bypr. move=> &m' [glS ->] /=.
+byequiv => //. rewrite glS. by proc true.
+skip => />. hoare.
+call (: true). skip => />. 
+smt().
+qed.
+
+local lemma testpr skt ct kt &1 &2:
+  (glob S){1} = (glob S){2} =>
+  Pr[S.decaps(skt, ct) @ &1 : res = kt]
+  =
+  Pr[S.decaps(skt, ct) @ &2 : res = kt].
+proof.  
+move=> eqgls.
+byequiv (: ={glob S, arg} ==> ={res}) => //.
+by proc true.
+qed.
+
+local equiv testeqv :
+  DD.main ~ DD.main : 
+    ={glob S} /\ arg{1} = (arg.`2, arg.`1, arg.`4, arg.`3){2} ==> res{1} = (res.`2, res.`1){2}.
+proof.
+bypr (res.`1, res.`2){1} (res.`2, res.`1){2}. smt().
+move=> />. move=> &1 &2 [kt kt'] eqglS -> /=. 
+move:  (testph sk'{2} sk{2} c'{2} c{2} kt kt' &1) => /= ->.
+move:  (testph sk{2} sk'{2} c{2} c'{2} kt' kt &2) => /=. 
+rewrite andbC => ->.
+by rewrite (testpr sk'{2} c'{2} kt &1 &2) 1://  (testpr sk{2} c{2} kt' &1 &2) 1:// RField.mulrC.
+qed. 
+
+local module WROB_CPA_V = {
+  var b : bool
+  var k'' : key_t option
+  
+  proc main() : bool = {
+    var pk0 : pk_t;
+    var pk1 : pk_t;
+    var sk0 : sk_t;
+    var sk1 : sk_t;
+    var k : key_t;
+    var k' : key_t option;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    b <@ A.choose(pk0, pk1);
+    (k, c) <@ S.encaps(if b then pk1 else pk0);
+    k' <@ S.decaps(if b then sk0 else sk1, c);
+    k'' <@ S.decaps(if b then sk1 else sk0, c);
+    
+    return k' <> None;
+  }
+}.
+
+local lemma EqPr_WROBCPA_V &m :
+  Pr[WROB_CPA(S, A).main() @ &m : res]
+  =
+  Pr[WROB_CPA_V.main() @ &m : res].
+proof.
+byequiv => //.
+by proc; call{2} S_decaps_ll; by sim.
+qed.
+
+
+(** 
+  Relation between WROB_CPA (for arbitrary adversary) and SROB_CPA
+  (with above reduction adverary). However, only holds as long as a honest decapsulation
+  of a (honestly generated) ciphertext does not fail. This is implied by correctness (i.e.,
+  the probability of a honest execution being incorrect is low, a.k.a., the complement of the 
+  Correctness game has low probability). 
+  (Shows SROB_CPA + Correctness --> SROB_CPA.)
+**)
+lemma Bnd_WROBCPA_SROBCPA &m :
+  Pr[WROB_CPA(S, A).main() @ &m : res]
+  <=
+  Pr[SROB_CPA(S, R_SROBCPA_WROBCPA(S, A)).main() @ &m : res]
+  +
+  2%r * Pr[Correctness(S).main() @ &m : !res].
+proof.
+rewrite -RField.ofintR RField.mulrC RField.mul1r2z.
+rewrite EqPr_WROBCPA_V Pr[mu_split WROB_CPA_V.k'' <> None] StdOrder.RealOrder.ler_add /=; last first.
++ rewrite Pr[mu_split WROB_CPA_V.b] StdOrder.RealOrder.ler_add.
+  + byequiv => //.
+    proc.
+    seq 3 1 : (={glob S} /\ pk1{1} = pk{2} /\ sk1{1} = sk{2}).
+    + by call{1} A_choose_ll; call (: true); call{1} (S_keygen_sl (glob S){m}).
+    case (WROB_CPA_V.b{1}); last first.
+    + call{1} S_decaps_ll; call{1} S_decaps_ll; call{1} S_encaps_ll.
+      by call{2} S_decaps_ll; call{2} S_encaps_ll.
+    seq 1 1 : (#pre /\ ={k, c}); 1: by call(: true); skip => />. 
+    by call (: true); exlim (glob S){1} => GS; call{1} (S_decaps_sl GS); skip => />.
+  byequiv => //.
+  proc.
+  seq 1 1 : (={glob S} /\ pk0{1} = pk{2} /\ sk0{1} = sk{2}); 1: by call (: true).
+  seq 2 0 : (#pre).
+  + by call{1} A_choose_ll; exlim (glob S){1} => GS; call{1} (S_keygen_sl GS).    
+  case (WROB_CPA_V.b{1}).
+  + call{1} S_decaps_ll; call{1} S_decaps_ll; call{1} S_encaps_ll.
+    by call{2} S_decaps_ll; call{2} S_encaps_ll.
+  seq 1 1 : (#pre /\ ={k, c}); 1: by call(: true); skip => />. 
+  by call (: true); exlim (glob S){1} => GS; call{1} (S_decaps_sl GS); skip => />.
+byequiv => //.
+proc; inline *.
+seq 4 7 : (={glob S, sk0, sk1, c} /\ WROB_CPA_V.b{1} = b{2}). 
++ by wp; call (: true); call (: true); wp; do 2! call (: true).
+case (b{2}); last first.
++ transitivity{2} {(k0, k1) <@ DD.main(sk1, sk0, c, c);} 
+                  (! WROB_CPA_V.b{1} /\ ={glob S, sk0, sk1, c} ==> k'{1} <> None /\ WROB_CPA_V.k''{1} <> None => k0{2} <> None /\ k1{2} <> None)
+                  (={glob S, sk0, sk1, c} /\ b{1} ==> k0{1} <> None /\ k1{1} <> None => k0{2} <> None /\ k1{2} <> None). smt(). smt(). 
+  inline{2} 1.
+  wp. call (: true). conseq />. smt(). call (: true); wp; skip => />.
+  transitivity{1} {(k0, k1) <@ DD.main(sk0, sk1, c, c);} 
+                  (={glob S, sk0, sk1, c} ==> k0{1} <> None /\ k1{1} <> None => k0{2} <> None /\ k1{2} <> None)
+                  (={glob S, sk0, sk1, c} ==> k0{1} <> None /\ k1{1} <> None => k0{2} <> None /\ k1{2} <> None).
+  progress. smt().  smt().
+  call testeqv. by skip.
+  inline{1} 1.
+  by wp; call (: true); call (: true); wp; skip.
+call (: true); call (: true). by skip => />.
+qed.
+
+(*
+(** Reduction adversary reducing SROB-CCA1 to WROB-CCA1 **)
+module (R_SROBCCA1_WROBCCA1 (A : Adv_WROBCCA1) : Adv_SROBCCA1) (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  proc scout(pk0 : pk_t, pk1 : pk_t) : unit = {
+    A(O0, O1).scout(pk0, pk1);
+  }
+  
+  proc distinguish(kc : key_t * ctxt_t) : bool = {
+    var b : bool;
+    
+    b <@ A(O0, O1).distinguish(kc.`2);
+    
+    return b;
+  }
+}.
+
+(** 
+  Equivalence between WROB_CCA1 (for arbitrary adversary) and SROB_CCA1
+  (with above reduction adverary). (Shows SROB_CCA1 --> WROB_CCA1.)
+**)
+lemma Eqv_WROBCCA1_SROBCCA1 (S <: Scheme) (O0 <: Oracles_CCA1i{-S}) (O1 <: Oracles_CCA1i{-S, -O0})
+                           (A <: Adv_WROBCCA1{-S, -O0, -O1}) :
+  equiv[O0.init ~ O0.init : ={glob S, glob A} ==> ={glob O0}] =>
+  equiv[O1.init ~ O1.init : ={glob S, glob A} ==> ={glob O1}] =>
+  equiv[WROB_CCA1(S, O0, O1, A).main ~ SROB_CCA1(S, O0, O1, R_SROBCCA1_WROBCCA1(A)).main :
+    ={glob S, glob A} ==> ={res}].
+proof.
+move=> O0_eqv_init O1_eqv_init.
+proc; inline *.
+wp; call (: true); wp; call (: true); rnd.
+call (: ={glob O0, glob O1}); 1,2: by sim.
+wp; call O1_eqv_init; call O0_eqv_init.
+by do 2! call (: true). 
+qed.
+
+
+(** Reduction adversary reducing SROB-CCA2 to WROB-CCA2 **)
+module (R_SROBCCA2_WROBCCA2 (A : Adv_WROBCCA2) : Adv_SROBCCA2) (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  proc scout(pk0 : pk_t, pk1 : pk_t) : unit = {
+    A(O0, O1).scout(pk0, pk1);
+  }
+  
+  proc distinguish(kc : key_t * ctxt_t) : bool = {
+    var b : bool;
+    
+    b <@ A(O0, O1).distinguish(kc.`2);
+    
+    return b;
+  }
+}.
+
+(** 
+  Equivalence between WROB_CCA2 (for arbitrary adversary) and SROB_CCA2
+  (with above reduction adverary). (Shows SROB_CCA2 --> WROB_CCA2.)
+**)
+lemma Eqv_WROBCCA2_SROBCCA2 (S <: Scheme)
+                           (O01 <: Oracles_CCA1i{-S}) (O11 <: Oracles_CCA1i{-S, -O01})
+                           (O02 <: Oracles_CCA2i{-S}) (O21 <: Oracles_CCA2i{-S, -O02})
+                           (A <: Adv_WROBCCA2{-S, -O01, -O11, -O02, -O21}) :
+  equiv[O01.init ~ O01.init : ={glob S, glob A} ==> ={glob O01}] =>
+  equiv[O11.init ~ O11.init : ={glob S, glob A} ==> ={glob O11}] =>
+  equiv[O02.init ~ O02.init : ={glob S, glob A} ==> ={glob O02}] =>
+  equiv[O21.init ~ O21.init : ={glob S, glob A} ==> ={glob O21}] =>
+  equiv[WROB_CCA2(S, O01, O11, O02, O21, A).main ~ SROB_CCA2(S, O01, O11, O02, O21, R_SROBCCA2_WROBCCA2(A)).main :
+          ={glob S, glob A} ==> ={res}].
+proof.
+move=> O01_eqv_init O11_eqv_init O02_eqv_init O21_eqv_init.
+proc; inline *.
+wp; call (: ={glob O02, glob O21}); 1,2: by sim.
+wp; call O21_eqv_init; call O02_eqv_init. 
+call (: true); rnd. 
+call (: ={glob O01, glob O11}); 1,2: by sim.
+wp; call O11_eqv_init; call O01_eqv_init. 
+by do 2! call (: true).
+qed.
+
+
+(** Reduction adversary reducing SROB-CCA to WROB-CCA **)
+module (R_SROBCCA_WROBCCA (A : Adv_WROBCCA) : Adv_SROBCCA) (O0 : Oracles_CCA, O1 : Oracles_CCA)  = {
+  proc distinguish(pk0 : pk_t, pk1 : pk_t, kc : key_t * ctxt_t) : bool = {
+    var b : bool;
+    
+    b <@ A(O0, O1).distinguish(pk0, pk1, kc.`2);
+    
+    return b;
+  }
+}.
+
+(** 
+  Equivalence between WROB_CCA (for arbitrary adversary) and SROB_CCA
+  (with above reduction adverary). (Shows SROB_CCA --> WROB_CCA.)
+**)
+lemma Eqv_WROBCCA_SROBCCA (S <: Scheme) (O0 <: Oracles_CCA2i{-S}) (O1 <: Oracles_CCA2i{-S, -O0})
+                         (A <: Adv_WROBCCA{-S, -O0, -O1}) :
+  equiv[O0.init ~ O0.init : ={glob S, glob A} ==> ={glob O0}] =>
+  equiv[O1.init ~ O1.init : ={glob S, glob A} ==> ={glob O1}] =>
+  equiv[WROB_CCA(S, O0, O1, A).main ~ SROB_CCA(S, O0, O1, R_SROBCCA_WROBCCA(A)).main :
+        ={glob S, glob A} ==> ={res}].
+proof.
+move=> O0_eqv_init O1_eqv_init.
+proc; inline *.
+wp; call (: ={glob O0, glob O1}); 1,2: by sim.
+wp; call O1_eqv_init; call O0_eqv_init.
+call (: true); rnd.
+by do 2! call (: true).
+qed.
+*)
+end section.
 end Relations.
