@@ -2144,7 +2144,7 @@ op is_bindbreak (bc : bindconf) (k0 k1 : key_t) (pk0 pk1 : pk_t) (c0 c1 : ctxt_t
 *)
 (** Adversary class considered for HON-BIND **)
 module type Adv_HONBIND (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
-  proc find(pk0 : pk_t, pk1 : pk_t) : ctxt_t * ctxt_t
+  proc find(bc : bindconf, pk0 : pk_t, pk1 : pk_t) : ctxt_t * ctxt_t
 }.
 
 (** HON-BIND security game (specific configuration is passed to the procedure) **)
@@ -2167,7 +2167,7 @@ module HON_BIND (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_HON
     O0.init(sk0);
     O1.init(sk1);
     
-    (c0, c1) <@ A(O0, O1).find(pk0, pk1);
+    (c0, c1) <@ A(O0, O1).find(bc, pk0, pk1);
     
     k0 <@ S.decaps(sk0, c0);
     k1 <@ S.decaps(sk1, c1);
@@ -2185,8 +2185,8 @@ module HON_BIND (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_HON
   honestly generated (asymmetric) key pairs.
 *)
 (** Adversary class considered for LEAK-BIND **)
-module type Adv_LEAKBIND= {
-  proc find(pk0 : pk_t, sk0 : sk_t, pk1 : pk_t, sk1 : sk_t) : ctxt_t * ctxt_t
+module type Adv_LEAKBIND = {
+  proc find(bc : bindconf, pk0 : pk_t, sk0 : sk_t, pk1 : pk_t, sk1 : sk_t) : ctxt_t * ctxt_t
 }.
 
 (** LEAK-BIND security game (specific configuration is passed to the procedure) **)
@@ -2206,7 +2206,7 @@ module LEAK_BIND (S : Scheme, A : Adv_LEAKBIND) = {
       (pk1, sk1) <@ S.keygen();
     }
     
-    (c0, c1) <@ A.find(pk0, sk0, pk1, sk1);
+    (c0, c1) <@ A.find(bc, pk0, sk0, pk1, sk1);
     
     k0 <@ S.decaps(sk0, c0);
     k1 <@ S.decaps(sk1, c1);
@@ -2247,7 +2247,7 @@ op sk2pk : sk_t -> pk_t.
 *)
 (** Adversary class considered for MAL-BIND-DD **)
 module type Adv_MALBIND_DD = {
-  proc find() : sk_t * sk_t * ctxt_t * ctxt_t
+  proc find(bc : bindconf) : sk_t * sk_t * ctxt_t * ctxt_t
 }.
 
 (** MAL-BIND-DD security game (specific configuration is passed to the procedure) **)
@@ -2259,7 +2259,7 @@ module MAL_BIND_DD (S : Scheme, A : Adv_MALBIND_DD) = {
     var pk0, pk1 : pk_t;
     var no_fail : bool;
     
-    (sk0, sk1, c0, c1) <@ A.find();
+    (sk0, sk1, c0, c1) <@ A.find(bc);
     
     pk0 <- sk2pk sk0;
     pk1 <- sk2pk sk1;
@@ -2307,7 +2307,7 @@ module type SchemeDerand = {
 *)
 (** Adversary class considered for MAL-BIND-ED **)
 module type Adv_MALBIND_ED = {
-  proc find() : sk_t * sk_t * rand_t * ctxt_t
+  proc find(bc : bindconf) : sk_t * sk_t * rand_t * ctxt_t
 }.
 
 (** MAL-BIND-ED security game (specific configuration is passed to the procedure) **)
@@ -2321,7 +2321,7 @@ module MAL_BIND_ED (S : SchemeDerand, A : Adv_MALBIND_ED) = {
     var pk0, pk1 : pk_t;
     var no_fail : bool;
     
-    (sk0, sk1, r, c1) <@ A.find();
+    (sk0, sk1, r, c1) <@ A.find(bc);
     
     pk0 <- sk2pk sk0;
     pk1 <- sk2pk sk1;
@@ -2344,7 +2344,7 @@ module MAL_BIND_ED (S : SchemeDerand, A : Adv_MALBIND_ED) = {
 *)
 (** Adversary class considered for MAL-BIND-EE **)
 module type Adv_MALBIND_EE = {
-  proc find() : sk_t * sk_t * rand_t * rand_t
+  proc find(bc : bindconf) : sk_t * sk_t * rand_t * rand_t
 }.
 
 (** MAL-BIND-EE security game (specific configuration is passed to the procedure) **)
@@ -2356,7 +2356,7 @@ module MAL_BIND_EE (S : SchemeDerand, A : Adv_MALBIND_EE) = {
     var k0, k1 : key_t;
     var pk0, pk1 : pk_t;
     
-    (sk0, sk1, r0, r1) <@ A.find();
+    (sk0, sk1, r0, r1) <@ A.find(bc);
     
     pk0 <- sk2pk sk0;
     pk1 <- sk2pk sk1;
@@ -2386,7 +2386,7 @@ type malbind_scenario = [
 (* Can potentially reuse things specific to MALBIND scenarios in general MALBIND game by tweaking interfaces, but may hurt readability quite a bit *)
 (** Adversary class considered for MAL-BIND **)
 module type Adv_MALBIND = {
-  proc choose() : malbind_scenario
+  proc choose(bc : bindconf) : malbind_scenario
   proc find_dd() : sk_t * sk_t * ctxt_t * ctxt_t
   proc find_de() : sk_t * sk_t * rand_t * ctxt_t
   proc find_ee() : sk_t * sk_t * rand_t * rand_t
@@ -2404,7 +2404,7 @@ module MAL_BIND (S : SchemeDerand, A : Adv_MALBIND) = {
     var pk0, pk1 : pk_t;
     var no_fail, is_bb : bool;
         
-    mbs <@ A.choose();
+    mbs <@ A.choose(bc);
     
     if (mbs = DECAPS_DECAPS) {
       (sk0, sk1, c0, c1) <@ A.find_dd();
@@ -2450,6 +2450,7 @@ end MALBIND.
 
 
 
+
 (** 
   Generic relations between properties of KEMs.
 **)
@@ -2457,7 +2458,7 @@ theory Relations.
 (* Clones and imports of theories for relevant security notions *)
 clone import IND.
 clone import NM.
-
+clone import MALBIND.
 
 (* 
   Hierarchy concerning (traditional) CCA2, (traditional) CCA1, and CPA.
@@ -3562,7 +3563,6 @@ byequiv => //.
 by proc; call{2} S_decaps_ll; by sim.
 qed.
 
-
 (** 
   Relation between WROB_CPA (for arbitrary adversary) and SROB_CPA
   (with above reduction adverary). However, only holds as long as a honest decapsulation
@@ -3620,7 +3620,6 @@ by call (: true); call (: true); skip => />.
 qed.
 
 
-
 (* Collision Freeness *)
 (* 
   Auxiliary module equivalent to WCFR_CPA, but with additional variables, and 
@@ -3663,8 +3662,6 @@ byequiv => //.
 by proc; call{2} S_decaps_ll; sim.
 qed.
 
-
-
 (** 
   Relation between WCFR_CPA (for arbitrary adversary) and SCFR_CPA
   (with above reduction adverary). However, only holds as long as a honest decapsulation
@@ -3724,231 +3721,89 @@ qed.
 end section.
 
 
-(* Security goal: Collision Freeness *)
-(** Reduction adversary reducing SCFR-CPA to WCFR-CPA **)
-module R_SCFRCPA_WCFRCPA (S : Scheme) (A : Adv_WCFRCPA) : Adv_SCFRCPA = {
-  proc find(pk0 : pk_t, pk1 : pk_t) : ctxt_t = {
-    var b : bool;
-    var k : key_t;
-    var c : ctxt_t;
+(* 
+  Relations/Hierarchy concerning binding properties 
+  (e.g., MAL --> LEAK --> HON). 
+*)
+(** Reduction adversary reducing from LEAK-BIND to HON-BIND **)
+module R_LEAK_HON (O0 : Oracles_CCA1i, O1 : Oracles_CCA1i) (A : Adv_HONBIND) : Adv_LEAKBIND = {
+  proc find(bc : bindconf, pk0 : pk_t, sk0 : sk_t, pk1 : pk_t, sk1 : sk_t) : ctxt_t * ctxt_t = {
+    var c0, c1 : ctxt_t;
     
-    b <@ A.choose(pk0, pk1);
+    O0.init(sk0);
+    O1.init(sk1);
     
-    (k, c) <@ S.encaps(if b then pk1 else pk0);
+    (c0, c1) <@ A(O0, O1).find(bc, pk0, pk1);
     
-    return c;
+    return (c0, c1);
   }
 }.
 
-section.
-
-(* Declare arbitrary KEM S *)
-declare module S <: Scheme.
-
-(* Losslessness (i.e., termination) assumption on S's encapsulation *)
-declare axiom S_encaps_ll : islossless S.encaps.
-
-(* Statelessness (+ losslessness) assumptions on S's procedures *)
-declare axiom S_keygen_sl (GS : glob S) :
-  phoare[S.keygen : glob S = GS ==> glob S = GS] = 1%r. 
-declare axiom S_decaps_sl (GS : glob S) :
-  phoare[S.decaps : glob S = GS ==> glob S = GS] = 1%r. 
-  
-(* Declare arbitrary WROB-CPA adversary A *)
-declare module A <: Adv_WROBCPA{-S}.
-
-(* Losslessness (i.e., termination) assumptions on A *)
-declare axiom A_choose_ll : islossless A.choose.
-
-
-(* Losslessness of S's keygen and decaps procedures (without statelessness) *) 
-local lemma S_keygen_ll : islossless S.keygen.
-proof. 
-bypr=> &m _.
-apply StdOrder.RealOrder.ler_anti; split => [|_]; 1: by rewrite Pr[mu_le1].
-rewrite -(: Pr[S.keygen() @ &m : glob S = (glob S){m}] = 1%r). 
-+ by byphoare (S_keygen_sl (glob S){m}).
-by byequiv => //=; proc true.
-qed.
-
-local lemma S_decaps_ll : islossless S.decaps.
+(** 
+  Equivalence between HON_BIND (for arbitrary adversary and any binding configuration)
+  and LEAK_BIND (with above reduction adverary). (Shows LEAK_BIND --> HON_BIND.)
+**)
+lemma Eqv_HONBIND_LEAKBIND (S <: Scheme) (O0 <: Oracles_CCA1i{-S}) (O1 <: Oracles_CCA1i{-S, -O0})
+                           (A <: Adv_HONBIND{-S, -O0, -O1}) :
+  equiv[O0.init ~ O0.init : ={glob S, glob A} ==> ={glob O0}] =>
+  equiv[O1.init ~ O1.init : ={glob S, glob A} ==> ={glob O1}] =>
+  equiv[HON_BIND(S, O0, O1, A).main ~ LEAK_BIND(S, R_LEAK_HON(O0, O1, A)).main :
+          ={glob S, glob A, arg} ==> ={res}].
 proof.
-bypr=> &m _.
-apply StdOrder.RealOrder.ler_anti; split => [|_]; 1: by rewrite Pr[mu_le1].
-rewrite -(: Pr[S.decaps(sk{m}, c{m}) @ &m : glob S = (glob S){m}] = 1%r). 
-+ by byphoare (S_decaps_sl (glob S){m}).
-by byequiv => //=; proc true.
+move=> O0_eqv_init O1_eqv_init.
+proc; inline *.
+wp; call (: true); call (: true).
+wp; call (: ={glob O0, glob O1}); 1,2: by sim. 
+call O1_eqv_init; call O0_eqv_init; wp.
+seq 1 1 : (#pre /\ ={pk0, sk0}); 1: by sim.
+by if => //; [wp | call (: true)]. 
 qed.
 
-
-(* Auxiliary module used to prove equivalence between different orders of decapsulation *)
-local module Decaps_Order = {
-  proc main(sk, sk', c, c') : key_t option * key_t option = {
-    var k, k' : key_t option;
-    
-    k <@ S.decaps(sk, c);
-    k' <@ S.decaps(sk', c');
-    
-    return (k, k');
-  }
-}.
-
-(* Equality (of probability) relating Decaps_Order call and individual decapsulation calls *)
-local lemma EqPr_DecapsOrder &m skt skt' ct ct' kt kt' :
-  Pr[Decaps_Order.main(skt, skt', ct, ct') @ &m : (res.`1, res.`2) = (kt, kt')]
-  =
-  Pr[S.decaps(skt, ct) @ &m : res = kt] * Pr[S.decaps(skt', ct') @ &m : res = kt'].
-proof.
-pose pr_dec_skc := Pr[S.decaps(skt, ct) @ &m : res = kt]. 
-pose pr_dec_skcp := Pr[S.decaps(skt', ct') @ &m : res = kt']. 
-byphoare (: glob S = (glob S){m} /\ arg = (skt, skt', ct, ct') ==> _) => //.
-proc.
-seq 1 : (k = kt) pr_dec_skc pr_dec_skcp _ 0%r (#pre) => //.
-+ call (: (glob S) = (glob S){m} ==> (glob S) = (glob S){m}); 2: by skip.
-  bypr=> /> &m' glS. 
-  rewrite Pr[mu_not] (: Pr[S.decaps(sk{m'}, c{m'}) @ &m' : true] = 1%r); 1: by byphoare S_decaps_ll => //.
-  by rewrite RField.subr_eq0 eq_sym; byphoare (S_decaps_sl (glob S){m}) => //. 
-+ call (: glob S = (glob S){m} /\ arg = (skt, ct) ==> res = kt); 2: by skip.
-  rewrite /pr_dec_skc; bypr => /> &m' glS ->.
-  by byequiv => //; proc true. 
-+ call (: glob S = (glob S){m} /\ arg = (skt', ct') ==> res = kt'); 2: by skip => />.
-  rewrite /pr_dec_skcp; bypr=> &m' [glS ->] /=.
-  by byequiv => //; proc true.
-by hoare; call (: true); skip => />. 
-qed.
-
-(* 
-  The output distribution of decapsulation is the same as long as 
-  the (initial) globals and arguments are the same.
-*)
-local lemma EqPr_Decaps &1 &2 skt ct kt:
-  (glob S){1} = (glob S){2} =>
-  Pr[S.decaps(skt, ct) @ &1 : res = kt]
-  =
-  Pr[S.decaps(skt, ct) @ &2 : res = kt].
-proof.  
-move=> eqgls.
-byequiv (: ={glob S, arg} ==> ={res}) => //.
-by proc true.
-qed.
-
-(* 
-  Equivalence stating relation between input and output order of Decaps_Order.
-  (i.e., if you swap public keys and secret keys in input, output keys will be swapped) 
-*)
-local equiv Eqv_DecapsOrder :
-  Decaps_Order.main ~ Decaps_Order.main : 
-    ={glob S} /\ arg{1} = (arg.`2, arg.`1, arg.`4, arg.`3){2} ==> res{1} = (res.`2, res.`1){2}.
-proof.
-bypr (res.`1, res.`2){1} (res.`2, res.`1){2} => [/#|]. 
-move=> /> &1 &2 [kt kt'] eqglS -> /=. 
-rewrite (EqPr_DecapsOrder &1 _ _ _ _ kt kt') andbC (EqPr_DecapsOrder &2 _ _ _ _ kt' kt). 
-by rewrite 2?(EqPr_Decaps &1 &2) 3:RField.mulrC.
-qed. 
-
-
-(* 
-  Auxiliary module equivalent to WCFR_CPA, but with additional variables, and 
-  certain variables defined global instead of local (so we can refer to them in proofs)
-*)
-local module WCFR_CPA_V = {
-  var b : bool
-  var k : key_t
-  var k'' : key_t option
-  
-  proc main() : bool = {
-    var pk0 : pk_t;
-    var pk1 : pk_t;
-    var sk0 : sk_t;
-    var sk1 : sk_t;
-    var k' : key_t option;
-    var c : ctxt_t;
+(** Reduction adversary reducing from MAL-BIND (Decaps Decaps) to LEAK-BIND **)
+module R_MALDD_LEAK (S : Scheme) (A : Adv_LEAKBIND) : Adv_MALBIND_DD = {
+  proc find(bc : bindconf) : sk_t * sk_t * ctxt_t * ctxt_t = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
     
     (pk0, sk0) <@ S.keygen();
-    (pk1, sk1) <@ S.keygen();
-    b <@ A.choose(pk0, pk1);
-    (k, c) <@ S.encaps(if b then pk1 else pk0);
-    k' <@ S.decaps(if b then sk0 else sk1, c);
-    k'' <@ S.decaps(if b then sk1 else sk0, c);
     
-    return k' = Some k;
+    if (is_pkbc bc) {
+      (pk1, sk1) <- (pk0, sk0);
+    } else {
+      (pk1, sk1) <@ S.keygen();
+    }
+    
+    (c0, c1) <@ A.find(bc, pk0, sk0, pk1, sk1);
+    
+    return (sk0, sk1, c0, c1);
   }
 }.
 
-(* 
-  Equivalence (expressed as equality of probabilities) between 
-  original WCFR_CPA and (auxiliary) WCFR_CPA_V.
-*)
-local lemma EqPr_WCFRCPA_V &m :
-  Pr[WCFR_CPA(S, A).main() @ &m : res]
-  =
-  Pr[WCFR_CPA_V.main() @ &m : res].
-proof.
-byequiv => //.
-by proc; call{2} S_decaps_ll; sim.
-qed.
-
-
 (** 
-  Relation between WCFR_CPA (for arbitrary adversary) and SCFR_CPA
-  (with above reduction adverary). However, only holds as long as a honest decapsulation
-  of a (honestly generated) ciphertext does not fail. This is implied by correctness (i.e.,
-  the probability of a honest execution being incorrect is low, a.k.a., the complement of the 
-  Correctness game has low probability). 
-  (Shows SCFR_CPA + Correctness --> WCFR_CPA.)
+  Equivalence between LEAK_BIND (for arbitrary adversary and any binding configuration)
+  and MAL_BIND_DD (with above reduction adversary). 
+  (Shows MAL_BIND (in Decaps Decaps case) --> HON_BIND.)
+  Can straightforwardtly be extended to regular MAL_BIND game, but requires introducing 
+  derandomized version of considered scheme.
 **)
-lemma Bnd_WCFRCPA_SCFRCPA &m :
-  Pr[WCFR_CPA(S, A).main() @ &m : res]
-  <=
-  Pr[SCFR_CPA(S, R_SCFRCPA_WCFRCPA(S, A)).main() @ &m : res]
-  +
-  2%r * Pr[Correctness(S).main() @ &m : !res].
+lemma Eqv_LEAKBIND_MALBINDDD (S <: Scheme) (A <: Adv_LEAKBIND{-S}) :
+  hoare[S.keygen : true ==> sk2pk res.`2 = res.`1] =>
+  equiv[LEAK_BIND(S, A).main ~ MAL_BIND_DD(S, R_MALDD_LEAK(S, A)).main :
+          ={glob S, glob A, arg} ==> ={res}].
 proof.
-rewrite -RField.ofintR RField.mulrC RField.mul1r2z.
-rewrite EqPr_WCFRCPA_V Pr[mu_split WCFR_CPA_V.k'' = Some WCFR_CPA_V.k] StdOrder.RealOrder.ler_add /=; last first.
-+ rewrite Pr[mu_split WCFR_CPA_V.b] StdOrder.RealOrder.ler_add.
-  + byequiv => //.
-    proc.
-    seq 3 1 : (={glob S} /\ pk1{1} = pk{2} /\ sk1{1} = sk{2}).
-    + by call{1} A_choose_ll; call (: true); call{1} (S_keygen_sl (glob S){m}).
-    case (WCFR_CPA_V.b{1}); last first.
-    + call{1} S_decaps_ll; call{1} S_decaps_ll; call{1} S_encaps_ll.
-      by call{2} S_decaps_ll; call{2} S_encaps_ll.
-    seq 1 1 : (#pre /\ ={c} /\ WCFR_CPA_V.k{1} = k{2}); 1: by call(: true); skip => />. 
-    by call (: true); exlim (glob S){1} => GS; call{1} (S_decaps_sl GS); skip => />.
-  byequiv => //.
-  proc.
-  seq 1 1 : (={glob S} /\ pk0{1} = pk{2} /\ sk0{1} = sk{2}); 1: by call (: true).
-  seq 2 0 : (#pre).
-  + by call{1} A_choose_ll; exlim (glob S){1} => GS; call{1} (S_keygen_sl GS).    
-  case (WCFR_CPA_V.b{1}).
-  + call{1} S_decaps_ll; call{1} S_decaps_ll; call{1} S_encaps_ll.
-    by call{2} S_decaps_ll; call{2} S_encaps_ll.
-  seq 1 1 : (#pre /\ ={c} /\ WCFR_CPA_V.k{1} = k{2}); 1: by call(: true); skip => />. 
-  by call (: true); exlim (glob S){1} => GS; call{1} (S_decaps_sl GS); skip => />.
-byequiv => //.
-proc; inline *.
-seq 4 7 : (={glob S, sk0, sk1, c} /\ WCFR_CPA_V.b{1} = b{2}). 
-+ by wp; call (: true); call (: true); wp; do 2! call (: true).
-case (b{2}); last first.
-+ transitivity{2} {(k0, k1) <@ Decaps_Order.main(sk1, sk0, c, c);} 
-                  (! WCFR_CPA_V.b{1} /\ ={glob S, sk0, sk1, c} ==> k'{1} <> None /\ k'{1} = WCFR_CPA_V.k''{1} => k0{2} <> None /\ k1{2} <> None /\ k0{2} = k1{2})
-                  (={glob S, sk0, sk1, c} ==> k0{1} <> None /\ k0{1} = k1{1} => k0{2} <> None /\ k0{2} = k1{2}); 1,2: smt().
-  + inline{2} 1.
-    by wp; call (: true); call (: true); wp; skip => />. 
-  transitivity{1} {(k0, k1) <@ Decaps_Order.main(sk0, sk1, c, c);} 
-                  (={glob S, sk0, sk1, c} ==> k0{1} <> None /\ k0{1} = k1{1} => k0{2} <> None /\ k0{2} = k1{2})
-                  (={glob S, sk0, sk1, c} ==> k0{1} <> None /\ k0{1} = k1{1} => k0{2} <> None /\ k0{2} = k1{2}); 1,2: smt().  
-  + by call Eqv_DecapsOrder; skip => /> /#. 
-  inline{1} 1.
-  by wp; call (: true); call (: true); wp; skip.
-by call (: true); call (: true); skip => />.
+move=> kg_sem.
+proc; inline *. 
+wp; call (: true); call (: true).
+wp; call (: true); sp 0 1.
+seq 1 1 : (#pre /\ pk0{1} = pk00{2} /\ sk0{1} = sk00{2} /\ sk2pk sk0{1} = pk0{1}). 
++ call (: ={glob S} ==> ={glob S, res} /\ sk2pk res{1}.`2 = res{1}.`1) => //.
+  by conseq (: ={glob S} ==> ={glob S, res}) kg_sem; proc true.
+if => //; 1: by wp.
+call (: ={glob S} ==> ={glob S, res} /\ sk2pk res{1}.`2 = res{1}.`1) => //.
++ by conseq (: ={glob S} ==> ={glob S, res}) kg_sem; proc true.
+by skip => /> /#.
 qed.
-
-end section.
-
-
-
 
 
 end Relations.
