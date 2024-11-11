@@ -3383,7 +3383,7 @@ by do 2! call (: true).
 qed.
 
 
-(* Security goal: Robustness *)
+(* Security goal: Robustness and Collision Freeness *)
 (** Reduction adversary reducing SROB-CPA to WROB-CPA **)
 module R_SROBCPA_WROBCPA (S : Scheme) (A : Adv_WROBCPA) : Adv_SROBCPA = {
   proc find(pk0 : pk_t, pk1 : pk_t) : ctxt_t = {
@@ -3399,8 +3399,23 @@ module R_SROBCPA_WROBCPA (S : Scheme) (A : Adv_WROBCPA) : Adv_SROBCPA = {
   }
 }.
 
-section.
+(** Reduction adversary reducing SCFR-CPA to WCFR-CPA **)
+module R_SCFRCPA_WCFRCPA (S : Scheme) (A : Adv_WCFRCPA) : Adv_SCFRCPA = {
+  proc find(pk0 : pk_t, pk1 : pk_t) : ctxt_t = {
+    var b : bool;
+    var k : key_t;
+    var c : ctxt_t;
+    
+    b <@ A.choose(pk0, pk1);
+    
+    (k, c) <@ S.encaps(if b then pk1 else pk0);
+    
+    return c;
+  }
+}.
 
+section.
+(* General *)
 (* Declare arbitrary KEM S *)
 declare module S <: Scheme.
 
@@ -3505,6 +3520,7 @@ by rewrite 2?(EqPr_Decaps &1 &2) 3:RField.mulrC.
 qed. 
 
 
+(* Robustness *)
 (* 
   Auxiliary module equivalent to WROB_CPA, but with additional variables, and 
   certain variables defined global instead of local (so we can refer to them in proofs)
@@ -3598,6 +3614,108 @@ case (b{2}); last first.
                   (={glob S, sk0, sk1, c} ==> k0{1} <> None /\ k1{1} <> None => k0{2} <> None /\ k1{2} <> None)
                   (={glob S, sk0, sk1, c} ==> k0{1} <> None /\ k1{1} <> None => k0{2} <> None /\ k1{2} <> None); 1,2: smt().  
   + by call Eqv_DecapsOrder.
+  inline{1} 1.
+  by wp; call (: true); call (: true); wp; skip.
+by call (: true); call (: true); skip => />.
+qed.
+
+
+
+(* Collision Freeness *)
+(* 
+  Auxiliary module equivalent to WCFR_CPA, but with additional variables, and 
+  certain variables defined global instead of local (so we can refer to them in proofs)
+*)
+local module WCFR_CPA_V = {
+  var b : bool
+  var k : key_t
+  var k'' : key_t option
+  
+  proc main() : bool = {
+    var pk0 : pk_t;
+    var pk1 : pk_t;
+    var sk0 : sk_t;
+    var sk1 : sk_t;
+    var k' : key_t option;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    b <@ A.choose(pk0, pk1);
+    (k, c) <@ S.encaps(if b then pk1 else pk0);
+    k' <@ S.decaps(if b then sk0 else sk1, c);
+    k'' <@ S.decaps(if b then sk1 else sk0, c);
+    
+    return k' = Some k;
+  }
+}.
+
+(* 
+  Equivalence (expressed as equality of probabilities) between 
+  original WCFR_CPA and (auxiliary) WCFR_CPA_V.
+*)
+local lemma EqPr_WCFRCPA_V &m :
+  Pr[WCFR_CPA(S, A).main() @ &m : res]
+  =
+  Pr[WCFR_CPA_V.main() @ &m : res].
+proof.
+byequiv => //.
+by proc; call{2} S_decaps_ll; sim.
+qed.
+
+
+
+(** 
+  Relation between WCFR_CPA (for arbitrary adversary) and SCFR_CPA
+  (with above reduction adverary). However, only holds as long as a honest decapsulation
+  of a (honestly generated) ciphertext does not fail. This is implied by correctness (i.e.,
+  the probability of a honest execution being incorrect is low, a.k.a., the complement of the 
+  Correctness game has low probability). 
+  (Shows SCFR_CPA + Correctness --> WCFR_CPA.)
+**)
+lemma Bnd_WCFRCPA_SCFRCPA &m :
+  Pr[WCFR_CPA(S, A).main() @ &m : res]
+  <=
+  Pr[SCFR_CPA(S, R_SCFRCPA_WCFRCPA(S, A)).main() @ &m : res]
+  +
+  2%r * Pr[Correctness(S).main() @ &m : !res].
+proof.
+rewrite -RField.ofintR RField.mulrC RField.mul1r2z.
+rewrite EqPr_WCFRCPA_V Pr[mu_split WCFR_CPA_V.k'' = Some WCFR_CPA_V.k] StdOrder.RealOrder.ler_add /=; last first.
++ rewrite Pr[mu_split WCFR_CPA_V.b] StdOrder.RealOrder.ler_add.
+  + byequiv => //.
+    proc.
+    seq 3 1 : (={glob S} /\ pk1{1} = pk{2} /\ sk1{1} = sk{2}).
+    + by call{1} A_choose_ll; call (: true); call{1} (S_keygen_sl (glob S){m}).
+    case (WCFR_CPA_V.b{1}); last first.
+    + call{1} S_decaps_ll; call{1} S_decaps_ll; call{1} S_encaps_ll.
+      by call{2} S_decaps_ll; call{2} S_encaps_ll.
+    seq 1 1 : (#pre /\ ={c} /\ WCFR_CPA_V.k{1} = k{2}); 1: by call(: true); skip => />. 
+    by call (: true); exlim (glob S){1} => GS; call{1} (S_decaps_sl GS); skip => />.
+  byequiv => //.
+  proc.
+  seq 1 1 : (={glob S} /\ pk0{1} = pk{2} /\ sk0{1} = sk{2}); 1: by call (: true).
+  seq 2 0 : (#pre).
+  + by call{1} A_choose_ll; exlim (glob S){1} => GS; call{1} (S_keygen_sl GS).    
+  case (WCFR_CPA_V.b{1}).
+  + call{1} S_decaps_ll; call{1} S_decaps_ll; call{1} S_encaps_ll.
+    by call{2} S_decaps_ll; call{2} S_encaps_ll.
+  seq 1 1 : (#pre /\ ={c} /\ WCFR_CPA_V.k{1} = k{2}); 1: by call(: true); skip => />. 
+  by call (: true); exlim (glob S){1} => GS; call{1} (S_decaps_sl GS); skip => />.
+byequiv => //.
+proc; inline *.
+seq 4 7 : (={glob S, sk0, sk1, c} /\ WCFR_CPA_V.b{1} = b{2}). 
++ by wp; call (: true); call (: true); wp; do 2! call (: true).
+case (b{2}); last first.
++ transitivity{2} {(k0, k1) <@ Decaps_Order.main(sk1, sk0, c, c);} 
+                  (! WCFR_CPA_V.b{1} /\ ={glob S, sk0, sk1, c} ==> k'{1} <> None /\ k'{1} = WCFR_CPA_V.k''{1} => k0{2} <> None /\ k1{2} <> None /\ k0{2} = k1{2})
+                  (={glob S, sk0, sk1, c} ==> k0{1} <> None /\ k0{1} = k1{1} => k0{2} <> None /\ k0{2} = k1{2}); 1,2: smt().
+  + inline{2} 1.
+    by wp; call (: true); call (: true); wp; skip => />. 
+  transitivity{1} {(k0, k1) <@ Decaps_Order.main(sk0, sk1, c, c);} 
+                  (={glob S, sk0, sk1, c} ==> k0{1} <> None /\ k0{1} = k1{1} => k0{2} <> None /\ k0{2} = k1{2})
+                  (={glob S, sk0, sk1, c} ==> k0{1} <> None /\ k0{1} = k1{1} => k0{2} <> None /\ k0{2} = k1{2}); 1,2: smt().  
+  + by call Eqv_DecapsOrder; skip => /> /#. 
   inline{1} 1.
   by wp; call (: true); call (: true); wp; skip.
 by call (: true); call (: true); skip => />.
@@ -3828,5 +3946,9 @@ by call (: true); call (: true); skip => />.
 qed.
 
 end section.
+
+
+
+
 
 end Relations.
