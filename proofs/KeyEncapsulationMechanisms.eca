@@ -2473,17 +2473,15 @@ clone import MALBIND.
 **)  
 lemma Eqv_OWCCA1_OWCCA2 (S <: Scheme) (O1 <: Oracles_CCA1i{-S}) (O2 <: Oracles_CCA2i)
                         (A <: Adv_OWCCA1{-S, -O1, -O2}) :
-  equiv[O1.init ~ O1.init : ={glob S, glob A} ==> ={glob O1}] =>
   islossless O2.init =>
   equiv[OW_CCA1(S, O1, A).main ~ OW_CCA2(S, O1, O2, A).main : 
-          ={glob S, glob A} ==> ={res}].
+          ={glob S, glob O1, glob A} ==> ={res}].
 proof. 
-move=> O1_eqv_init O2_init_ll. 
+move=> O2_init_ll. 
 proc; inline *. 
 call (: true); call{2} O2_init_ll; call (: true). 
 call (: ={glob O1}); 1: by sim.
-call O1_eqv_init. 
-by call (: true); skip. 
+by do 2! call (: true).
 qed.
 
 
@@ -2558,16 +2556,15 @@ qed.
 **)  
 lemma Eqv_INDCCA1_INDCCA2 (S <: Scheme) (O1 <: Oracles_CCA1i{-S}) (O2 <: Oracles_CCA2i)
                           (A <: Adv_INDCCA1{-S, -O1, -O2}) :
-  equiv[O1.init ~ O1.init : ={glob S, glob A} ==> ={glob O1}] =>
   islossless O2.init =>
   equiv[IND_CCA1(S, O1, A).main ~ IND_CCA2(S, O1, O2, A).main : 
-          ={glob S, glob A} ==> ={res}].
+          ={glob S, glob O1, glob A} ==> ={res}].
 proof.  
-move=> O1_eqv_init O2_init_ll. 
+move=> O2_init_ll. 
 proc; inline *. 
 call (: true); rnd; call{2} O2_init_ll. 
 rnd; call (: true); call (: ={glob O1}); 1: by sim.
-by call O1_eqv_init; call (: true); skip. 
+by do 2! call (: true); skip. 
 qed. 
 
 
@@ -2644,17 +2641,16 @@ qed.
 **)  
 lemma Eqv_NMCCA1_NMCCA2 (S <: Scheme) (O1 <: Oracles_CCA1i{-S}) (O2 <: Oracles_CCA2i{-S})
                         (A <: Adv_NMCCA1{-S, -O1, -O2}) :
-  equiv[O1.init ~ O1.init : ={glob S, glob A} ==> ={glob O1}] =>
   islossless O2.init =>
   equiv[NM_CCA1(S, O1, A).main ~ NM_CCA2(S, O1, O2, A).main : 
-          ={glob S, glob A} ==> ={res}].
+          ={glob S, glob O1, glob A} ==> ={res}].
 proof. 
-move=> O1_eqv_init O2_init_ll.
+move=> O2_init_ll.
 proc; inline *. 
 seq 5 6 : (={glob S, glob A, sk, k, c, k'}); 2: by sim.
 call{2} O2_init_ll; rnd; call (: true).
 call (: ={glob O1}); 1: by sim. 
-by call O1_eqv_init; call (: true); skip. 
+by do 2! call (: true); skip. 
 qed.
 
 
@@ -2730,17 +2726,16 @@ qed.
 **)  
 lemma Eqv_SNMCCA1_SNMCCA2 (S <: Scheme) (O1 <: Oracles_CCA1i{-S}) (O2 <: Oracles_CCA2i{-S})
                           (A <: Adv_SNMCCA1{-S, -O1, -O2}) :
-  equiv[O1.init ~ O1.init : ={glob S, glob A} ==> ={glob O1}] =>
   islossless O2.init =>
   equiv[SNM_CCA1(S, O1, A).main ~ SNM_CCA2(S, O1, O2, A).main : 
-          ={glob S, glob A} ==> ={res}].
+          ={glob S, glob O1, glob A} ==> ={res}].
 proof. 
-move=> O1_eqv_init O2_init_ll.
+move=> O2_init_ll.
 proc; inline *.
 seq 5 6 : (={glob S, glob A, sk, k, c, k'}); 2: by sim.
 call{2} O2_init_ll; rnd; call (: true).
 call (: ={glob O1}); 1: by sim.
-by call O1_eqv_init; call (: true).
+by do 2! call (: true).
 qed.
 
 
@@ -2822,18 +2817,15 @@ lemma Eqv_ANOCCA1_ANOCCA2 (S <: Scheme)
                           (O01 <: Oracles_CCA1i{-S}) (O11 <: Oracles_CCA1i{-S, -O01})
                           (O02 <: Oracles_CCA2i) (O21 <: Oracles_CCA2i)
                           (A <: Adv_ANOCCA1{-S, -O01, -O11, -O02, -O21}) :
-  equiv[O01.init ~ O01.init : ={glob S, glob A} ==> ={glob O01}] =>
-  equiv[O11.init ~ O11.init : ={glob S, glob A} ==> ={glob O11}] =>
   islossless O02.init => islossless O21.init =>
   equiv[ANO_CCA1(S, O01, O11, A).main ~ ANO_CCA2(S, O01, O11, O02, O21, A).main : 
-          ={glob S, glob A} ==> ={res}].
+          ={glob S, glob O01, glob O11, glob A} ==> ={res}].
 proof.
-move=> O01_eqv_init O11_eqv_init O02_init_ll O21_init_ll.
+move=> O02_init_ll O21_init_ll.
 proc; inline *.
 call (: true); call{2} O21_init_ll; call{2} O02_init_ll.
 call (: true); rnd; call (: ={glob O01, glob O11}); 1,2: by sim.
-call O11_eqv_init; call O01_eqv_init. 
-by do 2! call (: true); skip => /> b _ -[]. 
+by do 4! call (: true); skip => /> b _ -[]. 
 qed.
 
 
@@ -2913,19 +2905,16 @@ qed.
 lemma Eqv_WANOCCA1_WANOCCA2 (S <: Scheme) 
                             (O01 <: Oracles_CCA1i{-S}) (O11 <: Oracles_CCA1i{-S, -O01})
                             (O02 <: Oracles_CCA2i) (O21 <: Oracles_CCA2i)
-                            (A <: Adv_WANOCCA1{-S, -O01, -O11, -O02, -O21}) : 
-  equiv[O01.init ~ O01.init : ={glob S, glob A} ==> ={glob O01}] =>
-  equiv[O11.init ~ O11.init : ={glob S, glob A} ==> ={glob O11}] =>
+                            (A <: Adv_WANOCCA1{-S, -O01, -O11, -O02, -O21}) :
   islossless O02.init => islossless O21.init =>
   equiv[WANO_CCA1(S, O01, O11, A).main ~ WANO_CCA2(S, O01, O11, O02, O21, A).main : 
-          ={glob S, glob A} ==> ={res}].
+          ={glob S, glob O01, glob O11, glob A} ==> ={res}].
 proof. 
-move=> O01_eqv_init O11_eqv_init O02_init_ll O21_init_ll.
+move=> O02_init_ll O21_init_ll.
 proc; inline *.
 call (: true); call{2} O21_init_ll; call{2} O02_init_ll.
 call (: true); rnd; call (: ={glob O01, glob O11}); 1,2: by sim.
-call O11_eqv_init; call O01_eqv_init. 
-by do 2! call (: true); skip => /> b _ -[]. 
+by do 4! call (: true); skip => /> b _ -[]. 
 qed.
 
 
@@ -3137,10 +3126,10 @@ module R_SNMCPA_NMCPA (A : Adv_NMCPA) : Adv_SNMCPA = {
   Equivalence between NM_CPA (for arbitrary adversary) and SNM_CPA
   (with above reduction adverary). (Shows SNM_CPA --> SNM_CPA.)
 **)
-equiv Eqv_NMCPA_SNMCPA (S <: Scheme) 
+lemma Eqv_NMCPA_SNMCPA (S <: Scheme) 
                        (A <: Adv_NMCPA{-S}) :
-  NM_CPA(S, A).main ~ SNM_CPA(S, R_SNMCPA_NMCPA(A)).main :
-    ={glob S, glob A} ==> ={res}.
+  equiv[NM_CPA(S, A).main ~ SNM_CPA(S, R_SNMCPA_NMCPA(A)).main :
+        ={glob S, glob A} ==> ={res}].
 proof.
 proc; inline *. 
 seq 3 4 : (={glob S, glob A, pk, sk, k, c, k'}); 2: by sim.
@@ -3171,16 +3160,14 @@ module (R_SNMCCA1_NMCCA1 (A : Adv_NMCCA1) : Adv_SNMCCA1) (O : Oracles_CCA) = {
 **)
 lemma Eqv_NMCCA1_SNMCCA1 (S <: Scheme) (O <: Oracles_CCA1i{-S})
                          (A <: Adv_NMCCA1{-S, -O}) :
-  equiv[O.init ~ O.init : ={glob S, glob A} ==> ={glob O}] =>
   equiv[NM_CCA1(S, O, A).main ~ SNM_CCA1(S, O, R_SNMCCA1_NMCCA1(A)).main :
-            ={glob S, glob A} ==> ={res}].
+            ={glob S, glob O, glob A} ==> ={res}].
 proof.
-move=> O_eqv_init.
 proc; inline *.
 seq 5 7 : (={glob S, glob A, sk, k, c, k'}); 2: by sim.
 rnd{2}; rnd.
 call (: true); call (: ={glob O}); 1: by sim.
-by wp; call O_eqv_init; call (: true); skip.
+by wp; do 2! call (: true).
 qed. 
 
 
@@ -3206,18 +3193,15 @@ module (R_SNMCCA2_NMCCA2 (A : Adv_NMCCA2) : Adv_SNMCCA2) (O : Oracles_CCA) = {
 **)
 lemma Eqv_NMCCA2_SNMCCA2 (S <: Scheme) (O1 <: Oracles_CCA1i{-S}) (O2 <: Oracles_CCA2i{-S, -O1})
                          (A <: Adv_NMCCA2{-S, -O1, -O2}) :
-  equiv[O1.init ~ O1.init : ={glob S, glob A} ==> ={glob O1}] =>
-  equiv[O2.init ~ O2.init : ={glob S, glob A} ==> ={glob O2}] =>
   equiv[NM_CCA2(S, O1, O2, A).main ~ SNM_CCA2(S, O1, O2, R_SNMCCA2_NMCCA2(A)).main :
-          ={glob S, glob A} ==> ={res}].
+          ={glob S, glob O1, glob O2, glob A} ==> ={res}].
 proof.
-move=> O1_eqv_init O2_eqv_init. 
 proc; inline *.
 seq 7 11 : (={glob S, sk, k, c, k'} /\ rel{1} = rel0{2} /\ cl{1} = cl0{2}); 2: by sim.
 call (: ={glob O2}); 1: by sim.
-wp; rnd{2}; call O2_eqv_init; rnd; call (: true).
+wp; rnd{2}; call (: true); rnd; call (: true).
 call (: ={glob O1}); 1: by sim.
-by wp; call O1_eqv_init; call (: true); skip.
+by wp; do 2! call (: true).
 qed.
 
 
@@ -3239,14 +3223,12 @@ module (R_SNMCCA_NMCCA (A : Adv_NMCCA) : Adv_SNMCCA) (O : Oracles_CCA) = {
 **)
 lemma Eqv_NMCCA_SNMCCA (S <: Scheme) (O <: Oracles_CCA2i{-S})
                        (A <: Adv_NMCCA{-S, -O}) :
-  equiv[O.init ~ O.init : ={glob S, glob A} ==> ={glob O}] =>
   equiv[NM_CCA(S, O, A).main ~ SNM_CCA(S, O, R_SNMCCA_NMCCA(A)).main :
-          ={glob S, glob A} ==> ={res}].
+          ={glob S, glob O, glob A} ==> ={res}].
 proof.
-move=> O_eqv_init.
 proc; inline *.
 seq 4 5 : (={glob S, glob O, glob A, sk, pk, k, c, k'}); 2: by sim. 
-by rnd{2}; call O_eqv_init; rnd; call (: true); call (: true).
+by rnd{2}; call (: true); rnd; call (: true); call (: true).
 qed.
 
 
@@ -3266,10 +3248,10 @@ module R_ANOCPA_WANOCPA (A : Adv_WANOCPA) : Adv_ANOCPA = {
   Equivalence between WANO_CPA (for arbitrary adversary) and ANO_CPA
   (with above reduction adverary). (Shows ANO_CPA --> ANO_CPA.)
 **)
-equiv Eqv_WANOCPA_ANOCPA (S <: Scheme) 
+lemma Eqv_WANOCPA_ANOCPA (S <: Scheme) 
                          (A <: Adv_WANOCPA{-S}) :
-  WANO_CPA(S, A).main ~ ANO_CPA(S, R_ANOCPA_WANOCPA(A)).main :
-    ={glob S, glob A} ==> ={res}.
+  equiv[WANO_CPA(S, A).main ~ ANO_CPA(S, R_ANOCPA_WANOCPA(A)).main :
+          ={glob S, glob A} ==> ={res}].
 proof.
 proc; inline *.
 wp; call (: true); wp; call (: true); rnd.
@@ -3298,17 +3280,13 @@ module (R_ANOCCA1_WANOCCA1 (A : Adv_WANOCCA1) : Adv_ANOCCA1) (O0 : Oracles_CCA, 
 **)
 lemma Eqv_WANOCCA1_ANOCCA1 (S <: Scheme) (O0 <: Oracles_CCA1i{-S}) (O1 <: Oracles_CCA1i{-S, -O0})
                            (A <: Adv_WANOCCA1{-S, -O0, -O1}) :
-  equiv[O0.init ~ O0.init : ={glob S, glob A} ==> ={glob O0}] =>
-  equiv[O1.init ~ O1.init : ={glob S, glob A} ==> ={glob O1}] =>
   equiv[WANO_CCA1(S, O0, O1, A).main ~ ANO_CCA1(S, O0, O1, R_ANOCCA1_WANOCCA1(A)).main :
-    ={glob S, glob A} ==> ={res}].
+    ={glob S, glob O0, glob O1, glob A} ==> ={res}].
 proof.
-move=> O0_eqv_init O1_eqv_init.
 proc; inline *.
 wp; call (: true); wp; call (: true); rnd.
 call (: ={glob O0, glob O1}); 1,2: by sim.
-wp; call O1_eqv_init; call O0_eqv_init.
-by do 2! call (: true). 
+by wp; do 4! call (: true). 
 qed.
 
 
@@ -3333,23 +3311,17 @@ module (R_ANOCCA2_WANOCCA2 (A : Adv_WANOCCA2) : Adv_ANOCCA2) (O0 : Oracles_CCA, 
 **)
 lemma Eqv_WANOCCA2_ANOCCA2 (S <: Scheme)
                            (O01 <: Oracles_CCA1i{-S}) (O11 <: Oracles_CCA1i{-S, -O01})
-                           (O02 <: Oracles_CCA2i{-S}) (O21 <: Oracles_CCA2i{-S, -O02})
-                           (A <: Adv_WANOCCA2{-S, -O01, -O11, -O02, -O21}) :
-  equiv[O01.init ~ O01.init : ={glob S, glob A} ==> ={glob O01}] =>
-  equiv[O11.init ~ O11.init : ={glob S, glob A} ==> ={glob O11}] =>
-  equiv[O02.init ~ O02.init : ={glob S, glob A} ==> ={glob O02}] =>
-  equiv[O21.init ~ O21.init : ={glob S, glob A} ==> ={glob O21}] =>
-  equiv[WANO_CCA2(S, O01, O11, O02, O21, A).main ~ ANO_CCA2(S, O01, O11, O02, O21, R_ANOCCA2_WANOCCA2(A)).main :
-          ={glob S, glob A} ==> ={res}].
+                           (O02 <: Oracles_CCA2i{-S, -O01, -O11}) (O12 <: Oracles_CCA2i{-S, -O01, -O11, -O02})
+                           (A <: Adv_WANOCCA2{-S, -O01, -O11, -O02, -O12}) :
+  equiv[WANO_CCA2(S, O01, O11, O02, O12, A).main ~ ANO_CCA2(S, O01, O11, O02, O12, R_ANOCCA2_WANOCCA2(A)).main :
+          ={glob S, glob O01, glob O11, glob O02, glob O12, glob A} ==> ={res}].
 proof.
-move=> O01_eqv_init O11_eqv_init O02_eqv_init O21_eqv_init.
 proc; inline *.
-wp; call (: ={glob O02, glob O21}); 1,2: by sim.
-wp; call O21_eqv_init; call O02_eqv_init. 
+wp; call (: ={glob O02, glob O12}); 1,2: by sim.
+wp; do 2! call (: true).
 call (: true); rnd. 
 call (: ={glob O01, glob O11}); 1,2: by sim.
-wp; call O11_eqv_init; call O01_eqv_init. 
-by do 2! call (: true).
+by wp; do 4! call (: true).
 qed.
 
 
@@ -3370,15 +3342,12 @@ module (R_ANOCCA_WANOCCA (A : Adv_WANOCCA) : Adv_ANOCCA) (O0 : Oracles_CCA, O1 :
 **)
 lemma Eqv_WANOCCA_ANOCCA (S <: Scheme) (O0 <: Oracles_CCA2i{-S}) (O1 <: Oracles_CCA2i{-S, -O0})
                          (A <: Adv_WANOCCA{-S, -O0, -O1}) :
-  equiv[O0.init ~ O0.init : ={glob S, glob A} ==> ={glob O0}] =>
-  equiv[O1.init ~ O1.init : ={glob S, glob A} ==> ={glob O1}] =>
   equiv[WANO_CCA(S, O0, O1, A).main ~ ANO_CCA(S, O0, O1, R_ANOCCA_WANOCCA(A)).main :
-        ={glob S, glob A} ==> ={res}].
+          ={glob S, glob O0, glob O1, glob A} ==> ={res}].
 proof.
-move=> O0_eqv_init O1_eqv_init.
 proc; inline *.
 wp; call (: ={glob O0, glob O1}); 1,2: by sim.
-wp; call O1_eqv_init; call O0_eqv_init.
+wp; do 2! call (: true). 
 call (: true); rnd.
 by do 2! call (: true).
 qed.
@@ -3725,6 +3694,22 @@ end section.
   Relations/Hierarchy concerning binding properties 
   (e.g., MAL --> LEAK --> HON). 
 *)
+(** 
+  Auxiliary module capturing the probability of generating the same public-key
+  twice in a row. Required for proving implication between CT_Binds_PK and CT_Binds_K.  
+**)
+module Keygen_Equal_PK (S : Scheme) = {
+  proc main() : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+  
+    return pk0 = pk1;
+  }
+}.
+
 (** Reduction adversary reducing from LEAK-BIND to HON-BIND **)
 module R_LEAK_HON (O0 : Oracles_CCA1i, O1 : Oracles_CCA1i) (A : Adv_HONBIND) : Adv_LEAKBIND = {
   proc find(bc : bindconf, pk0 : pk_t, sk0 : sk_t, pk1 : pk_t, sk1 : sk_t) : ctxt_t * ctxt_t = {
@@ -3745,21 +3730,18 @@ module R_LEAK_HON (O0 : Oracles_CCA1i, O1 : Oracles_CCA1i) (A : Adv_HONBIND) : A
 **)
 lemma Eqv_HONBIND_LEAKBIND (S <: Scheme) (O0 <: Oracles_CCA1i{-S}) (O1 <: Oracles_CCA1i{-S, -O0})
                            (A <: Adv_HONBIND{-S, -O0, -O1}) :
-  equiv[O0.init ~ O0.init : ={glob S, glob A} ==> ={glob O0}] =>
-  equiv[O1.init ~ O1.init : ={glob S, glob A} ==> ={glob O1}] =>
   equiv[HON_BIND(S, O0, O1, A).main ~ LEAK_BIND(S, R_LEAK_HON(O0, O1, A)).main :
-          ={glob S, glob A, arg} ==> ={res}].
+          ={glob S, glob O0, glob O1, glob A, arg} ==> ={res}].
 proof.
-move=> O0_eqv_init O1_eqv_init.
 proc; inline *.
 wp; call (: true); call (: true).
 wp; call (: ={glob O0, glob O1}); 1,2: by sim. 
-call O1_eqv_init; call O0_eqv_init; wp.
+do 2! call (: true); wp. 
 seq 1 1 : (#pre /\ ={pk0, sk0}); 1: by sim.
 by if => //; [wp | call (: true)]. 
 qed.
 
-(** Reduction adversary reducing from MAL-BIND (Decaps Decaps) to LEAK-BIND **)
+(** Reduction adversary reducing from MAL-BIND (Decaps Decaps case) to LEAK-BIND **)
 module R_MALDD_LEAK (S : Scheme) (A : Adv_LEAKBIND) : Adv_MALBIND_DD = {
   proc find(bc : bindconf) : sk_t * sk_t * ctxt_t * ctxt_t = {
     var pk0, pk1 : pk_t;
@@ -3805,5 +3787,291 @@ call (: ={glob S} ==> ={glob S, res} /\ sk2pk res{1}.`2 = res{1}.`1) => //.
 by skip => /> /#.
 qed.
 
+(* Impossible?
+module (R_HON_K_PKK_CT (S : Scheme) (A : Adv_HONBIND) : Adv_HONBIND) (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  proc find(bc : bindconf, pk0 : pk_t, pk1 : pk_t) : ctxt_t * ctxt_t = {
+    var c0, c1 : ctxt_t;
+    var pk1' : pk_t;
+    var sk1' : sk_t;
+    
+    (pk1', sk1') <@ S.keygen();
+    
+    (c0, c1) <@ A(O0, O1).find(PKK_Binds_CT, pk0, pk1');
+    
+    return (c0, c1);
+  } 
+}.
+
+lemma Eqv_HON_PKK_K_CT (S <: Scheme) (O0 <: Oracles_CCA1i{-S}) (O1 <: Oracles_CCA1i{-S, -O0})
+                       (A <: Adv_HONBIND{-S, -O0, -O1}):
+  (forall GS, phoare[S.keygen : glob S = GS ==> glob S = GS] = 1%r) =>
+  equiv[O0.init ~ O0.init : ={glob S, glob A} ==> ={glob O0}] =>
+  equiv[O1.init ~ O1.init : ={glob S, glob A} ==> ={glob O1}] =>
+  equiv[HON_BIND(S, O0, O1, A).main ~ HON_BIND(S, O0, O1, R_HON_PKK_K_CT(S, A)).main :
+          ={glob S, glob A} /\ arg{1} = K_Binds_CT /\ arg{2} = PKK_Binds_CT ==> ={res}].
+proof. admit. qed.
+*)
+(** Reduction adversary reducing HON-BIND-K-PK and HON-BIND-CT-PK to HON-BIND-KCT-PK **)
+module (R_HON_K_CT_KCT_PK (A : Adv_HONBIND) : Adv_HONBIND) (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  proc find(bc : bindconf, pk0 : pk_t, pk1 : pk_t) : ctxt_t * ctxt_t = {
+    var c0, c1 : ctxt_t;
+    
+    (c0, c1) <@ A(O0, O1).find(KCT_Binds_PK, pk0, pk1);
+    
+    return (c0, c1);
+  } 
+}.
+
+(**
+  Equivalence between HON-BIND-KCT-PK (for arbitrary adversary)
+  and HON-BIND-K-PK or HON-BIND-CT-PK (with above reduction adversary).
+  (Shows HON-BIND-K-PK --> HON-BIND-KCT-PK and HON-BIND-CT-PK --> HON-BIND-KCT-PK .) 
+**)
+lemma Eqv_HON_KCT_K_CT_PK (S <: Scheme) (O0 <: Oracles_CCA1i{-S}) (O1 <: Oracles_CCA1i{-S, -O0})
+                          (A <: Adv_HONBIND{-S, -O0, -O1}):
+  equiv[HON_BIND(S, O0, O1, A).main ~ HON_BIND(S, O0, O1, R_HON_K_CT_KCT_PK(A)).main :
+          ={glob S, glob O0, glob O1, glob A} /\ arg{1} = KCT_Binds_PK /\ (arg{2} = K_Binds_PK \/ arg{2} = CT_Binds_PK) 
+          ==> 
+          res{1} => res{2}].
+proof. 
+proc; inline *.
+wp; call (: true); call (: true).
+wp; call (: ={glob O0, glob O1}); 1,2: by sim.
+wp; do 2! call (: true).
+seq 1 1 : (#pre /\ ={pk0, sk0}); 1: by call (: true).
+rcondf{1} 1; 1: by auto.
+rcondf{2} 1; 1: by auto => /> /#.
+by call(: true); skip => /> /#.
+qed.
+
+
+(** Reduction adversary reducing HON-BIND-CT-PK to HON-BIND-CT-K **)
+module (R_HON_CT_K_PK(A : Adv_HONBIND) : Adv_HONBIND) (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  proc find(bc : bindconf, pk0 : pk_t, pk1 : pk_t) : ctxt_t * ctxt_t = {
+    var c0, c1 : ctxt_t;
+    
+    (c0, c1) <@ A(O0, O1).find(CT_Binds_K, pk0, pk1);
+    
+    return (c0, c1);
+  } 
+}.
+
+section.
+
+declare module S <: Scheme.
+
+declare axiom S_decaps_ll : islossless S.decaps. 
+
+declare module O0 <: Oracles_CCA1i{-S}.
+declare module O1 <: Oracles_CCA1i{-S, -O0}.
+
+declare axiom O0_init_ll : islossless O0.init.
+declare axiom O1_init_ll : islossless O1.init.
+
+declare module A <: Adv_HONBIND{-S, -O0, -O1}.
+
+declare axiom A_find_ll : islossless A(O0, O1).find. 
+
+
+local module HON_BIND_V = {
+  var pk0 : pk_t
+  var pk1 : pk_t
+  
+  proc main(bc : bindconf) : bool = {
+
+    var sk0 : sk_t;
+    var sk1 : sk_t;
+    var c0 : ctxt_t;
+    var c1 : ctxt_t;
+    var k0 : key_t option;
+    var k1 : key_t option;
+    var no_fail : bool;
+    
+    (pk0, sk0) <@ S.keygen();
+    if (is_pkbc bc) {
+      (pk1, sk1) <- (pk0, sk0);
+    } else { 
+      (pk1, sk1) <@ S.keygen();
+    }
+    
+    O0.init(sk0);
+    O1.init(sk1);
+    
+    (c0, c1) <@ A(O0, O1).find(bc, pk0, pk1);
+    
+    k0 <@ S.decaps(sk0, c0);
+    k1 <@ S.decaps(sk1, c1);
+    
+    no_fail <- k0 <> None /\ k1 <> None;
+    
+    return no_fail /\ is_bindbreak bc (oget k0) (oget k1) pk0 pk1 c0 c1;
+  }  
+}.
+
+local lemma EqPr_HONBIND_V &m (bc : bindconf) :
+  Pr[HON_BIND(S, O0, O1, A).main(bc) @ &m : res]
+  =
+  Pr[HON_BIND_V.main(bc) @ &m : res].
+proof. by byequiv => //; sim. qed.
+
+
+(**
+  Relation between HON-BIND-CT-K (for arbitrary adversary)
+  and HON-BIND-CT-PK (with above reduction adversary).
+  Requires generated public keys to be different.
+  (Shows HON-BIND-CT-PK + Different PKs --> HON-BIND-K-PK.) 
+**)
+lemma Bnd_HON_K_KCT_PK &m :
+  Pr[HON_BIND(S, O0, O1, A).main(CT_Binds_K) @ &m : res]
+  <=
+  Pr[HON_BIND(S, O0, O1, R_HON_CT_K_PK(A)).main(CT_Binds_PK) @ &m : res]
+  +
+  Pr[Keygen_Equal_PK(S).main() @ &m : res].
+proof.
+rewrite EqPr_HONBIND_V Pr[mu_split HON_BIND_V.pk0 <> HON_BIND_V.pk1] StdOrder.RealOrder.ler_add.
++ byequiv (: ={glob S, glob O0, glob O1, glob A} /\ bc{1} = CT_Binds_K /\ bc{2} = CT_Binds_PK ==> _) => //.
+  proc; inline *.
+  seq 1 1 : (#pre /\ ={sk0} /\ HON_BIND_V.pk0{1} = pk0{2}); 1: by call (: true).
+  wp; call (: true); call (: true); wp.
+  call (: ={glob O0, glob O1}); 1,2: by sim.
+  wp; call (: true); call (: true).
+  rcondf{1} 1; 1: by auto.
+  rcondf{2} 1; 1: by auto.
+  by call (: true).
+byequiv => //.
+proc; inline *.
+rcondf{1} 2; 1: by move=> ?; call(: true).
+wp; call{1} S_decaps_ll; call{1} S_decaps_ll; call{1} A_find_ll.
+call{1} O1_init_ll; call{1} O0_init_ll.
+by do 2! call (: true).
+qed.
+
+end section.
+
+
+(** Reduction adversary reducing LEAK-BIND-K-PK and LEAK-BIND-CT-PK to LEAK-BIND-KCT-PK **)
+module R_LEAK_K_CT_KCT_PK (A : Adv_LEAKBIND) : Adv_LEAKBIND = {
+  proc find(bc : bindconf, pk0 : pk_t, sk0 : sk_t, pk1 : pk_t, sk1 : sk_t) : ctxt_t * ctxt_t = {
+    var c0, c1 : ctxt_t;
+    
+    (c0, c1) <@ A.find(KCT_Binds_PK, pk0, sk0, pk1, sk1);
+    
+    return (c0, c1);
+  } 
+}.
+
+(**
+  Equivalence between LEAK-BIND-KCT-PK (for arbitrary adversary)
+  and LEAK-BIND-K-PK or LEAK-BIND-CT-PK (with above reduction adversary).
+  (Shows LEAK-BIND-K-PK --> LEAK-BIND-KCT-PK and LEAK-BIND-CT-PK --> LEAK-BIND-KCT-PK .) 
+**)
+lemma Eqv_LEAK_KCT_K_CT_PK (S <: Scheme) (A <: Adv_LEAKBIND{-S}):
+  equiv[LEAK_BIND(S, A).main ~ LEAK_BIND(S, R_LEAK_K_CT_KCT_PK(A)).main :
+          ={glob S, glob A} /\ arg{1} = KCT_Binds_PK /\ (arg{2} = K_Binds_PK \/ arg{2} = CT_Binds_PK) 
+          ==> 
+          res{1} => res{2}].
+proof. 
+proc; inline *.
+wp; call (: true); call (: true).
+wp; call (: true); wp. 
+seq 1 1 : (#pre /\ ={pk0, sk0}); 1: by call (: true).
+rcondf{1} 1; 1: by auto.
+rcondf{2} 1; 1: by auto => /> /#.
+by call(: true); skip => /> /#.
+qed.
+
+
+(** Reduction adversary reducing LEAK-BIND-CT-PK to LEAK-BIND-CT-K **)
+module R_LEAK_CT_K_PK (A : Adv_LEAKBIND) : Adv_LEAKBIND = {
+  proc find(bc : bindconf, pk0 : pk_t, sk0 : sk_t, pk1 : pk_t, sk1 : sk_t) : ctxt_t * ctxt_t = {
+    var c0, c1 : ctxt_t;
+    
+    (c0, c1) <@ A.find(CT_Binds_K, pk0, sk0, pk1, sk1);
+    
+    return (c0, c1);
+  } 
+}.
+
+section.
+
+declare module S <: Scheme.
+
+declare axiom S_decaps_ll : islossless S.decaps. 
+
+declare module A <: Adv_LEAKBIND{-S}.
+
+declare axiom A_find_ll : islossless A.find. 
+
+print LEAK_BIND.
+local module LEAK_BIND_V = {
+  var pk0 : pk_t
+  var pk1 : pk_t
+  
+  proc main(bc : bindconf) : bool = {
+
+    var sk0 : sk_t;
+    var sk1 : sk_t;
+    var c0 : ctxt_t;
+    var c1 : ctxt_t;
+    var k0 : key_t option;
+    var k1 : key_t option;
+    var no_fail : bool;
+    
+    (pk0, sk0) <@ S.keygen();
+    if (is_pkbc bc) {
+      (pk1, sk1) <- (pk0, sk0);
+    } else { 
+      (pk1, sk1) <@ S.keygen();
+    }
+    
+    (c0, c1) <@ A.find(bc, pk0, sk0, pk1, sk1);
+    
+    k0 <@ S.decaps(sk0, c0);
+    k1 <@ S.decaps(sk1, c1);
+    
+    no_fail <- k0 <> None /\ k1 <> None;
+    
+    return no_fail /\ is_bindbreak bc (oget k0) (oget k1) pk0 pk1 c0 c1;
+  }  
+}.
+
+local lemma EqPr_LEAKBIND_V &m (bc : bindconf) :
+  Pr[LEAK_BIND(S, A).main(bc) @ &m : res]
+  =
+  Pr[LEAK_BIND_V.main(bc) @ &m : res].
+proof. by byequiv => //; sim. qed.
+
+
+(**
+  Relation between LEAK-BIND-CT-K (for arbitrary adversary)
+  and LEAK-BIND-CT-PK (with above reduction adversary).
+  Requires generated public keys to be different.
+  (Shows LEAK-BIND-CT-PK + Different PKs --> LEAK-BIND-K-PK.) 
+**)
+lemma Bnd_LEAK_K_KCT_PK &m :
+  Pr[LEAK_BIND(S, A).main(CT_Binds_K) @ &m : res]
+  <=
+  Pr[LEAK_BIND(S, R_LEAK_CT_K_PK(A)).main(CT_Binds_PK) @ &m : res]
+  +
+  Pr[Keygen_Equal_PK(S).main() @ &m : res].
+proof.
+rewrite EqPr_LEAKBIND_V Pr[mu_split LEAK_BIND_V.pk0 <> LEAK_BIND_V.pk1] StdOrder.RealOrder.ler_add.
++ byequiv (: ={glob S, glob A} /\ bc{1} = CT_Binds_K /\ bc{2} = CT_Binds_PK ==> _) => //.
+  proc; inline *.
+  seq 1 1 : (#pre /\ ={sk0} /\ LEAK_BIND_V.pk0{1} = pk0{2}); 1: by call (: true).
+  wp; call (: true); call (: true); wp.
+  call (: true); wp.
+  rcondf{1} 1; 1: by auto.
+  rcondf{2} 1; 1: by auto.
+  by call (: true).
+byequiv => //.
+proc; inline *.
+rcondf{1} 2; 1: by move=> ?; call(: true).
+wp; call{1} S_decaps_ll; call{1} S_decaps_ll; call{1} A_find_ll.
+by do 2! call (: true).
+qed.
+
+end section.
 
 end Relations.
+
