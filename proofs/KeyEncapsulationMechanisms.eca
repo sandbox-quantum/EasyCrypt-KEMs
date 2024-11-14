@@ -620,6 +620,9 @@ end IND.
   which one is independently sampled at random, and the other is the one
   encapsulated by the given ciphertext. (The order in which they appear in the pair
   is (uniformly) random).
+  
+  Note that these notions only have a sensible definition with a provided bit, so 
+  no "sampled bit" variants are defined
 **)
 abstract theory NM.
 (* Distributions *)
@@ -644,40 +647,8 @@ module type Adv_NMCPA = {
   proc find(pk : pk_t, c : ctxt_t) : (key_t -> key_t option list -> bool) * ctxt_t list
 }.
 
-(** NM-CPA security game (sampled bit) **)
+(** NM-CPA security game **)
 module NM_CPA (S : Scheme, A : Adv_NMCPA) = {
-  proc main() = {
-    var pk : pk_t;
-    var sk : sk_t;
-    var k, k' : key_t;
-    var c : ctxt_t;
-    var rel : key_t -> key_t option list -> bool;
-    var cl : ctxt_t list;
-    var ko : key_t option;
-    var kol : key_t option list;
-    var b : bool;
-    
-    (pk, sk) <@ S.keygen();
-    
-    (k, c) <@ S.encaps(pk);
-    k' <$ dkeym pk;
-    
-    (rel, cl) <@ A.find(pk, c);
-    
-    kol <- [];
-    while (size kol < size cl) {
-      ko <@ S.decaps(sk, nth witness cl (size kol));
-      kol <- rcons kol ko;
-    }
-    
-    b <$ {0,1};
-    
-    return !(c \in cl) /\ rel (if b then k' else k) kol;
-  }
-}.
-
-(** NM-CPA security game (provided bit) **)
-module NM_CPA_P (S : Scheme, A : Adv_NMCPA) = {
   proc main(b : bool) = {
     var pk : pk_t;
     var sk : sk_t;
@@ -717,41 +688,8 @@ module type Adv_SNMCPA = {
   proc find(pk : pk_t, c : ctxt_t, kk : key_t * key_t) : (key_t -> key_t option list -> bool) * ctxt_t list
 }.
 
-(** SNM-CPA security game (sampled bit) **)
+(** SNM-CPA security game **)
 module SNM_CPA (S : Scheme, A : Adv_SNMCPA) = {
-  proc main() = {
-    var pk : pk_t;
-    var sk : sk_t;
-    var k, k' : key_t;
-    var c : ctxt_t;
-    var rel : key_t -> key_t option list -> bool;
-    var cl : ctxt_t list;
-    var ko : key_t option;
-    var kol : key_t option list;
-    var b, o : bool;
-    
-    (pk, sk) <@ S.keygen();
-    
-    (k, c) <@ S.encaps(pk);
-    k' <$ dkeym pk;
-    
-    o <$ {0,1};
-    (rel, cl) <@ A.find(pk, c, if o then (k', k) else (k, k'));
-    
-    kol <- [];
-    while (size kol < size cl) {
-      ko <@ S.decaps(sk, nth witness cl (size kol));
-      kol <- rcons kol ko;
-    }
-    
-    b <$ {0,1};
-    
-    return !(c \in cl) /\ rel (if b then k' else k) kol;
-  }
-}.
-
-(** SNM-CPA security game (provided bit) **)
-module SNM_CPA_P (S : Scheme, A : Adv_SNMCPA) = {
   proc main(b : bool) = {
     var pk : pk_t;
     var sk : sk_t;
@@ -796,43 +734,8 @@ module type Adv_NMCCA1 (O : Oracles_CCA) = {
   proc find(c : ctxt_t) : (key_t -> key_t option list -> bool) * ctxt_t list { }
 }.
 
-(** NM-CCA1 security game (sampled bit) **)
+(** NM-CCA1 security game **)
 module NM_CCA1 (S : Scheme, O : Oracles_CCA1i, A : Adv_NMCCA1) = {
-  proc main() = {
-    var pk : pk_t;
-    var sk : sk_t;
-    var k, k' : key_t;
-    var c : ctxt_t;
-    var rel : key_t -> key_t option list -> bool;
-    var cl : ctxt_t list;
-    var ko : key_t option;
-    var kol : key_t option list;
-    var b : bool;
-    
-    (pk, sk) <@ S.keygen();
-    O.init(sk);
-    
-    A(O).scout(pk);
-    
-    (k, c) <@ S.encaps(pk);
-    k' <$ dkeym pk;
-    
-    (rel, cl) <@ A(O).find(c);
-    
-    kol <- [];
-    while (size kol < size cl) {
-      ko <@ S.decaps(sk, nth witness cl (size kol));
-      kol <- rcons kol ko;
-    }
-    
-    b <$ {0,1};
-    
-    return !(c \in cl) /\ rel (if b then k' else k) kol;
-  }
-}.
-
-(** NM-CCA1 security game (provided bit) **)
-module NM_CCA1_P (S : Scheme, O : Oracles_CCA1i, A : Adv_NMCCA1) = {
   proc main(b : bool) = {
     var pk : pk_t;
     var sk : sk_t;
@@ -876,44 +779,8 @@ module type Adv_SNMCCA1 (O : Oracles_CCA) = {
   proc find(c : ctxt_t, kk : key_t * key_t) : (key_t -> key_t option list -> bool) * ctxt_t list { }
 }.
 
-(** SNM-CCA1 security game (sanmpled bit) **)
+(** SNM-CCA1 security game **)
 module SNM_CCA1 (S : Scheme, O : Oracles_CCA1i, A : Adv_SNMCCA1) = {
-  proc main() = {
-    var pk : pk_t;
-    var sk : sk_t;
-    var k, k' : key_t;
-    var c : ctxt_t;
-    var rel : key_t -> key_t option list -> bool;
-    var cl : ctxt_t list;
-    var ko : key_t option;
-    var kol : key_t option list;
-    var b, o : bool;
-    
-    (pk, sk) <@ S.keygen();
-    O.init(sk);
-    
-    A(O).scout(pk);
-        
-    (k, c) <@ S.encaps(pk);
-    k' <$ dkeym pk;
-
-    o <$ {0,1};
-    (rel, cl) <@ A(O).find(c, if o then (k', k) else (k, k'));
-    
-    kol <- [];
-    while (size kol < size cl) {
-      ko <@ S.decaps(sk, nth witness cl (size kol));
-      kol <- rcons kol ko;
-    }
-    
-    b <$ {0,1};
-    
-    return !(c \in cl) /\ rel (if b then k' else k) kol;
-  }
-}.
-
-(** SNM-CCA1 security game (provided bit) **)
-module SNM_CCA1_P (S : Scheme, O : Oracles_CCA1i, A : Adv_SNMCCA1) = {
   proc main(b : bool) = {
     var pk : pk_t;
     var sk : sk_t;
@@ -961,44 +828,8 @@ module type Adv_NMCCA2 (O : Oracles_CCA) = {
   proc find(c : ctxt_t) : (key_t -> key_t option list -> bool) * ctxt_t list
 }.
 
-(** NM-CCA2 security game (sampled bit) **)
+(** NM-CCA2 security game **)
 module NM_CCA2 (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_NMCCA2) = {
-  proc main() = {
-    var pk : pk_t;
-    var sk : sk_t;
-    var k, k' : key_t;
-    var c : ctxt_t;
-    var rel : key_t -> key_t option list -> bool;
-    var cl : ctxt_t list;
-    var ko : key_t option;
-    var kol : key_t option list;
-    var b : bool;
-    
-    (pk, sk) <@ S.keygen();
-    O1.init(sk);
-    
-    A(O1).scout(pk);
-    
-    (k, c) <@ S.encaps(pk);
-    k' <$ dkeym pk;
-    O2.init(sk, c);
-    
-    (rel, cl) <@ A(O2).find(c);
-    
-    kol <- [];
-    while (size kol < size cl) {
-      ko <@ S.decaps(sk, nth witness cl (size kol));
-      kol <- rcons kol ko;
-    }
-    
-    b <$ {0,1};
-    
-    return !(c \in cl) /\ rel (if b then k' else k) kol;
-  }
-}.
-
-(** NM-CCA2 security game (provided bit) **)
-module NM_CCA2_P (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_NMCCA2) = {
   proc main(b : bool) = {
     var pk : pk_t;
     var sk : sk_t;
@@ -1045,43 +876,6 @@ module type Adv_SNMCCA2 (O : Oracles_CCA) = {
 
 (** SNM-CCA2 security game **)
 module SNM_CCA2 (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_SNMCCA2) = {
-  proc main() = {
-    var pk : pk_t;
-    var sk : sk_t;
-    var k, k' : key_t;
-    var c : ctxt_t;
-    var rel : key_t -> key_t option list -> bool;
-    var cl : ctxt_t list;
-    var ko : key_t option;
-    var kol : key_t option list;
-    var b, o : bool;
-    
-    (pk, sk) <@ S.keygen();
-    O1.init(sk);
-    
-    A(O1).scout(pk);
-
-    (k, c) <@ S.encaps(pk);
-    k' <$ dkeym pk;
-    O2.init(sk, c);
-
-    o <$ {0,1};
-    (rel, cl) <@ A(O2).find(c, if o then (k', k) else (k, k'));
-    
-    kol <- [];
-    while (size kol < size cl) {
-      ko <@ S.decaps(sk, nth witness cl (size kol));
-      kol <- rcons kol ko;
-    }
-    
-    b <$ {0,1};
-    
-    return !(c \in cl) /\ rel (if b then k' else k) kol;
-  }
-}.
-
-(** SNM-CCA2 security game (provided bit) **)
-module SNM_CCA2_P (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_SNMCCA2) = {
   proc main(b : bool) = {
     var pk : pk_t;
     var sk : sk_t;
@@ -1129,41 +923,8 @@ module type Adv_NMCCA (O : Oracles_CCA) = {
   proc find(pk : pk_t, c : ctxt_t) : (key_t -> key_t option list -> bool) * ctxt_t list
 }.
 
-(** NM-CCA (i.e., modern NM-CCA2) security game (sampled bit) **)
+(** NM-CCA (i.e., modern NM-CCA2) security game **)
 module NM_CCA (S : Scheme, O : Oracles_CCA2i, A : Adv_NMCCA) = {
-  proc main() = {
-    var pk : pk_t;
-    var sk : sk_t;
-    var k, k' : key_t;
-    var c : ctxt_t;
-    var rel : key_t -> key_t option list -> bool;
-    var cl : ctxt_t list;
-    var ko : key_t option;
-    var kol : key_t option list;
-    var b : bool;
-    
-    (pk, sk) <@ S.keygen();
-    
-    (k, c) <@ S.encaps(pk);
-    k' <$ dkeym pk;
-    O.init(sk, c);
-    
-    (rel, cl) <@ A(O).find(pk, c);
-    
-    kol <- [];
-    while (size kol < size cl) {
-      ko <@ S.decaps(sk, nth witness cl (size kol));
-      kol <- rcons kol ko;
-    }
-    
-    b <$ {0,1};
-    
-    return !(c \in cl) /\ rel (if b then k' else k) kol;
-  }
-}.
-
-(** NM-CCA (i.e., modern NM-CCA2) security game (provided bit) **)
-module NM_CCA_P (S : Scheme, O : Oracles_CCA2i, A : Adv_NMCCA) = {
   proc main(b : bool) = {
     var pk : pk_t;
     var sk : sk_t;
@@ -1206,40 +967,6 @@ module type Adv_SNMCCA (O : Oracles_CCA) = {
 
 (** SNM-CCA (i.e., modern SNM-CCA2) security game **)
 module SNM_CCA (S : Scheme, O : Oracles_CCA2i, A : Adv_SNMCCA) = {
-  proc main() = {
-    var pk : pk_t;
-    var sk : sk_t;
-    var k, k' : key_t;
-    var c : ctxt_t;
-    var rel : key_t -> key_t option list -> bool;
-    var cl : ctxt_t list;
-    var ko : key_t option;
-    var kol : key_t option list;
-    var b, o : bool;
-    
-    (pk, sk) <@ S.keygen();
-    
-    (k, c) <@ S.encaps(pk);
-    k' <$ dkeym pk;
-    O.init(sk, c);
-
-    o <$ {0,1};
-    (rel, cl) <@ A(O).find(pk, c, if o then (k', k) else (k, k'));
-    
-    kol <- [];
-    while (size kol < size cl) {
-      ko <@ S.decaps(sk, nth witness cl (size kol));
-      kol <- rcons kol ko;
-    }
-    
-    b <$ {0,1};
-    
-    return !(c \in cl) /\ rel (if b then k' else k) kol;
-  }
-}.
-
-(** SNM-CCA (i.e., modern SNM-CCA2) security game **)
-module SNM_CCA_P (S : Scheme, O : Oracles_CCA2i, A : Adv_SNMCCA) = {
   proc main(b : bool) = {
     var pk : pk_t;
     var sk : sk_t;
@@ -2388,7 +2115,7 @@ type malbind_scenario = [
 module type Adv_MALBIND = {
   proc choose(bc : bindconf) : malbind_scenario
   proc find_dd() : sk_t * sk_t * ctxt_t * ctxt_t
-  proc find_de() : sk_t * sk_t * rand_t * ctxt_t
+  proc find_ed() : sk_t * sk_t * rand_t * ctxt_t
   proc find_ee() : sk_t * sk_t * rand_t * rand_t
 }.
 
@@ -2418,7 +2145,7 @@ module MAL_BIND (S : SchemeDerand, A : Adv_MALBIND) = {
       no_fail <- k0o <> None /\ k1o <> None;
       is_bb <- is_bindbreak bc (oget k0o) (oget k1o) pk0 pk1 c0 c1;
     } elif (mbs = ENCAPS_DECAPS) {
-      (sk0, sk1, r0, c1) <@ A.find_de();
+      (sk0, sk1, r0, c1) <@ A.find_ed();
 
       pk0 <- sk2pk sk0;
       pk1 <- sk2pk sk1;
@@ -2643,11 +2370,11 @@ lemma Eqv_NMCCA1_NMCCA2 (S <: Scheme) (O1 <: Oracles_CCA1i{-S}) (O2 <: Oracles_C
                         (A <: Adv_NMCCA1{-S, -O1, -O2}) :
   islossless O2.init =>
   equiv[NM_CCA1(S, O1, A).main ~ NM_CCA2(S, O1, O2, A).main : 
-          ={glob S, glob O1, glob A} ==> ={res}].
+          ={glob S, glob O1, glob A, arg} ==> ={res}].
 proof. 
 move=> O2_init_ll.
-proc; inline *. 
-seq 5 6 : (={glob S, glob A, sk, k, c, k'}); 2: by sim.
+proc; inline *.
+seq 5 6 : (={glob S, glob A, b, sk, k, c, k'}); 2: by sim.
 call{2} O2_init_ll; rnd; call (: true).
 call (: ={glob O1}); 1: by sim. 
 by do 2! call (: true); skip. 
@@ -2680,11 +2407,11 @@ lemma Eqv_NMCPA_NMCCA1 (S <: Scheme{-R_NMCCA1_NMCPA}) (O <: Oracles_CCA1i{-S})
                        (A <: Adv_NMCPA{-S, -O}) :
   islossless O.init =>
   equiv[NM_CPA(S, A).main ~ NM_CCA1(S, O, R_NMCCA1_NMCPA(A)).main :
-          ={glob S, glob A} ==> ={res}].
+          ={glob S, glob A, arg} ==> ={res}].
 proof. 
 move=> O_init_ll.
 proc; inline *.
-seq 1 2 : (={glob S, glob A, pk, sk}); 2: by sim.
+seq 1 2 : (={glob S, glob A, b, pk, sk}); 2: by sim.
 by call{2} O_init_ll; call (: true); skip. 
 qed.
 
@@ -2709,11 +2436,11 @@ lemma Eqv_NMCPA_NMCCA (S <: Scheme) (O <: Oracles_CCA2i{-S})
                       (A <: Adv_NMCPA{-S, -O}) :
   islossless O.init =>
   equiv[NM_CPA(S, A).main ~ NM_CCA(S, O, R_NMCCA_NMCPA(A)).main :
-          ={glob S, glob A} ==> ={res}].
+          ={glob S, glob A, arg} ==> ={res}].
 proof.
 move=> O_init_ll. 
 proc; inline *.
-seq 3 4 : (={glob S, glob A, pk, sk, k, c, k'}); 2: by sim.
+seq 3 4 : (={glob S, glob A, b, pk, sk, k, c, k'}); 2: by sim.
 by call{2} O_init_ll; rnd; call (: true); call (: true). 
 qed.
 
@@ -2728,11 +2455,11 @@ lemma Eqv_SNMCCA1_SNMCCA2 (S <: Scheme) (O1 <: Oracles_CCA1i{-S}) (O2 <: Oracles
                           (A <: Adv_SNMCCA1{-S, -O1, -O2}) :
   islossless O2.init =>
   equiv[SNM_CCA1(S, O1, A).main ~ SNM_CCA2(S, O1, O2, A).main : 
-          ={glob S, glob O1, glob A} ==> ={res}].
+          ={glob S, glob O1, glob A, arg} ==> ={res}].
 proof. 
 move=> O2_init_ll.
 proc; inline *.
-seq 5 6 : (={glob S, glob A, sk, k, c, k'}); 2: by sim.
+seq 5 6 : (={glob S, glob A, b, sk, k, c, k'}); 2: by sim.
 call{2} O2_init_ll; rnd; call (: true).
 call (: ={glob O1}); 1: by sim.
 by do 2! call (: true).
@@ -2765,11 +2492,11 @@ lemma Eqv_SNMCPA_SNMCCA1 (S <: Scheme{-R_SNMCCA1_SNMCPA}) (O <: Oracles_CCA1i{-S
                          (A <: Adv_SNMCPA{-R_SNMCCA1_SNMCPA, -S, -O}) :
   islossless O.init =>
   equiv[SNM_CPA(S, A).main ~ SNM_CCA1(S, O, R_SNMCCA1_SNMCPA(A)).main :
-          ={glob S, glob A} ==> ={res}].
+          ={glob S, glob A, arg} ==> ={res}].
 proof.
 move=> O_init_ll. 
 proc; inline *. 
-seq 5 10 : (={glob S, sk, k, c, k'} /\ rel{1} = rel0{2} /\ cl{1} = cl0{2}); 2: by sim. 
+seq 5 10 : (={glob S, b, sk, k, c, k'} /\ rel{1} = rel0{2} /\ cl{1} = cl0{2}); 2: by sim. 
 call (: true); wp; rnd; rnd; wp. 
 by call (: true); wp; call{2} O_init_ll; call (: true). 
 qed.
@@ -2789,17 +2516,17 @@ module (R_SNMCCA_SNMCPA (A : Adv_SNMCPA) : Adv_SNMCCA) (O : Oracles_CCA) = {
 
 (** 
   Equivalence between SNM_CPA (for arbitrary adversary) and SNM_CCA
-  (with above reduction adverary) for an SNM_CCA adversary (shows SNM_CCA --> SNM_CPA).
+  (with above reduction adverary). (Shows SNM_CCA --> SNM_CPA.)
 **)
 lemma Eqv_SNMCPA_SNMCCA (S <: Scheme) (O <: Oracles_CCA2i{-S})
                         (A <: Adv_SNMCPA{-S, -O}) :
   islossless O.init => 
   equiv[SNM_CPA(S, A).main ~ SNM_CCA(S, O, R_SNMCCA_SNMCPA(A)).main :
-          ={glob S, glob A} ==> ={res}].
+          ={glob S, glob A, arg} ==> ={res}].
 proof.
 move=> O_init_ll.
 proc; inline *.
-seq 5 9 : (={glob S, sk, k, c, k'} /\ rel{1} = rel0{2} /\ cl{1} = cl0{2}); 2: by sim. 
+seq 5 9 : (={glob S, b, sk, k, c, k'} /\ rel{1} = rel0{2} /\ cl{1} = cl0{2}); 2: by sim. 
 call (: true); wp. 
 rnd; call{2} O_init_ll; rnd.
 by call (: true); call (: true); skip. 
@@ -2856,7 +2583,7 @@ lemma Eqv_ANOCPA_ANOCCA1 (S <: Scheme{-R_ANOCCA1_ANOCPA})
                          (A <: Adv_ANOCPA{-S, -O0, -O1}) :
   islossless O0.init => islossless O1.init =>
   equiv[ANO_CPA(S, A).main ~ ANO_CCA1(S, O0, O1, R_ANOCCA1_ANOCPA(A)).main :
-          ={glob S, glob A} ==> ={res}].
+          ={glob S, glob A, arg} ==> ={res}].
 proof. 
 move=> O0_init_ll O1_init_ll.
 proc; inline *.
@@ -3126,13 +2853,12 @@ module R_SNMCPA_NMCPA (A : Adv_NMCPA) : Adv_SNMCPA = {
   Equivalence between NM_CPA (for arbitrary adversary) and SNM_CPA
   (with above reduction adverary). (Shows SNM_CPA --> SNM_CPA.)
 **)
-lemma Eqv_NMCPA_SNMCPA (S <: Scheme) 
-                       (A <: Adv_NMCPA{-S}) :
+lemma Eqv_NMCPA_SNMCPA (S <: Scheme) (A <: Adv_NMCPA{-S}) :
   equiv[NM_CPA(S, A).main ~ SNM_CPA(S, R_SNMCPA_NMCPA(A)).main :
-        ={glob S, glob A} ==> ={res}].
+          ={glob S, glob A, arg} ==> ={res}].
 proof.
 proc; inline *. 
-seq 3 4 : (={glob S, glob A, pk, sk, k, c, k'}); 2: by sim.
+seq 3 4 : (={glob S, glob A, b, pk, sk, k, c, k'}); 2: by sim.
 rnd{2}; rnd.
 by call (: true); call (: true).
 qed. 
@@ -3161,10 +2887,10 @@ module (R_SNMCCA1_NMCCA1 (A : Adv_NMCCA1) : Adv_SNMCCA1) (O : Oracles_CCA) = {
 lemma Eqv_NMCCA1_SNMCCA1 (S <: Scheme) (O <: Oracles_CCA1i{-S})
                          (A <: Adv_NMCCA1{-S, -O}) :
   equiv[NM_CCA1(S, O, A).main ~ SNM_CCA1(S, O, R_SNMCCA1_NMCCA1(A)).main :
-            ={glob S, glob O, glob A} ==> ={res}].
+          ={glob S, glob O, glob A, arg} ==> ={res}].
 proof.
 proc; inline *.
-seq 5 7 : (={glob S, glob A, sk, k, c, k'}); 2: by sim.
+seq 5 7 : (={glob S, glob A, b, sk, k, c, k'}); 2: by sim.
 rnd{2}; rnd.
 call (: true); call (: ={glob O}); 1: by sim.
 by wp; do 2! call (: true).
@@ -3194,10 +2920,10 @@ module (R_SNMCCA2_NMCCA2 (A : Adv_NMCCA2) : Adv_SNMCCA2) (O : Oracles_CCA) = {
 lemma Eqv_NMCCA2_SNMCCA2 (S <: Scheme) (O1 <: Oracles_CCA1i{-S}) (O2 <: Oracles_CCA2i{-S, -O1})
                          (A <: Adv_NMCCA2{-S, -O1, -O2}) :
   equiv[NM_CCA2(S, O1, O2, A).main ~ SNM_CCA2(S, O1, O2, R_SNMCCA2_NMCCA2(A)).main :
-          ={glob S, glob O1, glob O2, glob A} ==> ={res}].
+          ={glob S, glob O1, glob O2, glob A, arg} ==> ={res}].
 proof.
 proc; inline *.
-seq 7 11 : (={glob S, sk, k, c, k'} /\ rel{1} = rel0{2} /\ cl{1} = cl0{2}); 2: by sim.
+seq 7 11 : (={glob S, b, sk, k, c, k'} /\ rel{1} = rel0{2} /\ cl{1} = cl0{2}); 2: by sim.
 call (: ={glob O2}); 1: by sim.
 wp; rnd{2}; call (: true); rnd; call (: true).
 call (: ={glob O1}); 1: by sim.
@@ -3224,10 +2950,10 @@ module (R_SNMCCA_NMCCA (A : Adv_NMCCA) : Adv_SNMCCA) (O : Oracles_CCA) = {
 lemma Eqv_NMCCA_SNMCCA (S <: Scheme) (O <: Oracles_CCA2i{-S})
                        (A <: Adv_NMCCA{-S, -O}) :
   equiv[NM_CCA(S, O, A).main ~ SNM_CCA(S, O, R_SNMCCA_NMCCA(A)).main :
-          ={glob S, glob O, glob A} ==> ={res}].
+          ={glob S, glob O, glob A, arg} ==> ={res}].
 proof.
 proc; inline *.
-seq 4 5 : (={glob S, glob O, glob A, sk, pk, k, c, k'}); 2: by sim. 
+seq 4 5 : (={glob S, glob O, glob A, b, sk, pk, k, c, k'}); 2: by sim. 
 by rnd{2}; call (: true); rnd; call (: true); call (: true).
 qed.
 
@@ -3846,7 +3572,7 @@ qed.
 
 
 (** Reduction adversary reducing HON-BIND-CT-PK to HON-BIND-CT-K **)
-module (R_HON_CT_K_PK(A : Adv_HONBIND) : Adv_HONBIND) (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+module (R_HON_CT_PK_K(A : Adv_HONBIND) : Adv_HONBIND) (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
   proc find(bc : bindconf, pk0 : pk_t, pk1 : pk_t) : ctxt_t * ctxt_t = {
     var c0, c1 : ctxt_t;
     
@@ -3858,21 +3584,30 @@ module (R_HON_CT_K_PK(A : Adv_HONBIND) : Adv_HONBIND) (O0 : Oracles_CCA, O1 : Or
 
 section.
 
+(* Declare arbitrary KEM S *)
 declare module S <: Scheme.
 
+(* Losslessness (i.e., termination) assumption on S's decapsulation *)
 declare axiom S_decaps_ll : islossless S.decaps. 
 
+(* Declare arbitrary CCA1 oracles O0 and O1 (with initialization) *)
 declare module O0 <: Oracles_CCA1i{-S}.
 declare module O1 <: Oracles_CCA1i{-S, -O0}.
 
+(* Losslessness (i.e., termination) assumption on the oracles' initialization *)
 declare axiom O0_init_ll : islossless O0.init.
 declare axiom O1_init_ll : islossless O1.init.
 
+(* Declare arbtirary HON-BIND adversary A *)
 declare module A <: Adv_HONBIND{-S, -O0, -O1}.
 
+(* Losslessness (i.e., termination) assumption on A's finding *)
 declare axiom A_find_ll : islossless A(O0, O1).find. 
 
-
+(* 
+  Auxiliary module equivalent to HON_BIND, but with certain variables 
+  defined global instead of local (so we can refer to them in proofs).
+*)
 local module HON_BIND_V = {
   var pk0 : pk_t
   var pk1 : pk_t
@@ -3908,6 +3643,10 @@ local module HON_BIND_V = {
   }  
 }.
 
+(* 
+  Equivalence (expressed as equality of probabilities) between 
+  original HON_BIND and (auxiliary) HON_BIND_V.
+*)
 local lemma EqPr_HONBIND_V &m (bc : bindconf) :
   Pr[HON_BIND(S, O0, O1, A).main(bc) @ &m : res]
   =
@@ -3921,10 +3660,10 @@ proof. by byequiv => //; sim. qed.
   Requires generated public keys to be different.
   (Shows HON-BIND-CT-PK + Different PKs --> HON-BIND-K-PK.) 
 **)
-lemma Bnd_HON_K_KCT_PK &m :
+lemma Bnd_HON_CT_K_PK &m :
   Pr[HON_BIND(S, O0, O1, A).main(CT_Binds_K) @ &m : res]
   <=
-  Pr[HON_BIND(S, O0, O1, R_HON_CT_K_PK(A)).main(CT_Binds_PK) @ &m : res]
+  Pr[HON_BIND(S, O0, O1, R_HON_CT_PK_K(A)).main(CT_Binds_PK) @ &m : res]
   +
   Pr[Keygen_Equal_PK(S).main() @ &m : res].
 proof.
@@ -3982,7 +3721,7 @@ qed.
 
 
 (** Reduction adversary reducing LEAK-BIND-CT-PK to LEAK-BIND-CT-K **)
-module R_LEAK_CT_K_PK (A : Adv_LEAKBIND) : Adv_LEAKBIND = {
+module R_LEAK_CT_PK_K (A : Adv_LEAKBIND) : Adv_LEAKBIND = {
   proc find(bc : bindconf, pk0 : pk_t, sk0 : sk_t, pk1 : pk_t, sk1 : sk_t) : ctxt_t * ctxt_t = {
     var c0, c1 : ctxt_t;
     
@@ -3994,15 +3733,22 @@ module R_LEAK_CT_K_PK (A : Adv_LEAKBIND) : Adv_LEAKBIND = {
 
 section.
 
+(* Declare arbitrary KEM S *)
 declare module S <: Scheme.
 
+(* Losslessness (i.e., termination) assumption on S's decapsulation *)
 declare axiom S_decaps_ll : islossless S.decaps. 
 
+(* Declare arbtirary LEAK-BIND adversary A *)
 declare module A <: Adv_LEAKBIND{-S}.
 
+(* Losslessness (i.e., termination) assumption on A's finding *)
 declare axiom A_find_ll : islossless A.find. 
 
-print LEAK_BIND.
+(* 
+  Auxiliary module equivalent to LEAK_BIND, but with certain variables 
+  defined global instead of local (so we can refer to them in proofs).
+*)
 local module LEAK_BIND_V = {
   var pk0 : pk_t
   var pk1 : pk_t
@@ -4035,6 +3781,10 @@ local module LEAK_BIND_V = {
   }  
 }.
 
+(* 
+  Equivalence (expressed as equality of probabilities) between 
+  original LEAK_BIND and (auxiliary) LEAK_BIND_V.
+*)
 local lemma EqPr_LEAKBIND_V &m (bc : bindconf) :
   Pr[LEAK_BIND(S, A).main(bc) @ &m : res]
   =
@@ -4048,10 +3798,10 @@ proof. by byequiv => //; sim. qed.
   Requires generated public keys to be different.
   (Shows LEAK-BIND-CT-PK + Different PKs --> LEAK-BIND-K-PK.) 
 **)
-lemma Bnd_LEAK_K_KCT_PK &m :
+lemma Bnd_LEAK_CT_K_PK &m :
   Pr[LEAK_BIND(S, A).main(CT_Binds_K) @ &m : res]
   <=
-  Pr[LEAK_BIND(S, R_LEAK_CT_K_PK(A)).main(CT_Binds_PK) @ &m : res]
+  Pr[LEAK_BIND(S, R_LEAK_CT_PK_K(A)).main(CT_Binds_PK) @ &m : res]
   +
   Pr[Keygen_Equal_PK(S).main() @ &m : res].
 proof.
@@ -4073,5 +3823,233 @@ qed.
 
 end section.
 
-end Relations.
 
+(** Reduction adversary reducing MAL-BIND-K-CT to MAL-BIND-PKK-CT **)
+module R_MAL_K_PKK_CT (A : Adv_MALBIND) : Adv_MALBIND = {
+  proc choose(bc : bindconf) : malbind_scenario = {
+    var mbs : malbind_scenario;
+    
+    mbs <@ A.choose(PKK_Binds_CT);
+    
+    return mbs;
+  }
+  
+  proc find_dd() : sk_t * sk_t * ctxt_t * ctxt_t = {
+    var sk0, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
+    
+    (sk0, sk1, c0, c1) <@ A.find_dd();
+    
+    return (sk0, sk1, c0, c1);
+  }
+
+  proc find_ed() : sk_t * sk_t * rand_t * ctxt_t = {
+    var sk0, sk1 : sk_t;
+    var r0 : rand_t;
+    var c1 : ctxt_t;
+    
+    (sk0, sk1, r0, c1) <@ A.find_ed();
+    
+    return (sk0, sk1, r0, c1);
+  }
+  
+  proc find_ee() : sk_t * sk_t * rand_t * rand_t = {
+    var sk0, sk1 : sk_t;
+    var r0, r1 : rand_t;
+    
+    (sk0, sk1, r0, r1) <@ A.find_ee();
+    
+    return (sk0, sk1, r0, r1);
+  }
+}.
+
+
+(**
+  Equivalence between MAL-BIND-PKK-CT (for arbitrary adversary)
+  and MAL-BIND-K-CT (with above reduction adversary).
+  (Shows MAL-BIND-K-CT --> MAL-BIND-PKK-CT.) 
+**)
+lemma Eqv_MAL_PKK_K_CT (S <: SchemeDerand) (A <: Adv_MALBIND{-S}) :
+  equiv[MAL_BIND(S, A).main ~ MAL_BIND(S, R_MAL_K_PKK_CT(A)).main :
+          ={glob S, glob A} /\ arg{1} = PKK_Binds_CT /\ arg{2} = K_Binds_CT
+          ==>
+          res{1} => res{2}].
+proof.  
+proc; inline *.
+seq 1 3 : (#pre /\ ={mbs}).
++ by wp; call (: true); wp.
+if => //.
++ wp; call (: true); call (: true).
+  by wp; call(: true); skip.
+if => //.  
++ wp; call (: true); call (: true).
+  by wp; call(: true); skip.
+wp; call (: true); call (: true).
+by wp; call(: true); skip.
+qed. 
+
+
+(** Reduction adversary reducing MAL-BIND-K-PK and MAL-BIND-CT-PK to MAL-BIND-KCT-PK **)
+module R_MAL_K_CT_KCT_PK (A : Adv_MALBIND) : Adv_MALBIND = {
+  proc choose(bc : bindconf) : malbind_scenario = {
+    var mbs : malbind_scenario;
+    
+    mbs <@ A.choose(KCT_Binds_PK);
+    
+    return mbs;
+  } 
+  
+  proc find_dd() : sk_t * sk_t * ctxt_t * ctxt_t = {
+    var sk0, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
+    
+    (sk0, sk1, c0, c1) <@ A.find_dd();
+    
+    return (sk0, sk1, c0, c1);
+  }
+
+  proc find_ed() : sk_t * sk_t * rand_t * ctxt_t = {
+    var sk0, sk1 : sk_t;
+    var r0 : rand_t;
+    var c1 : ctxt_t;
+    
+    (sk0, sk1, r0, c1) <@ A.find_ed();
+    
+    return (sk0, sk1, r0, c1);
+  }
+  
+  proc find_ee() : sk_t * sk_t * rand_t * rand_t = {
+    var sk0, sk1 : sk_t;
+    var r0, r1 : rand_t;
+    
+    (sk0, sk1, r0, r1) <@ A.find_ee();
+    
+    return (sk0, sk1, r0, r1);
+  }
+}.
+
+(**
+  Equivalence between MAL-BIND-KCT-PK (for arbitrary adversary)
+  and MAL-BIND-K-PK or MAL-BIND-CT-PK (with above reduction adversary).
+  (Shows MAL-BIND-K-PK --> MAL-BIND-KCT-PK and MAL-BIND-CT-PK --> MAL-BIND-KCT-PK .) 
+**)
+lemma Eqv_MAL_KCT_K_CT_PK (S <: SchemeDerand) (A <: Adv_MALBIND{-S}):
+  equiv[MAL_BIND(S, A).main ~ MAL_BIND(S, R_MAL_K_CT_KCT_PK(A)).main :
+          ={glob S, glob A} /\ arg{1} = KCT_Binds_PK /\ (arg{2} = K_Binds_PK \/ arg{2} = CT_Binds_PK) 
+          ==> 
+          res{1} => res{2}].
+proof.  
+proc; inline *.
+seq 1 3 : (#pre /\ ={mbs}).
++ by wp; call (: true); wp.
+if => //.
++ wp; call (: true); call (: true).
+  by wp; call(: true); skip => /> /#. 
+if => //.  
++ wp; call (: true); call (: true).
+  by wp; call(: true); skip => /> /#. 
+wp; call (: true); call (: true).
+by wp; call(: true); skip => /> /#.
+qed. 
+
+
+
+(* Test *)
+module SNM_CCA_Split(S : Scheme, O : Oracles_CCA2i, A : Adv_SNMCCA) = {
+  proc rest(b : bool, o : bool) = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var k : key_t;
+    var k' : key_t;
+    var c : ctxt_t;
+    var rel : key_t -> key_t option list -> bool;
+    var cl : ctxt_t list;
+    var ko : key_t option;
+    var kol : key_t option list;
+    
+    (pk, sk) <@ S.keygen();
+    (k, c) <@ S.encaps(pk);
+    k' <$ (dkeym pk)%NM;
+    O.init(sk, c);
+    
+    (rel, cl) <@ A(O).find(pk, c, if o then (k', k) else (k, k'));
+    kol <- [];
+    while (size kol < size cl){
+      ko <@ S.decaps(sk, nth witness cl (size kol));
+      kol <- rcons kol ko;
+    }
+    
+    return ! (c \in cl) /\ rel (if b then k' else k) kol;
+  }
+  
+  proc main(b : bool) : bool = {
+    var o, r : bool;
+    
+
+    o <$ {0,1};
+    r <@ rest(b, o);
+    
+    return r;
+  }
+}.
+
+module (R_SNMCCA_INDCCAP (A : Adv_INDCCA) : Adv_SNMCCA) (O : Oracles_CCA) = {
+  proc find(pk : pk_t, c : ctxt_t, kk : key_t * key_t) : (key_t -> key_t option list -> bool) * ctxt_t list = {
+    var b' : bool;
+    
+    b' <@ A(O).distinguish(pk, kk.`1, c);
+    
+    return (fun k kl, k = if b' then kk.`2 else kk.`1, []);    
+  }
+}.
+
+
+lemma test (S <: Scheme) (O <: Oracles_CCA2i{-S}) (A <: Adv_INDCCA{-S, -O}) &m :
+  IND.dkeym = NM.dkeym =>
+  Pr[SNM_CCA_Split(S, O, R_SNMCCA_INDCCAP(A)).main(false) @ &m : res]
+  =
+  1%r / 2%r * Pr[IND_CCA_P(S, O, A).main(false) @ &m : !res]
+  +
+  1%r / 2%r * Pr[IND_CCA_P(S, O, A).main(true) @ &m : res].
+proof. admit. qed.
+
+
+lemma test2 (S <: Scheme) (O <: Oracles_CCA2i{-S}) (A <: Adv_INDCCA{-S, -O}) &m :
+  IND.dkeym = NM.dkeym =>
+  Pr[SNM_CCA_Split(S, O, R_SNMCCA_INDCCAP(A)).main(true) @ &m : res]
+  =
+  1%r / 2%r * Pr[IND_CCA_P(S, O, A).main(false) @ &m : res]
+  +
+  1%r / 2%r * Pr[IND_CCA_P(S, O, A).main(true) @ &m : !res].
+proof. admit. qed.
+
+
+
+lemma test3 (S <: Scheme) (O <: Oracles_CCA2i{-S}) (A <: Adv_INDCCA{-S, -O}) &m :
+  IND.dkeym = NM.dkeym =>
+  Pr[SNM_CCA_Split(S, O, R_SNMCCA_INDCCAP(A)).main(false) @ &m : res]
+  -
+  Pr[SNM_CCA_Split(S, O, R_SNMCCA_INDCCAP(A)).main(true) @ &m : res]  
+  =
+  Pr[IND_CCA_P(S, O, A).main(true) @ &m : res]
+  -
+  Pr[IND_CCA_P(S, O, A).main(false) @ &m : res].
+proof.
+move=> t.
+move: (test S O A &m t) (test2 S O A &m t).
+rewrite Pr[mu_not] Pr[mu_not].
+have ->:
+  Pr[IND_CCA_P(S, O, A).main(false) @ &m : true]
+  =
+  1%r.
++ admit.
+have ->:
+  Pr[IND_CCA_P(S, O, A).main(true) @ &m : true]
+  =
+  1%r.
++ admit.
+smt().
+qed. 
+
+   
+end Relations.
