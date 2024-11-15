@@ -100,6 +100,32 @@ module O_CCA1_Default (S : Scheme) : Oracles_CCA1i = {
   }
 }.
 
+(** 
+  A duplicate of the default implementation for the oracles employed in CCA1 security games 
+  (as well as the first stage of CCA2 games). May be useful for security notions considering two
+  such (sets of) oracles.
+**)
+module O_CCA1_DDefault (S : Scheme) : Oracles_CCA1i = {
+  var sk : sk_t
+  var qs : (ctxt_t * ptxt_t option) list
+  
+  proc init(sk_init : sk_t) = {
+    sk <- sk_init;
+    qs <- [];
+  }
+  
+  proc dec(c : ctxt_t) : ptxt_t option = {
+    var p : ptxt_t option;
+    
+    p <@ S.dec(sk, c);
+    
+    qs <- rcons qs (c, p);
+    
+    return p;
+  }
+}.
+
+
 (* 
   adaptive Chosen-Ciphertext Attacks (CCA2)
   The adversary is given the considered public key and access to a decryption oracle throughout.  
@@ -115,6 +141,37 @@ module type Oracles_CCA2i = {
 
 (** A default implementation for the oracles employed in (the second stage of) CCA2 security games **)
 module O_CCA2_Default (S : Scheme) : Oracles_CCA2i = {
+  var sk : sk_t
+  var c' : ctxt_t
+  var qs : (ctxt_t * ptxt_t option) list
+  
+  proc init(sk_init : sk_t, c'_init : ctxt_t) = {
+    sk <- sk_init;
+    c' <- c'_init;
+    qs <- [];
+  }
+  
+  proc dec(c : ctxt_t) : ptxt_t option = {
+    var p : ptxt_t option;
+    
+    if (c <> c') {
+      p <@ S.dec(sk, c);
+    } else {
+      p <- None;
+    }
+    
+    qs <- rcons qs (c, p);
+    
+    return p;
+  }
+}.
+
+(** 
+  A duplicate of the default implementation for the oracles employed in 
+  (the second stage of) CCA2 security games. May be useful for security notions considering two
+  such (sets of) oracles.
+**)
+module O_CCA2_DDefault (S : Scheme) : Oracles_CCA2i = {
   var sk : sk_t
   var c' : ctxt_t
   var qs : (ctxt_t * ptxt_t option) list
@@ -449,6 +506,9 @@ module IND_CCA2_P (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_I
   The adversary is asked to provide a relation (say R) and
   a list of ciphertexts such that the plaintexts obtained from decrypting these
   ciphertexts are related (under R) to the plaintext corresponding to a given ciphertext.
+  
+  Note that these notions only have a sensible definition with a provided bit, so 
+  no "sampled bit" variants are defined.
 **)
 abstract theory NM.
 (* Operators *)
@@ -477,45 +537,8 @@ module type Adv_NMCPA = {
   proc find(c : ctxt_t) : (ptxt_t -> ptxt_t option list -> bool) * ctxt_t list
 }.
 
-(** NM-CPA security game (sampled bit) **)
+(** NM-CPA security game **)
 module NM_CPA (S : Scheme, A : Adv_NMCPA) = {
-  proc main() : bool = {
-    var pk : pk_t;
-    var sk : sk_t;
-    var dp : ptxt_t distr;
-    var b : bool;
-    var p, p' : ptxt_t;
-    var c : ctxt_t;
-    var rel : ptxt_t -> ptxt_t option list -> bool;
-    var cl : ctxt_t list;
-    var po : ptxt_t option;
-    var pol : ptxt_t option list;
-    
-    (pk, sk) <@ S.keygen();
-    
-    dp <@ A.choose(pk);
-    
-    p <$ dp;
-    p' <$ dp;
-    
-    c <@ S.enc(pk, p);
-    
-    (rel, cl) <@ A.find(c);
-    
-    pol <- [];
-    while (size pol < size cl) {
-      po <@ S.dec(sk, nth witness cl (size pol));
-      pol <- rcons pol po;
-    }
-    
-    b <$ {0,1};
-    
-    return is_valid_dp dp /\ !(c \in cl) /\ rel (if b then p' else p) pol;
-  }
-}.
-
-(** NM-CPA security game (provided bit) **)
-module NM_CPA_P (S : Scheme, A : Adv_NMCPA) = {
   proc main(b : bool) : bool = {
     var pk : pk_t;
     var sk : sk_t;
@@ -561,46 +584,8 @@ module type Adv_NMCCA1 (O : Oracles_CCA) = {
   proc find(c : ctxt_t) : (ptxt_t -> ptxt_t option list -> bool) * ctxt_t list { }
 }.
 
-(** NM-CCA1 security game (sampled bit) **)
+(** NM-CCA1 security game **)
 module NM_CCA1 (S : Scheme, O : Oracles_CCA1i, A : Adv_NMCCA1) = {
-  proc main() : bool = {
-    var pk : pk_t;
-    var sk : sk_t;
-    var dp : ptxt_t distr;
-    var b : bool;
-    var p, p' : ptxt_t;
-    var c : ctxt_t;
-    var rel : ptxt_t -> ptxt_t option list -> bool;
-    var cl : ctxt_t list;
-    var po : ptxt_t option;
-    var pol : ptxt_t option list;
-    
-    (pk, sk) <@ S.keygen();
-    O.init(sk);
-    
-    dp <@ A(O).choose(pk);
-    
-    p <$ dp;
-    p' <$ dp;
-    
-    c <@ S.enc(pk, p);
-    
-    (rel, cl) <@ A(O).find(c);
-    
-    pol <- [];
-    while (size pol < size cl) {
-      po <@ S.dec(sk, nth witness cl (size pol));
-      pol <- rcons pol po;
-    }
-    
-    b <$ {0,1};
-    
-    return is_valid_dp dp /\ !(c \in cl) /\ rel (if b then p' else p) pol;
-  }
-}.
-
-(** NM-CCA1 security game (provided bit) **)
-module NM_CCA1_P (S : Scheme, O : Oracles_CCA1i, A : Adv_NMCCA1) = {
   proc main(b : bool) : bool = {
     var pk : pk_t;
     var sk : sk_t;
@@ -648,46 +633,7 @@ module type Adv_NMCCA2 (O : Oracles_CCA) = {
   proc find(c : ctxt_t) : (ptxt_t -> ptxt_t option list -> bool) * ctxt_t list
 }.
 
-(** NM-CCA2 security game (sampled bit) **)
-module NM_CCA2 (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_NMCCA2) = {
-  proc main() : bool = {
-    var pk : pk_t;
-    var sk : sk_t;
-    var dp : ptxt_t distr;
-    var b : bool;
-    var p, p' : ptxt_t;
-    var c : ctxt_t;
-    var rel : ptxt_t -> ptxt_t option list -> bool;
-    var cl : ctxt_t list;
-    var po : ptxt_t option;
-    var pol : ptxt_t option list;
-    
-    (pk, sk) <@ S.keygen();
-    O1.init(sk);
-    
-    dp <@ A(O1).choose(pk);
-    
-    p <$ dp;
-    p' <$ dp;
-    
-    c <@ S.enc(pk, p);
-    O2.init(sk, c);
-    
-    (rel, cl) <@ A(O2).find(c);
-    
-    pol <- [];
-    while (size pol < size cl) {
-      po <@ S.dec(sk, nth witness cl (size pol));
-      pol <- rcons pol po;
-    }
-    
-    b <$ {0,1};
-    
-    return is_valid_dp dp /\ !(c \in cl) /\ rel (if b then p' else p) pol;
-  }
-}.
-
-(** NM-CCA2 security game (provided bit) **)
+(** NM-CCA2 security game **)
 module NM_CCA2_P (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_NMCCA2) = {
   proc main(b : bool) : bool = {
     var pk : pk_t;
@@ -1241,15 +1187,6 @@ module WCFR_CCA (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_WCF
     return p' <> Some p;
   }
 }.
-
-
-(*
-  BINDing (BIND)
-  
-  
-
-*)
-
 
 
 (** Delta-correct (i.e., partially-correct) PKE schemes. **)
