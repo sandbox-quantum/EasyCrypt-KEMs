@@ -74,13 +74,13 @@ module Correctness (S : Scheme) = {
 *)
 (* Oracles *)
 (** Interface for oracles employed in CCA1 security games **)
-module type Oracles_CCA1i = {
+module type Oracles_CCA1i (S : Scheme)  = {
   proc init(sk_init : sk_t) : unit
   proc dec(c : ctxt_t) : ptxt_t option
 }.
 
 (** A default implementation for the oracles employed in CCA1 security games **)
-module O_CCA1_Default (S : Scheme) : Oracles_CCA1i = {
+module (O_CCA1_Default : Oracles_CCA1i) (S : Scheme) = {
   var sk : sk_t
   var qs : (ctxt_t * ptxt_t option) list
   
@@ -105,7 +105,7 @@ module O_CCA1_Default (S : Scheme) : Oracles_CCA1i = {
   (as well as the first stage of CCA2 games). May be useful for security notions considering two
   such (sets of) oracles.
 **)
-module O_CCA1_DDefault (S : Scheme) : Oracles_CCA1i = {
+module (O_CCA1_DDefault : Oracles_CCA1i) (S : Scheme)  = {
   var sk : sk_t
   var qs : (ctxt_t * ptxt_t option) list
   
@@ -134,13 +134,13 @@ module O_CCA1_DDefault (S : Scheme) : Oracles_CCA1i = {
   that are part of the challenge).
 *)
 (** Interface for oracles employed in (the second stage of) CCA2 security games **)
-module type Oracles_CCA2i = {
+module type Oracles_CCA2i (S : Scheme) = {
   proc init(sk_init : sk_t, c'_init : ctxt_t) : unit
   proc dec(c : ctxt_t) : ptxt_t option
 }.
 
 (** A default implementation for the oracles employed in (the second stage of) CCA2 security games **)
-module O_CCA2_Default (S : Scheme) : Oracles_CCA2i = {
+module (O_CCA2_Default : Oracles_CCA2i) (S : Scheme) = {
   var sk : sk_t
   var c' : ctxt_t
   var qs : (ctxt_t * ptxt_t option) list
@@ -171,7 +171,7 @@ module O_CCA2_Default (S : Scheme) : Oracles_CCA2i = {
   (the second stage of) CCA2 security games. May be useful for security notions considering two
   such (sets of) oracles.
 **)
-module O_CCA2_DDefault (S : Scheme) : Oracles_CCA2i = {
+module (O_CCA2_DDefault : Oracles_CCA2i) (S : Scheme)  = {
   var sk : sk_t
   var c' : ctxt_t
   var qs : (ctxt_t * ptxt_t option) list
@@ -269,20 +269,19 @@ module OW_CCA1 (S : Scheme, O : Oracles_CCA1i, A : Adv_OWCCA1) = {
     var c : ctxt_t;
     
     (pk, sk) <@ S.keygen();
-    O.init(sk);
+    O(S).init(sk);
     
-    A(O).scout(pk);
+    A(O(S)).scout(pk);
     
     p <$ dptxtm pk;
     
     c <@ S.enc(pk, p);
     
-    p' <@ A(O).find(c);
+    p' <@ A(O(S)).find(c);
     
     return p' = p; 
   }
 }.
-
 
 
 (*
@@ -305,16 +304,16 @@ module OW_CCA2 (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_OWCC
     var c : ctxt_t;
     
     (pk, sk) <@ S.keygen();
-    O1.init(sk);
+    O1(S).init(sk);
     
-    A(O1).scout(pk);
+    A(O1(S)).scout(pk);
     
     p <$ dptxtm pk;
     
     c <@ S.enc(pk, p);
-    O2.init(sk, c);
+    O2(S).init(sk, c);
     
-    p' <@ A(O2).find(c);
+    p' <@ A(O2(S)).find(c);
     
     return p' = p; 
   }
@@ -405,15 +404,15 @@ module IND_CCA1 (S : Scheme, O : Oracles_CCA1i, A : Adv_INDCCA1) = {
     var c : ctxt_t;
     
     (pk, sk) <@ S.keygen();
-    O.init(sk);
+    O(S).init(sk);
     
-    (p0, p1) <@ A(O).choose(pk);
+    (p0, p1) <@ A(O(S)).choose(pk);
     
     b <$ {0,1};
     
     c <@ S.enc(pk, if b then p1 else p0);
     
-    b' <@ A(O).distinguish(c);
+    b' <@ A(O(S)).distinguish(c);
     
     return b' = b;
   }
@@ -429,13 +428,13 @@ module IND_CCA1_P (S : Scheme, O : Oracles_CCA1i, A : Adv_INDCCA1) = {
     var c : ctxt_t;
     
     (pk, sk) <@ S.keygen();
-    O.init(sk);
+    O(S).init(sk);
     
-    (p0, p1) <@ A(O).choose(pk);
+    (p0, p1) <@ A(O(S)).choose(pk);
     
     c <@ S.enc(pk, if b then p1 else p0);
     
-    b' <@ A(O).distinguish(c);
+    b' <@ A(O(S)).distinguish(c);
     
     return b' = b; 
   }
@@ -462,16 +461,16 @@ module IND_CCA2 (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_IND
     var c : ctxt_t;
     
     (pk, sk) <@ S.keygen();
-    O1.init(sk);
+    O1(S).init(sk);
     
-    (p0, p1) <@ A(O1).choose(pk);
+    (p0, p1) <@ A(O1(S)).choose(pk);
     
     b <$ {0,1};
     
     c <@ S.enc(pk, if b then p1 else p0);
-    O2.init(sk, c);
+    O2(S).init(sk, c);
     
-    b' <@ A(O2).distinguish(c);
+    b' <@ A(O2(S)).distinguish(c);
     
     return b' = b;
   }
@@ -487,14 +486,14 @@ module IND_CCA2_P (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_I
     var c : ctxt_t;
     
     (pk, sk) <@ S.keygen();
-    O1.init(sk);
+    O1(S).init(sk);
     
-    (p0, p1) <@ A(O1).choose(pk);
+    (p0, p1) <@ A(O1(S)).choose(pk);
     
     c <@ S.enc(pk, if b then p1 else p0);
-    O2.init(sk, c);
+    O2(S).init(sk, c);
     
-    b' <@ A(O2).distinguish(c);
+    b' <@ A(O2(S)).distinguish(c);
     
     return b' = b;
   }
@@ -598,16 +597,16 @@ module NM_CCA1 (S : Scheme, O : Oracles_CCA1i, A : Adv_NMCCA1) = {
     var pol : ptxt_t option list;
     
     (pk, sk) <@ S.keygen();
-    O.init(sk);
+    O(S).init(sk);
     
-    dp <@ A(O).choose(pk);
+    dp <@ A(O(S)).choose(pk);
     
     p <$ dp;
     p' <$ dp;
     
     c <@ S.enc(pk, p);
     
-    (rel, cl) <@ A(O).find(c);
+    (rel, cl) <@ A(O(S)).find(c);
     
     pol <- [];
     while (size pol < size cl) {
@@ -618,7 +617,6 @@ module NM_CCA1 (S : Scheme, O : Oracles_CCA1i, A : Adv_NMCCA1) = {
     return is_valid_dp dp /\ !(c \in cl) /\ rel (if b then p' else p) pol;
   }
 }.
-
 
 
 (*
@@ -647,17 +645,17 @@ module NM_CCA2_P (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_NM
     var pol : ptxt_t option list;
     
     (pk, sk) <@ S.keygen();
-    O1.init(sk);
+    O1(S).init(sk);
     
-    dp <@ A(O1).choose(pk);
+    dp <@ A(O1(S)).choose(pk);
     
     p <$ dp;
     p' <$ dp;
     
     c <@ S.enc(pk, p);
-    O2.init(sk, c);
+    O2(S).init(sk, c);
     
-    (rel, cl) <@ A(O2).find(c);
+    (rel, cl) <@ A(O2(S)).find(c);
     
     pol <- [];
     while (size pol < size cl) {
@@ -767,16 +765,16 @@ module ANO_CCA1 (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_ANO
     
     (pk0, sk0) <@ S.keygen();
     (pk1, sk1) <@ S.keygen();
-    O0.init(sk0);
-    O1.init(sk1);
+    O0(S).init(sk0);
+    O1(S).init(sk1);
     
-    p <@ A(O0, O1).choose(pk0, pk1);
+    p <@ A(O0(S), O1(S)).choose(pk0, pk1);
     
     b <$ {0,1};
     
     c <@ S.enc(if b then pk1 else pk0, p);
     
-    b' <@ A(O0, O1).distinguish(c);
+    b' <@ A(O0(S), O1(S)).distinguish(c);
     
     return b' = b;
   }
@@ -793,14 +791,14 @@ module ANO_CCA1_P (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_A
     
     (pk0, sk0) <@ S.keygen();
     (pk1, sk1) <@ S.keygen();
-    O0.init(sk0);
-    O1.init(sk1);
+    O0(S).init(sk0);
+    O1(S).init(sk1);
     
-    p <@ A(O0, O1).choose(pk0, pk1);
+    p <@ A(O0(S), O1(S)).choose(pk0, pk1);
     
     c <@ S.enc(if b then pk1 else pk0, p);
     
-    b' <@ A(O0, O1).distinguish(c);
+    b' <@ A(O0(S), O1(S)).distinguish(c);
     
     return b';
   }
@@ -836,18 +834,18 @@ module ANO_CCA2 (S : Scheme)
     
     (pk0, sk0) <@ S.keygen();
     (pk1, sk1) <@ S.keygen();
-    O01.init(sk0);
-    O11.init(sk1);
+    O01(S).init(sk0);
+    O11(S).init(sk1);
     
-    p <@ A(O01, O11).choose(pk0, pk1);
+    p <@ A(O01(S), O11(S)).choose(pk0, pk1);
     
     b <$ {0,1};
     
     c <@ S.enc(if b then pk1 else pk0, p);
-    O02.init(sk0, c);
-    O12.init(sk1, c);
+    O02(S).init(sk0, c);
+    O12(S).init(sk1, c);
     
-    b' <@ A(O02, O12).distinguish(c);
+    b' <@ A(O02(S), O12(S)).distinguish(c);
     
     return b' = b;
   }
@@ -867,18 +865,18 @@ module ANO_CCA2_P (S : Scheme)
     
     (pk0, sk0) <@ S.keygen();
     (pk1, sk1) <@ S.keygen();
-    O01.init(sk0);
-    O11.init(sk1);
+    O01(S).init(sk0);
+    O11(S).init(sk1);
     
-    p <@ A(O01, O11).choose(pk0, pk1);
+    p <@ A(O01(S), O11(S)).choose(pk0, pk1);
     
     b <$ {0,1};
     
     c <@ S.enc(if b then pk1 else pk0, p);
-    O02.init(sk0, c);
-    O12.init(sk1, c);
+    O02(S).init(sk0, c);
+    O12(S).init(sk1, c);
     
-    b' <@ A(O02, O12).distinguish(c);
+    b' <@ A(O02(S), O12(S)).distinguish(c);
     
     return b';
   }
@@ -991,10 +989,10 @@ module SROB_CCA (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_SRO
     
     (pk0, sk0) <@ S.keygen();
     (pk1, sk1) <@ S.keygen();
-    O0.init(sk0);
-    O1.init(sk1);
+    O0(S).init(sk0);
+    O1(S).init(sk1);
     
-    c <@ A(O0, O1).find(pk0, pk1);
+    c <@ A(O0(S), O1(S)).find(pk0, pk1);
     
     p0 <@ S.dec(sk0, c);
     p1 <@ S.dec(sk1, c);
@@ -1028,10 +1026,10 @@ module WROB_CCA (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_WRO
     
     (pk0, sk0) <@ S.keygen();
     (pk1, sk1) <@ S.keygen();
-    O0.init(sk0);
-    O1.init(sk1);
+    O0(S).init(sk0);
+    O1(S).init(sk1);
     
-    (b, p) <@ A(O0, O1).choose(pk0, pk1);
+    (b, p) <@ A(O0(S), O1(S)).choose(pk0, pk1);
     
     c <@ S.enc(if b then pk1 else pk0, p);
     p' <@ S.dec(if b then sk0 else sk1, c);
@@ -1107,7 +1105,6 @@ module WCFR_CPA (S : Scheme, A : Adv_WCFRCPA) = {
     (pk0, sk0) <@ S.keygen();
     (pk1, sk1) <@ S.keygen();
 
-    
     (b, p) <@ A.choose(pk0, pk1);
     
     c <@ S.enc(if b then pk1 else pk0, p);
@@ -1139,10 +1136,10 @@ module SCFR_CCA (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_SCF
     
     (pk0, sk0) <@ S.keygen();
     (pk1, sk1) <@ S.keygen();
-    O0.init(sk0);
-    O1.init(sk1);
+    O0(S).init(sk0);
+    O1(S).init(sk1);
     
-    c <@ A(O0, O1).find(pk0, pk1);
+    c <@ A(O0(S), O1(S)).find(pk0, pk1);
     
     p0 <@ S.dec(sk0, c);
     p1 <@ S.dec(sk1, c);
@@ -1176,10 +1173,10 @@ module WCFR_CCA (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_WCF
     
     (pk0, sk0) <@ S.keygen();
     (pk1, sk1) <@ S.keygen();
-    O0.init(sk0);
-    O1.init(sk1);
+    O0(S).init(sk0);
+    O1(S).init(sk1);
     
-    (b, p) <@ A(O0, O1).choose(pk0, pk1);
+    (b, p) <@ A(O0(S), O1(S)).choose(pk0, pk1);
     
     c <@ S.enc(if b then pk1 else pk0, p);
     p' <@ S.dec(if b then sk0 else sk1, c);
@@ -1221,13 +1218,13 @@ module Correctness_Delta (S : Scheme, A : Adv_Cor) = {
 (* Attacker capabilities/models (additional) *)
 (* Oracles *)
 (** Interface for Plaintext-Checking (PC) oracles used by games **)
-module type Oracles_PCi = {
+module type Oracles_PCi (S : Scheme) = {
   proc init(sk_init : sk_t) : unit
   proc check(p : ptxt_t, c : ctxt_t) : bool
 }.
 
 (** A default implementation for the plaintext-checking oracles **)
-module O_PC_Default (S : Scheme) : Oracles_PCi = {
+module (O_PC_Default : Oracles_PCi) (S : Scheme) = {
   var sk : sk_t
   var qs : (ptxt_t * ctxt_t * bool) list
   
@@ -1247,18 +1244,18 @@ module O_PC_Default (S : Scheme) : Oracles_PCi = {
 
 (** Interface for PC oracles given to adversaries **)
 module type Oracles_PC = {
-  include Oracles_PCi [-init]
+  proc check(p : ptxt_t, c : ctxt_t) : bool
 }.
 
 
 (** Interface for Ciphertext-Validity (CV) oracles used by games **)
-module type Oracles_CVi = {
+module type Oracles_CVi (S : Scheme) = {
   proc init(sk_init : sk_t, c'_init : ctxt_t ) : unit
   proc check(c : ctxt_t) : bool option
 }.
 
 (** A default implementation for the ciphertext-validity oracles **)
-module O_CV_Default (S : Scheme) : Oracles_CVi = {
+module (O_CV_Default : Oracles_CVi) (S : Scheme) = {
   var sk : sk_t
   var c' : ctxt_t
   var qs : (ctxt_t * bool) list
@@ -1286,7 +1283,7 @@ module O_CV_Default (S : Scheme) : Oracles_CVi = {
 
 (** Interface for CV oracles given to adversaries **)
 module type Oracles_CV = {
-  include Oracles_CVi [-init]
+  proc check(c : ctxt_t) : bool option
 }.
 
 
@@ -1323,14 +1320,14 @@ module OW_CPA (S : Scheme, O : Oracles_PCi, A : Adv_OWCPA) = {
     var is_pre : bool;
     
     (pk, sk) <@ S.keygen();
-    O.init(sk);
+    O(S).init(sk);
     
     p <$ dptxtm pk;
     c <@ S.enc(pk, p);
     
     p' <@ A.find(pk, c);
     
-    is_pre <@ O.check(p', c);
+    is_pre <@ O(S).check(p', c);
     
     return is_pre; 
   }
@@ -1353,14 +1350,14 @@ module OW_PCA (S : Scheme, O : Oracles_PCi, A : Adv_OWPCA) = {
     var is_pre : bool;
     
     (pk, sk) <@ S.keygen();
-    O.init(sk);
+    O(S).init(sk);
     
     p <$ dptxtm pk;
     c <@ S.enc(pk, p);
     
-    p' <@ A(O).find(pk, c);
+    p' <@ A(O(S)).find(pk, c);
     
-    is_pre <@ O.check(p', c);
+    is_pre <@ O(S).check(p', c);
     
     return is_pre; 
   }
@@ -1383,15 +1380,15 @@ module OW_VCA (S : Scheme, OPC : Oracles_PCi, OCV : Oracles_CVi, A : Adv_OWVCA) 
     var is_pre : bool;
     
     (pk, sk) <@ S.keygen();
-    OPC.init(sk);
+    OPC(S).init(sk);
     
     p <$ dptxtm pk;
     c <@ S.enc(pk, p);
-    OCV.init(sk, c);
+    OCV(S).init(sk, c);
     
-    p' <@ A(OCV).find(pk, c);
+    p' <@ A(OCV(S)).find(pk, c);
     
-    is_pre <@ OPC.check(p', c);
+    is_pre <@ OPC(S).check(p', c);
     
     return is_pre; 
   }
@@ -1414,15 +1411,15 @@ module OW_PVCA (S : Scheme, OPC : Oracles_PCi, OCV : Oracles_CVi, A : Adv_OWPVCA
     var is_pre : bool;
     
     (pk, sk) <@ S.keygen();
-    OPC.init(sk);
+    OPC(S).init(sk);
     
     p <$ dptxtm pk;
     c <@ S.enc(pk, p);
-    OCV.init(sk, c);
+    OCV(S).init(sk, c);
     
-    p' <@ A(OPC, OCV).find(pk, c);
+    p' <@ A(OPC(S), OCV(S)).find(pk, c);
     
-    is_pre <@ OPC.check(p', c);
+    is_pre <@ OPC(S).check(p', c);
     
     return is_pre; 
   }

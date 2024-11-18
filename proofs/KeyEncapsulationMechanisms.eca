@@ -80,7 +80,7 @@ module Correctness (S : Scheme) = {
 *)
 (* Oracles *)
 (** Interface for oracles employed in CCA1 security games **)
-module type Oracles_CCA1i = {
+module type Oracles_CCA1i (S : Scheme) = {
   proc init(sk_init : sk_t) : unit
   proc decaps(c : ctxt_t) : key_t option
 }.
@@ -89,7 +89,7 @@ module type Oracles_CCA1i = {
   A default implementation for the oracles employed in CCA1 security games 
   (as well as the first stage of CCA2 games).
 **)
-module O_CCA1_Default (S : Scheme) : Oracles_CCA1i = {
+module (O_CCA1_Default : Oracles_CCA1i) (S : Scheme) = {
   var sk : sk_t
   var qs : (ctxt_t * key_t option) list
   
@@ -114,7 +114,7 @@ module O_CCA1_Default (S : Scheme) : Oracles_CCA1i = {
   (as well as the first stage of CCA2 games). May be useful for security notions considering two
   such (sets of) oracles.
 **)
-module O_CCA1_DDefault (S : Scheme) : Oracles_CCA1i = {
+module (O_CCA1_DDefault : Oracles_CCA1i) (S : Scheme) = {
   var sk : sk_t
   var qs : (ctxt_t * key_t option) list
   
@@ -150,13 +150,13 @@ module O_CCA1_DDefault (S : Scheme) : Oracles_CCA1i = {
   Here, we denote the traditional one by CCA2 (as we do for PKE schemes), and the modern one by CCA.
 *)
 (** Interface for oracles employed in CCA2 (CCA) security games **)
-module type Oracles_CCA2i = {
+module type Oracles_CCA2i (S : Scheme) = {
   proc init(sk_init : sk_t, c'_init : ctxt_t) : unit
   proc decaps(c : ctxt_t) : key_t option
 }.
 
 (** A default implementation for the oracles employed in (the second stage of) CCA2 (CCA) security games **)
-module O_CCA2_Default (S : Scheme) : Oracles_CCA2i = {
+module (O_CCA2_Default : Oracles_CCA2i) (S : Scheme) = {
   var sk : sk_t
   var c' : ctxt_t 
   var qs : (ctxt_t * key_t option) list
@@ -187,7 +187,7 @@ module O_CCA2_Default (S : Scheme) : Oracles_CCA2i = {
   (the second stage of) CCA2 (CCA) security games. May be useful for security notions 
   considering two such (sets of) oracles.
 **)
-module O_CCA2_DDefault (S : Scheme) : Oracles_CCA2i = {
+module (O_CCA2_DDefault : Oracles_CCA2i) (S : Scheme) = {
   var sk : sk_t
   var c' : ctxt_t 
   var qs : (ctxt_t * key_t option) list
@@ -219,7 +219,7 @@ module O_CCA2_DDefault (S : Scheme) : Oracles_CCA2i = {
   (i.e., CCA1, traditional CCA2, and modern CCA2) 
 **)
 module type Oracles_CCA = {
-  include Oracles_CCA2i [-init]
+  proc decaps(c : ctxt_t) : key_t option
 }.
 
 
@@ -277,13 +277,13 @@ module OW_CCA1 (S : Scheme, O : Oracles_CCA1i, A : Adv_OWCCA1) = {
     var c : ctxt_t;
     
     (pk, sk) <@ S.keygen();
-    O.init(sk);
+    O(S).init(sk);
     
-    A(O).scout(pk);
+    A(O(S)).scout(pk);
     
     (k, c) <@ S.encaps(pk);
     
-    k' <@ A(O).find(c);
+    k' <@ A(O(S)).find(c);
     
     return k' = k; 
   }
@@ -310,14 +310,14 @@ module OW_CCA2 (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_OWCC
     var c : ctxt_t;
     
     (pk, sk) <@ S.keygen();
-    O1.init(sk);
+    O1(S).init(sk);
     
-    A(O1).scout(pk);
+    A(O1(S)).scout(pk);
     
     (k, c) <@ S.encaps(pk);
-    O2.init(sk, c);
+    O2(S).init(sk, c);
     
-    k' <@ A(O2).find(c);
+    k' <@ A(O2(S)).find(c);
     
     return k' = k; 
   }
@@ -345,9 +345,9 @@ module OW_CCA (S : Scheme, O : Oracles_CCA2i, A : Adv_OWCCA) = {
     (pk, sk) <@ S.keygen();
     
     (k, c) <@ S.encaps(pk);
-    O.init(sk, c);
+    O(S).init(sk, c);
     
-    k' <@ A(O).find(pk, c);
+    k' <@ A(O(S)).find(pk, c);
     
     return k' = k; 
   }
@@ -447,16 +447,16 @@ module IND_CCA1 (S : Scheme, O : Oracles_CCA1i, A : Adv_INDCCA1) = {
     var c : ctxt_t;
     
     (pk, sk) <@ S.keygen();
-    O.init(sk);
+    O(S).init(sk);
     
-    A(O).scout(pk);
+    A(O(S)).scout(pk);
     
     (k, c) <@ S.encaps(pk);
     k' <$ dkeym pk;
     
     b <$ {0,1};
     
-    b' <@ A(O).distinguish(if b then k' else k, c);
+    b' <@ A(O(S)).distinguish(if b then k' else k, c);
     
     return b' = b; 
   }
@@ -472,14 +472,14 @@ module IND_CCA1_P (S : Scheme, O : Oracles_CCA1i, A : Adv_INDCCA1) = {
     var c : ctxt_t;
     
     (pk, sk) <@ S.keygen();
-    O.init(sk);
+    O(S).init(sk);
     
-    A(O).scout(pk);
+    A(O(S)).scout(pk);
     
     (k, c) <@ S.encaps(pk);
     k' <$ dkeym pk;
     
-    b' <@ A(O).distinguish(if b then k' else k, c);
+    b' <@ A(O(S)).distinguish(if b then k' else k, c);
     
     return b' = b; 
   }
@@ -508,17 +508,17 @@ module IND_CCA2 (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_IND
     var c : ctxt_t;
     
     (pk, sk) <@ S.keygen();
-    O1.init(sk);
+    O1(S).init(sk);
     
-    A(O1).scout(pk);
+    A(O1(S)).scout(pk);
     
     (k, c) <@ S.encaps(pk);
     k' <$ dkeym pk;
-    O2.init(sk, c);
+    O2(S).init(sk, c);
     
     b <$ {0,1};
     
-    b' <@ A(O2).distinguish(if b then k' else k, c);
+    b' <@ A(O2(S)).distinguish(if b then k' else k, c);
     
     return b' = b; 
   }
@@ -534,15 +534,15 @@ module IND_CCA2_P (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_I
     var c : ctxt_t;
     
     (pk, sk) <@ S.keygen();
-    O1.init(sk);
+    O1(S).init(sk);
     
-    A(O1).scout(pk);
+    A(O1(S)).scout(pk);
     
     (k, c) <@ S.encaps(pk);
     k' <$ dkeym pk;
-    O2.init(sk, c);
+    O2(S).init(sk, c);
     
-    b' <@ A(O2).distinguish(if b then k' else k, c);
+    b' <@ A(O2(S)).distinguish(if b then k' else k, c);
     
     return b' = b; 
   }
@@ -573,11 +573,11 @@ module IND_CCA (S : Scheme, O : Oracles_CCA2i, A : Adv_INDCCA) = {
     
     (k, c) <@ S.encaps(pk);
     k' <$ dkeym pk;
-    O.init(sk, c);
+    O(S).init(sk, c);
     
     b <$ {0,1};
     
-    b' <@ A(O).distinguish(pk, if b then k' else k, c);
+    b' <@ A(O(S)).distinguish(pk, if b then k' else k, c);
     
     return b' = b; 
   }
@@ -596,9 +596,9 @@ module IND_CCA_P (S : Scheme, O : Oracles_CCA2i, A : Adv_INDCCA) = {
     
     (k, c) <@ S.encaps(pk);
     k' <$ dkeym pk;
-    O.init(sk, c);
+    O(S).init(sk, c);
     
-    b' <@ A(O).distinguish(pk, if b then k' else k, c);
+    b' <@ A(O(S)).distinguish(pk, if b then k' else k, c);
     
     return b' = b; 
   }
@@ -747,14 +747,14 @@ module NM_CCA1 (S : Scheme, O : Oracles_CCA1i, A : Adv_NMCCA1) = {
     var kol : key_t option list;
     
     (pk, sk) <@ S.keygen();
-    O.init(sk);
+    O(S).init(sk);
     
-    A(O).scout(pk);
+    A(O(S)).scout(pk);
     
     (k, c) <@ S.encaps(pk);
     k' <$ dkeym pk;
     
-    (rel, cl) <@ A(O).find(c);
+    (rel, cl) <@ A(O(S)).find(c);
     
     kol <- [];
     while (size kol < size cl) {
@@ -793,15 +793,15 @@ module SNM_CCA1 (S : Scheme, O : Oracles_CCA1i, A : Adv_SNMCCA1) = {
     var o : bool;
     
     (pk, sk) <@ S.keygen();
-    O.init(sk);
+    O(S).init(sk);
     
-    A(O).scout(pk);
+    A(O(S)).scout(pk);
         
     (k, c) <@ S.encaps(pk);
     k' <$ dkeym pk;
 
     o <$ {0,1};
-    (rel, cl) <@ A(O).find(c, if o then (k', k) else (k, k'));
+    (rel, cl) <@ A(O(S)).find(c, if o then (k', k) else (k, k'));
     
     kol <- [];
     while (size kol < size cl) {
@@ -841,15 +841,15 @@ module NM_CCA2 (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_NMCC
     var kol : key_t option list;
         
     (pk, sk) <@ S.keygen();
-    O1.init(sk);
+    O1(S).init(sk);
     
-    A(O1).scout(pk);
+    A(O1(S)).scout(pk);
     
     (k, c) <@ S.encaps(pk);
     k' <$ dkeym pk;
-    O2.init(sk, c);
+    O2(S).init(sk, c);
     
-    (rel, cl) <@ A(O2).find(c);
+    (rel, cl) <@ A(O2(S)).find(c);
     
     kol <- [];
     while (size kol < size cl) {
@@ -888,16 +888,16 @@ module SNM_CCA2 (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_SNM
     var o : bool;
     
     (pk, sk) <@ S.keygen();
-    O1.init(sk);
+    O1(S).init(sk);
     
-    A(O1).scout(pk);
+    A(O1(S)).scout(pk);
 
     (k, c) <@ S.encaps(pk);
     k' <$ dkeym pk;
-    O2.init(sk, c);
+    O2(S).init(sk, c);
 
     o <$ {0,1};
-    (rel, cl) <@ A(O2).find(c, if o then (k', k) else (k, k'));
+    (rel, cl) <@ A(O2(S)).find(c, if o then (k', k) else (k, k'));
     
     kol <- [];
     while (size kol < size cl) {
@@ -939,9 +939,9 @@ module NM_CCA (S : Scheme, O : Oracles_CCA2i, A : Adv_NMCCA) = {
     
     (k, c) <@ S.encaps(pk);
     k' <$ dkeym pk;
-    O.init(sk, c);
+    O(S).init(sk, c);
     
-    (rel, cl) <@ A(O).find(pk, c);
+    (rel, cl) <@ A(O(S)).find(pk, c);
     
     kol <- [];
     while (size kol < size cl) {
@@ -982,10 +982,10 @@ module SNM_CCA (S : Scheme, O : Oracles_CCA2i, A : Adv_SNMCCA) = {
     
     (k, c) <@ S.encaps(pk);
     k' <$ dkeym pk;
-    O.init(sk, c);
+    O(S).init(sk, c);
 
     o <$ {0,1};
-    (rel, cl) <@ A(O).find(pk, c, if o then (k', k) else (k, k'));
+    (rel, cl) <@ A(O(S)).find(pk, c, if o then (k', k) else (k, k'));
     
     kol <- [];
     while (size kol < size cl) {
@@ -1136,16 +1136,16 @@ module ANO_CCA1 (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_ANO
     
     (pk0, sk0) <@ S.keygen();
     (pk1, sk1) <@ S.keygen();
-    O0.init(sk0);
-    O1.init(sk1);
+    O0(S).init(sk0);
+    O1(S).init(sk1);
     
-    A(O0, O1).scout(pk0, pk1);
+    A(O0(S), O1(S)).scout(pk0, pk1);
     
     b <$ {0,1};
     
     kc <@ S.encaps(if b then pk1 else pk0);
     
-    b' <@ A(O0, O1).distinguish(kc);
+    b' <@ A(O0(S), O1(S)).distinguish(kc);
     
     return b' = b;
   }
@@ -1161,14 +1161,14 @@ module ANO_CCA1_P (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_A
     
     (pk0, sk0) <@ S.keygen();
     (pk1, sk1) <@ S.keygen();
-    O0.init(sk0);
-    O1.init(sk1);
+    O0(S).init(sk0);
+    O1(S).init(sk1);
     
-    A(O0, O1).scout(pk0, pk1);
+    A(O0(S), O1(S)).scout(pk0, pk1);
     
     kc <@ S.encaps(if b then pk1 else pk0);
     
-    b' <@ A(O0, O1).distinguish(kc);
+    b' <@ A(O0(S), O1(S)).distinguish(kc);
     
     return b';
   }
@@ -1197,16 +1197,16 @@ module WANO_CCA1 (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_WA
     
     (pk0, sk0) <@ S.keygen();
     (pk1, sk1) <@ S.keygen();
-    O0.init(sk0);
-    O1.init(sk1);
+    O0(S).init(sk0);
+    O1(S).init(sk1);
     
-    A(O0, O1).scout(pk0, pk1);
+    A(O0(S), O1(S)).scout(pk0, pk1);
     
     b <$ {0,1};
     
     (k, c) <@ S.encaps(if b then pk1 else pk0);
     
-    b' <@ A(O0, O1).distinguish(c);
+    b' <@ A(O0(S), O1(S)).distinguish(c);
     
     return b' = b;
   }
@@ -1223,14 +1223,14 @@ module WANO_CCA1_P (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_
     
     (pk0, sk0) <@ S.keygen();
     (pk1, sk1) <@ S.keygen();
-    O0.init(sk0);
-    O1.init(sk1);
+    O0(S).init(sk0);
+    O1(S).init(sk1);
     
-    A(O0, O1).scout(pk0, pk1);
+    A(O0(S), O1(S)).scout(pk0, pk1);
     
     (k, c) <@ S.encaps(if b then pk1 else pk0);
     
-    b' <@ A(O0, O1).distinguish(c);
+    b' <@ A(O0(S), O1(S)).distinguish(c);
     
     return b' = b;
   }
@@ -1264,18 +1264,18 @@ module ANO_CCA2 (S : Scheme)
     
     (pk0, sk0) <@ S.keygen();
     (pk1, sk1) <@ S.keygen();
-    O01.init(sk0);
-    O11.init(sk1);
+    O01(S).init(sk0);
+    O11(S).init(sk1);
     
-    A(O01, O11).scout(pk0, pk1);
+    A(O01(S), O11(S)).scout(pk0, pk1);
     
     b <$ {0,1};
     
     (k, c) <@ S.encaps(if b then pk1 else pk0);
-    O02.init(sk0, c);
-    O12.init(sk1, c);
+    O02(S).init(sk0, c);
+    O12(S).init(sk1, c);
     
-    b' <@ A(O02, O12).distinguish((k, c));
+    b' <@ A(O02(S), O12(S)).distinguish((k, c));
     
     return b' = b;
   }
@@ -1295,16 +1295,16 @@ module ANO_CCA2_P (S : Scheme)
     
     (pk0, sk0) <@ S.keygen();
     (pk1, sk1) <@ S.keygen();
-    O01.init(sk0);
-    O11.init(sk1);
+    O01(S).init(sk0);
+    O11(S).init(sk1);
     
-    A(O01, O11).scout(pk0, pk1);
+    A(O01(S), O11(S)).scout(pk0, pk1);
     
     (k, c) <@ S.encaps(if b then pk1 else pk0);
-    O02.init(sk0, c);
-    O12.init(sk1, c);
+    O02(S).init(sk0, c);
+    O12(S).init(sk1, c);
     
-    b' <@ A(O02, O12).distinguish((k, c));
+    b' <@ A(O02(S), O12(S)).distinguish((k, c));
     
     return b';
   }
@@ -1335,18 +1335,18 @@ module WANO_CCA2 (S : Scheme)
     
     (pk0, sk0) <@ S.keygen();
     (pk1, sk1) <@ S.keygen();
-    O01.init(sk0);
-    O11.init(sk1);
+    O01(S).init(sk0);
+    O11(S).init(sk1);
     
-    A(O01, O11).scout(pk0, pk1);
+    A(O01(S), O11(S)).scout(pk0, pk1);
     
     b <$ {0,1};
     
     (k, c) <@ S.encaps(if b then pk1 else pk0);
-    O02.init(sk0, c);
-    O12.init(sk1, c);
+    O02(S).init(sk0, c);
+    O12(S).init(sk1, c);
     
-    b' <@ A(O02, O12).distinguish(c);
+    b' <@ A(O02(S), O12(S)).distinguish(c);
     
     return b' = b;
   }
@@ -1366,16 +1366,16 @@ module WANO_CCA2_P (S : Scheme)
     
     (pk0, sk0) <@ S.keygen();
     (pk1, sk1) <@ S.keygen();
-    O01.init(sk0);
-    O11.init(sk1);
+    O01(S).init(sk0);
+    O11(S).init(sk1);
     
-    A(O01, O11).scout(pk0, pk1);
+    A(O01(S), O11(S)).scout(pk0, pk1);
     
     (k, c) <@ S.encaps(if b then pk1 else pk0);
-    O02.init(sk0, c);
-    O12.init(sk1, c);
+    O02(S).init(sk0, c);
+    O12(S).init(sk1, c);
     
-    b' <@ A(O02, O12).distinguish(c);
+    b' <@ A(O02(S), O12(S)).distinguish(c);
     
     return b';
   }
@@ -1411,10 +1411,10 @@ module ANO_CCA (S : Scheme)
     b <$ {0,1};
     
     (k, c) <@ S.encaps(if b then pk1 else pk0);
-    O0.init(sk0, c);
-    O1.init(sk1, c);
+    O0(S).init(sk0, c);
+    O1(S).init(sk1, c);
     
-    b' <@ A(O0, O1).distinguish(pk0, pk1, (k, c));
+    b' <@ A(O0(S), O1(S)).distinguish(pk0, pk1, (k, c));
     
     return b' = b;
   }
@@ -1435,10 +1435,10 @@ module ANO_CCA_P (S : Scheme)
     (pk1, sk1) <@ S.keygen();
     
     (k, c) <@ S.encaps(if b then pk1 else pk0);
-    O0.init(sk0, c);
-    O1.init(sk1, c);
+    O0(S).init(sk0, c);
+    O1(S).init(sk1, c);
     
-    b' <@ A(O0, O1).distinguish(pk0, pk1, (k, c));
+    b' <@ A(O0(S), O1(S)).distinguish(pk0, pk1, (k, c));
     
     return b' = b;
   }
@@ -1471,10 +1471,10 @@ module WANO_CCA (S : Scheme)
     b <$ {0,1};
     
     (k, c) <@ S.encaps(if b then pk1 else pk0);
-    O0.init(sk0, c);
-    O1.init(sk1, c);
+    O0(S).init(sk0, c);
+    O1(S).init(sk1, c);
     
-    b' <@ A(O0, O1).distinguish(pk0, pk1, c);
+    b' <@ A(O0(S), O1(S)).distinguish(pk0, pk1, c);
     
     return b' = b;
   }
@@ -1495,10 +1495,10 @@ module WANO_CCA_P (S : Scheme)
     (pk1, sk1) <@ S.keygen();
     
     (k, c) <@ S.encaps(if b then pk1 else pk0);
-    O0.init(sk0, c);
-    O1.init(sk1, c);
+    O0(S).init(sk0, c);
+    O1(S).init(sk1, c);
     
-    b' <@ A(O0, O1).distinguish(pk0, pk1, c);
+    b' <@ A(O0(S), O1(S)).distinguish(pk0, pk1, c);
     
     return b' = b;
   }
@@ -1611,10 +1611,10 @@ module SROB_CCA (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_SRO
     
     (pk0, sk0) <@ S.keygen();
     (pk1, sk1) <@ S.keygen();
-    O0.init(sk0);
-    O1.init(sk1);
+    O0(S).init(sk0);
+    O1(S).init(sk1);
     
-    c <@ A(O0, O1).find(pk0, pk1);
+    c <@ A(O0(S), O1(S)).find(pk0, pk1);
     
     k0 <@ S.decaps(sk0, c);
     k1 <@ S.decaps(sk1, c);
@@ -1648,10 +1648,10 @@ module WROB_CCA (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_WRO
     
     (pk0, sk0) <@ S.keygen();
     (pk1, sk1) <@ S.keygen();
-    O0.init(sk0);
-    O1.init(sk1);
+    O0(S).init(sk0);
+    O1(S).init(sk1);
     
-    b <@ A(O0, O1).choose(pk0, pk1);
+    b <@ A(O0(S), O1(S)).choose(pk0, pk1);
     
     (k, c) <@ S.encaps(if b then pk1 else pk0);
     k' <@ S.decaps(if b then sk0 else sk1, c);
@@ -1758,10 +1758,10 @@ module SCFR_CCA (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_SCF
     
     (pk0, sk0) <@ S.keygen();
     (pk1, sk1) <@ S.keygen();
-    O0.init(sk0);
-    O1.init(sk1);
+    O0(S).init(sk0);
+    O1(S).init(sk1);
     
-    c <@ A(O0, O1).find(pk0, pk1);
+    c <@ A(O0(S), O1(S)).find(pk0, pk1);
     
     k0 <@ S.decaps(sk0, c);
     k1 <@ S.decaps(sk1, c);
@@ -1795,10 +1795,10 @@ module WCFR_CCA (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_WCF
     
     (pk0, sk0) <@ S.keygen();
     (pk1, sk1) <@ S.keygen();
-    O0.init(sk0);
-    O1.init(sk1);
+    O0(S).init(sk0);
+    O1(S).init(sk1);
     
-    b <@ A(O0, O1).choose(pk0, pk1);
+    b <@ A(O0(S), O1(S)).choose(pk0, pk1);
     
     (k, c) <@ S.encaps(if b then pk1 else pk0);
     k' <@ S.decaps(if b then sk0 else sk1, c);
@@ -1891,10 +1891,10 @@ module HON_BIND (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_HON
       (pk1, sk1) <@ S.keygen();
     }
     
-    O0.init(sk0);
-    O1.init(sk1);
+    O0(S).init(sk0);
+    O1(S).init(sk1);
     
-    (c0, c1) <@ A(O0, O1).find(bc, pk0, pk1);
+    (c0, c1) <@ A(O0(S), O1(S)).find(bc, pk0, pk1);
     
     k0 <@ S.decaps(sk0, c0);
     k1 <@ S.decaps(sk1, c1);
@@ -2200,15 +2200,16 @@ clone import MALBIND.
 **)  
 lemma Eqv_OWCCA1_OWCCA2 (S <: Scheme) (O1 <: Oracles_CCA1i{-S}) (O2 <: Oracles_CCA2i)
                         (A <: Adv_OWCCA1{-S, -O1, -O2}) :
-  islossless O2.init =>
+  islossless O2(S).init =>
   equiv[OW_CCA1(S, O1, A).main ~ OW_CCA2(S, O1, O2, A).main : 
           ={glob S, glob O1, glob A} ==> ={res}].
 proof. 
 move=> O2_init_ll. 
 proc; inline *. 
-call (: true); call{2} O2_init_ll; call (: true). 
-call (: ={glob O1}); 1: by sim.
-by do 2! call (: true).
+call (: true); call{2} O2_init_ll; call (: true).
+call (: ={glob O1, glob S}); 1: by sim.
+call (: ={glob S}); 1..3: by sim.
+by call (: true).
 qed.
 
 
@@ -2235,14 +2236,15 @@ module (R_OWCCA1_OWCPA (A : Adv_OWCPA) : Adv_OWCCA1) (O : Oracles_CCA) = {
 **)
 lemma Eqv_OWCPA_OWCCA1 (S <: Scheme{-R_OWCCA1_OWCPA}) (O <: Oracles_CCA1i{-S})
                        (A <: Adv_OWCPA{-R_OWCCA1_OWCPA, -S, -O}) :
-  islossless O.init =>
+  (forall (GS : glob S), phoare[O(S).init : glob S = GS ==> glob S = GS] = 1%r) =>
   equiv[OW_CPA(S, A).main ~ OW_CCA1(S, O, R_OWCCA1_OWCPA(A)).main :
           ={glob S, glob A} ==> ={res}].
 proof. 
-move=> O_init_ll.
+move=> O_init_sl.
 proc; inline *.
+seq 1 1 : (#pre /\ ={pk, sk}); 1: by sim.
 wp; call (: true); wp; call (: true); wp.
-by call{2} O_init_ll; call (: true); skip. 
+by exlim (glob S){2} => GS; call{2} (O_init_sl GS). 
 qed.
 
 
@@ -2263,7 +2265,7 @@ module (R_OWCCA_OWCPA (A : Adv_OWCPA) : Adv_OWCCA) (O : Oracles_CCA) = {
 **)
 lemma Eqv_OWCPA_OWCCA (S <: Scheme) (O <: Oracles_CCA2i)
                       (A <: Adv_OWCPA{-S, -O}) :
-  islossless O.init =>
+  islossless O(S).init =>
   equiv[OW_CPA(S, A).main ~ OW_CCA(S, O, R_OWCCA_OWCPA(A)).main :
           ={glob S, glob A} ==> ={res}].
 proof. 
@@ -2283,15 +2285,16 @@ qed.
 **)  
 lemma Eqv_INDCCA1_INDCCA2 (S <: Scheme) (O1 <: Oracles_CCA1i{-S}) (O2 <: Oracles_CCA2i)
                           (A <: Adv_INDCCA1{-S, -O1, -O2}) :
-  islossless O2.init =>
+  islossless O2(S).init =>
   equiv[IND_CCA1(S, O1, A).main ~ IND_CCA2(S, O1, O2, A).main : 
           ={glob S, glob O1, glob A} ==> ={res}].
 proof.  
 move=> O2_init_ll. 
 proc; inline *. 
 call (: true); rnd; call{2} O2_init_ll. 
-rnd; call (: true); call (: ={glob O1}); 1: by sim.
-by do 2! call (: true); skip. 
+rnd; call (: true); call (: ={glob O1, glob S}); 1: by sim.
+call (: ={glob S}); 1..3: by sim. 
+by call (: true).
 qed. 
 
 
@@ -2318,15 +2321,17 @@ module (R_INDCCA1_INDCPA (A : Adv_INDCPA) : Adv_INDCCA1) (O : Oracles_CCA) = {
 **)
 lemma Eqv_INDCPA_INDCCA1 (S <: Scheme{-R_INDCCA1_INDCPA}) (O <: Oracles_CCA1i{-S})
                          (A <: Adv_INDCPA{-R_INDCCA1_INDCPA, -S, -O}) :
-  islossless O.init =>
+  (forall (GS : glob S), phoare[O(S).init : glob S = GS ==> glob S = GS] = 1%r) =>
   equiv[IND_CPA(S, A).main ~ IND_CCA1(S, O, R_INDCCA1_INDCPA(A)).main :
           ={glob S, glob A} ==> ={res}].
 proof. 
-move=> O_init_ll.
+move=> O_init_sl.
 proc; inline *.
+seq 1 1 : (#pre /\ ={pk, sk}); 1: by call (: true).
 wp; call (: true); wp.
 rnd; rnd.
-by call (: true); wp; call{2} O_init_ll; call (: true); skip.
+call (: true); wp. 
+by exlim (glob S){2} => GS; call{2} (O_init_sl GS).
 qed.
 
 
@@ -2347,7 +2352,7 @@ module (R_INDCCA_INDCPA (A : Adv_INDCPA) : Adv_INDCCA) (O : Oracles_CCA) = {
 **)
 lemma Eqv_INDCPA_INDCCA (S <: Scheme) (O <: Oracles_CCA2i)
                         (A <: Adv_INDCPA{-S, -O}) :
-  islossless O.init =>
+  islossless O(S).init =>
   equiv[IND_CPA(S, A).main ~ IND_CCA(S, O, R_INDCCA_INDCPA(A)).main :
     ={glob S, glob A} ==> ={res}].
 proof. 
@@ -2368,16 +2373,14 @@ qed.
 **)  
 lemma Eqv_NMCCA1_NMCCA2 (S <: Scheme) (O1 <: Oracles_CCA1i{-S}) (O2 <: Oracles_CCA2i{-S})
                         (A <: Adv_NMCCA1{-S, -O1, -O2}) :
-  islossless O2.init =>
+  (forall (GS : glob S), phoare[O2(S).init : glob S = GS ==> glob S = GS] = 1%r) =>
   equiv[NM_CCA1(S, O1, A).main ~ NM_CCA2(S, O1, O2, A).main : 
           ={glob S, glob O1, glob A, arg} ==> ={res}].
 proof. 
-move=> O2_init_ll.
+move=> O2_init_sl.
 proc; inline *.
-seq 5 6 : (={glob S, glob A, b, sk, k, c, k'}); 2: by sim.
-call{2} O2_init_ll; rnd; call (: true).
-call (: ={glob O1}); 1: by sim. 
-by do 2! call (: true); skip. 
+seq 5 5 : (={glob S, glob A, b, sk, k, c, k'}); [by sim | sim].  
+by exlim (glob S){2} => GS; call{2} (O2_init_sl GS).
 qed.
 
 
@@ -2405,14 +2408,14 @@ module (R_NMCCA1_NMCPA (A : Adv_NMCPA) : Adv_NMCCA1) (O : Oracles_CCA) = {
 **)
 lemma Eqv_NMCPA_NMCCA1 (S <: Scheme{-R_NMCCA1_NMCPA}) (O <: Oracles_CCA1i{-S})
                        (A <: Adv_NMCPA{-S, -O}) :
-  islossless O.init =>
+  (forall (GS : glob S), phoare[O(S).init : glob S = GS ==> glob S = GS] = 1%r) =>
   equiv[NM_CPA(S, A).main ~ NM_CCA1(S, O, R_NMCCA1_NMCPA(A)).main :
           ={glob S, glob A, arg} ==> ={res}].
 proof. 
-move=> O_init_ll.
+move=> O_init_sl.
 proc; inline *.
-seq 1 2 : (={glob S, glob A, b, pk, sk}); 2: by sim.
-by call{2} O_init_ll; call (: true); skip. 
+seq 1 1 : (={glob S, glob A, b, pk, sk}); [by call (: true) | sim]. 
+by exlim (glob S){2} => GS; call{2} (O_init_sl GS). 
 qed.
 
 
@@ -2434,14 +2437,14 @@ module (R_NMCCA_NMCPA (A : Adv_NMCPA) : Adv_NMCCA) (O : Oracles_CCA) = {
 **)
 lemma Eqv_NMCPA_NMCCA (S <: Scheme) (O <: Oracles_CCA2i{-S})
                       (A <: Adv_NMCPA{-S, -O}) :
-  islossless O.init =>
+  (forall (GS : glob S), phoare[O(S).init : glob S = GS ==> glob S = GS] = 1%r) =>
   equiv[NM_CPA(S, A).main ~ NM_CCA(S, O, R_NMCCA_NMCPA(A)).main :
           ={glob S, glob A, arg} ==> ={res}].
 proof.
-move=> O_init_ll. 
+move=> O_init_sl. 
 proc; inline *.
-seq 3 4 : (={glob S, glob A, b, pk, sk, k, c, k'}); 2: by sim.
-by call{2} O_init_ll; rnd; call (: true); call (: true). 
+seq 3 3 : (={glob S, glob A, b, pk, sk, k, c, k'}); [ by sim | sim ].
+by exlim (glob S){2} => GS; call{2} (O_init_sl GS). 
 qed.
 
 
@@ -2453,16 +2456,14 @@ qed.
 **)  
 lemma Eqv_SNMCCA1_SNMCCA2 (S <: Scheme) (O1 <: Oracles_CCA1i{-S}) (O2 <: Oracles_CCA2i{-S})
                           (A <: Adv_SNMCCA1{-S, -O1, -O2}) :
-  islossless O2.init =>
+  (forall (GS : glob S), phoare[O2(S).init : glob S = GS ==> glob S = GS] = 1%r) =>
   equiv[SNM_CCA1(S, O1, A).main ~ SNM_CCA2(S, O1, O2, A).main : 
           ={glob S, glob O1, glob A, arg} ==> ={res}].
 proof. 
-move=> O2_init_ll.
+move=> O2_init_sl.
 proc; inline *.
-seq 5 6 : (={glob S, glob A, b, sk, k, c, k'}); 2: by sim.
-call{2} O2_init_ll; rnd; call (: true).
-call (: ={glob O1}); 1: by sim.
-by do 2! call (: true).
+seq 5 5 : (={glob S, glob A, b, sk, k, c, k'}); [by sim | sim]. 
+by exlim (glob S){2} => GS; call{2} (O2_init_sl GS). 
 qed.
 
 
@@ -2490,15 +2491,17 @@ module (R_SNMCCA1_SNMCPA (A : Adv_SNMCPA) : Adv_SNMCCA1) (O : Oracles_CCA) = {
 **)
 lemma Eqv_SNMCPA_SNMCCA1 (S <: Scheme{-R_SNMCCA1_SNMCPA}) (O <: Oracles_CCA1i{-S})
                          (A <: Adv_SNMCPA{-R_SNMCCA1_SNMCPA, -S, -O}) :
-  islossless O.init =>
+  (forall (GS : glob S), phoare[O(S).init : glob S = GS ==> glob S = GS] = 1%r) =>
   equiv[SNM_CPA(S, A).main ~ SNM_CCA1(S, O, R_SNMCCA1_SNMCPA(A)).main :
           ={glob S, glob A, arg} ==> ={res}].
 proof.
-move=> O_init_ll. 
+move=> O_init_sl. 
 proc; inline *. 
 seq 5 10 : (={glob S, b, sk, k, c, k'} /\ rel{1} = rel0{2} /\ cl{1} = cl0{2}); 2: by sim. 
 call (: true); wp; rnd; rnd; wp. 
-by call (: true); wp; call{2} O_init_ll; call (: true). 
+call (: true); wp. 
+seq 1 1 : (#pre /\ ={pk, sk}); 1: by call (: true).
+by exlim (glob S){2} => GS; call{2} (O_init_sl GS). 
 qed.
 
 
@@ -2520,16 +2523,16 @@ module (R_SNMCCA_SNMCPA (A : Adv_SNMCPA) : Adv_SNMCCA) (O : Oracles_CCA) = {
 **)
 lemma Eqv_SNMCPA_SNMCCA (S <: Scheme) (O <: Oracles_CCA2i{-S})
                         (A <: Adv_SNMCPA{-S, -O}) :
-  islossless O.init => 
+  (forall (GS : glob S), phoare[O(S).init : glob S = GS ==> glob S = GS] = 1%r) =>
   equiv[SNM_CPA(S, A).main ~ SNM_CCA(S, O, R_SNMCCA_SNMCPA(A)).main :
           ={glob S, glob A, arg} ==> ={res}].
 proof.
-move=> O_init_ll.
+move=> O_init_sl.
 proc; inline *.
-seq 5 9 : (={glob S, b, sk, k, c, k'} /\ rel{1} = rel0{2} /\ cl{1} = cl0{2}); 2: by sim. 
-call (: true); wp. 
-rnd; call{2} O_init_ll; rnd.
-by call (: true); call (: true); skip. 
+swap{2} 5 -1.
+seq 4 4: (#pre /\ ={pk, sk, k, k', c, o}); [by sim | sim].
+call (: true); wp.
+by exlim (glob S){2} => GS; call{2} (O_init_sl GS).
 qed. 
 
 
@@ -2544,15 +2547,16 @@ lemma Eqv_ANOCCA1_ANOCCA2 (S <: Scheme)
                           (O01 <: Oracles_CCA1i{-S}) (O11 <: Oracles_CCA1i{-S, -O01})
                           (O02 <: Oracles_CCA2i) (O21 <: Oracles_CCA2i)
                           (A <: Adv_ANOCCA1{-S, -O01, -O11, -O02, -O21}) :
-  islossless O02.init => islossless O21.init =>
+  islossless O02(S).init => islossless O21(S).init =>
   equiv[ANO_CCA1(S, O01, O11, A).main ~ ANO_CCA2(S, O01, O11, O02, O21, A).main : 
           ={glob S, glob O01, glob O11, glob A} ==> ={res}].
 proof.
 move=> O02_init_ll O21_init_ll.
 proc; inline *.
 call (: true); call{2} O21_init_ll; call{2} O02_init_ll.
-call (: true); rnd; call (: ={glob O01, glob O11}); 1,2: by sim.
-by do 4! call (: true); skip => /> b _ -[]. 
+call (: true); rnd; call (: ={glob O01, glob O11, glob S}); 1,2: by sim.
+do 2! (call (: ={glob S}); 1..3: by sim).
+by do 2! call (: true); skip => /> b _ -[]. 
 qed.
 
 
@@ -2581,15 +2585,15 @@ module (R_ANOCCA1_ANOCPA (A : Adv_ANOCPA) : Adv_ANOCCA1) (O0 : Oracles_CCA, O1 :
 lemma Eqv_ANOCPA_ANOCCA1 (S <: Scheme{-R_ANOCCA1_ANOCPA}) 
                          (O0 <: Oracles_CCA1i{-S}) (O1 <: Oracles_CCA1i{-S})
                          (A <: Adv_ANOCPA{-S, -O0, -O1}) :
-  islossless O0.init => islossless O1.init =>
+  (forall (GS : glob S), phoare[O0(S).init : glob S = GS ==> glob S = GS] = 1%r) =>
+  (forall (GS : glob S), phoare[O1(S).init : glob S = GS ==> glob S = GS] = 1%r) =>
   equiv[ANO_CPA(S, A).main ~ ANO_CCA1(S, O0, O1, R_ANOCCA1_ANOCPA(A)).main :
           ={glob S, glob A, arg} ==> ={res}].
 proof. 
-move=> O0_init_ll O1_init_ll.
+move=> O0_init_sl O1_init_sl.
 proc; inline *.
-seq 2 4 : (={glob S, glob A, pk0, pk1}); 2: by sim. 
-call{2} O1_init_ll; call{2} O0_init_ll. 
-by call (: true); call (: true).
+seq 2 2 : (={glob S, glob A, pk0, pk1}); [ by sim | sim ]. 
+by exlim (glob S){2} => GS; call{2} (O1_init_sl GS); call{2} (O0_init_sl GS). 
 qed.
 
 
@@ -2611,7 +2615,7 @@ module (R_ANOCCA_ANOCPA (A : Adv_ANOCPA) : Adv_ANOCCA) (O0 : Oracles_CCA, O1 : O
 lemma Eqv_ANOCPA_ANOCCA (S <: Scheme) 
                         (O0 <: Oracles_CCA2i) (O1 <: Oracles_CCA2i)
                         (A <: Adv_ANOCPA{-S, -O0, -O1}) :
-  islossless O0.init => islossless O1.init =>
+  islossless O0(S).init => islossless O1(S).init =>
   equiv[ANO_CPA(S, A).main ~ ANO_CCA(S, O0, O1, R_ANOCCA_ANOCPA(A)).main :
           ={glob S, glob A} ==> ={res}].
 proof. 
@@ -2633,15 +2637,17 @@ lemma Eqv_WANOCCA1_WANOCCA2 (S <: Scheme)
                             (O01 <: Oracles_CCA1i{-S}) (O11 <: Oracles_CCA1i{-S, -O01})
                             (O02 <: Oracles_CCA2i) (O21 <: Oracles_CCA2i)
                             (A <: Adv_WANOCCA1{-S, -O01, -O11, -O02, -O21}) :
-  islossless O02.init => islossless O21.init =>
+  islossless O02(S).init => islossless O21(S).init =>
   equiv[WANO_CCA1(S, O01, O11, A).main ~ WANO_CCA2(S, O01, O11, O02, O21, A).main : 
           ={glob S, glob O01, glob O11, glob A} ==> ={res}].
 proof. 
 move=> O02_init_ll O21_init_ll.
 proc; inline *.
 call (: true); call{2} O21_init_ll; call{2} O02_init_ll.
-call (: true); rnd; call (: ={glob O01, glob O11}); 1,2: by sim.
-by do 4! call (: true); skip => /> b _ -[]. 
+call (: true); rnd. 
+call (: ={glob O01, glob O11, glob S}); 1,2: by sim.
+do 2! (call (: ={glob S}); 1..3: by sim).
+by do 2! call (: true); skip => /> b _ -[]. 
 qed.
 
 
@@ -2670,15 +2676,15 @@ module (R_WANOCCA1_WANOCPA (A : Adv_WANOCPA) : Adv_WANOCCA1) (O0 : Oracles_CCA, 
 lemma Eqv_WANOCPA_WANOCCA1 (S <: Scheme{-R_WANOCCA1_WANOCPA}) 
                            (O0 <: Oracles_CCA1i{-S}) (O1 <: Oracles_CCA1i{-S})
                            (A <: Adv_WANOCPA{-S, -O0, -O1}) :
-  islossless O0.init => islossless O1.init =>
+  (forall (GS : glob S), phoare[O0(S).init : glob S = GS ==> glob S = GS] = 1%r) =>
+  (forall (GS : glob S), phoare[O1(S).init : glob S = GS ==> glob S = GS] = 1%r) =>
   equiv[WANO_CPA(S, A).main ~ WANO_CCA1(S, O0, O1, R_WANOCCA1_WANOCPA(A)).main :
           ={glob S, glob A} ==> ={res}].
 proof. 
-move=> O0_init_ll O1_init_ll.
+move=> O0_init_sl O1_init_sl.
 proc; inline *.
-seq 2 4 : (={glob S, glob A, pk0, pk1}); 2: by sim.
-call{2} O1_init_ll; call{2} O0_init_ll.
-by do 2! call (: true).
+seq 2 2 : (={glob S, glob A, pk0, pk1}); [ by sim | sim ].
+by exlim (glob S){2} => GS; call{2} (O1_init_sl GS); call{2} (O0_init_sl GS). 
 qed.
 
 
@@ -2700,7 +2706,7 @@ module (R_WANOCCA_WANOCPA (A : Adv_WANOCPA) : Adv_WANOCCA) (O0 : Oracles_CCA, O1
 lemma Eqv_WANOCPA_WANOCCA (S <: Scheme) 
                           (O0 <: Oracles_CCA2i) (O1 <: Oracles_CCA2i)
                           (A <: Adv_WANOCPA{-S, -O0, -O1}) :
-  islossless O0.init => islossless O1.init =>
+  islossless O0(S).init => islossless O1(S).init =>
   equiv[WANO_CPA(S, A).main ~ WANO_CCA(S, O0, O1, R_WANOCCA_WANOCPA(A)).main :
           ={glob S, glob A} ==> ={res}].
 proof. 
@@ -2730,15 +2736,15 @@ module (R_SROBCCA_SROBCPA (A : Adv_SROBCPA) : Adv_SROBCCA) (O0 : Oracles_CCA, O1
 **)
 lemma Eqv_SROBCPA_SROBCCA (S <: Scheme) (O0 <: Oracles_CCA1i{-S}) (O1 <: Oracles_CCA1i{-S})
                           (A <: Adv_SROBCPA{-S, -O0, -O1}) :
-  islossless O0.init => islossless O1.init =>
+  (forall (GS : glob S), phoare[O0(S).init : glob S = GS ==> glob S = GS] = 1%r) =>
+  (forall (GS : glob S), phoare[O1(S).init : glob S = GS ==> glob S = GS] = 1%r) =>
   equiv[SROB_CPA(S, A).main ~ SROB_CCA(S, O0, O1, R_SROBCCA_SROBCPA(A)).main :
           ={glob S, glob A} ==> ={res}].
 proof. 
-move=> O0_init_ll O1_init_ll.
+move=> O0_init_sl O1_init_sl.
 proc; inline *.
-seq 2 4 : (={glob S, glob A, pk0, sk0, pk1, sk1}); 2: by sim.
-call{2} O1_init_ll; call{2} O0_init_ll.
-by do 2! call (: true).
+seq 2 2 : (={glob S, glob A, pk0, sk0, pk1, sk1}); [ by sim | sim ].
+by exlim (glob S){2} => GS; call{2} (O1_init_sl GS); call{2} (O0_init_sl GS). 
 qed. 
 
 
@@ -2759,15 +2765,15 @@ module (R_WROBCCA_WROBCPA (A : Adv_WROBCPA) : Adv_WROBCCA) (O0 : Oracles_CCA, O1
 **)
 lemma Eqv_WROBCPA_WROBCCA (S <: Scheme) (O0 <: Oracles_CCA1i{-S}) (O1 <: Oracles_CCA1i{-S})
                           (A <: Adv_WROBCPA{-S, -O0, -O1}) :
-  islossless O0.init => islossless O1.init =>
+  (forall (GS : glob S), phoare[O0(S).init : glob S = GS ==> glob S = GS] = 1%r) =>
+  (forall (GS : glob S), phoare[O1(S).init : glob S = GS ==> glob S = GS] = 1%r) =>
   equiv[WROB_CPA(S, A).main ~ WROB_CCA(S, O0, O1, R_WROBCCA_WROBCPA(A)).main :
           ={glob S, glob A} ==> ={res}].
 proof. 
-move=> O0_init_ll O1_init_ll.
+move=> O0_init_sl O1_init_sl.
 proc; inline *.
-seq 2 4 : (={glob S, glob A, pk0, sk0, pk1, sk1}); 2: by sim.
-call{2} O1_init_ll; call{2} O0_init_ll.
-by do 2! call (: true).
+seq 2 2 : (={glob S, glob A, pk0, sk0, pk1, sk1}); [ by sim | sim ].
+by exlim (glob S){2} => GS; call{2} (O1_init_sl GS); call{2} (O0_init_sl GS). 
 qed.
 
 
@@ -2789,15 +2795,15 @@ module (R_SCFRCCA_SCFRCPA (A : Adv_SCFRCPA) : Adv_SCFRCCA) (O0 : Oracles_CCA, O1
 **)
 lemma Eqv_SCFRCPA_SCFRCCA (S <: Scheme) (O0 <: Oracles_CCA1i{-S}) (O1 <: Oracles_CCA1i{-S})
                           (A <: Adv_SCFRCPA{-S, -O0, -O1}) :
-  islossless O0.init => islossless O1.init =>
+  (forall (GS : glob S), phoare[O0(S).init : glob S = GS ==> glob S = GS] = 1%r) =>
+  (forall (GS : glob S), phoare[O1(S).init : glob S = GS ==> glob S = GS] = 1%r) =>
   equiv[SCFR_CPA(S, A).main ~ SCFR_CCA(S, O0, O1, R_SCFRCCA_SCFRCPA(A)).main :
           ={glob S, glob A} ==> ={res}].
 proof.
-move=> O0_init_ll O1_init_ll.
-proc; inline *. 
-seq 2 4 : (={glob S, glob A, pk0, sk0, pk1, sk1}); 2: by sim.
-call{2} O1_init_ll; call{2} O0_init_ll.
-by do 2! call (: true).
+move=> O0_init_sl O1_init_sl.
+proc; inline *.
+seq 2 2 : (={glob S, glob A, pk0, sk0, pk1, sk1}); [ by sim | sim ].
+by exlim (glob S){2} => GS; call{2} (O1_init_sl GS); call{2} (O0_init_sl GS). 
 qed. 
 
 
@@ -2818,15 +2824,15 @@ module (R_WCFRCCA_WCFRCPA (A : Adv_WCFRCPA) : Adv_WCFRCCA) (O0 : Oracles_CCA, O1
 **)
 lemma Eqv_WCFRCPA_WCFRCCA (S <: Scheme) (O0 <: Oracles_CCA1i{-S}) (O1 <: Oracles_CCA1i{-S})
                           (A <: Adv_WCFRCPA{-S, -O0, -O1}) :
-  islossless O0.init => islossless O1.init =>
+  (forall (GS : glob S), phoare[O0(S).init : glob S = GS ==> glob S = GS] = 1%r) =>
+  (forall (GS : glob S), phoare[O1(S).init : glob S = GS ==> glob S = GS] = 1%r) =>
   equiv[WCFR_CPA(S, A).main ~ WCFR_CCA(S, O0, O1, R_WCFRCCA_WCFRCPA(A)).main :
           ={glob S, glob A} ==> ={res}].
-proof. 
-move=> O0_init_ll O1_init_ll.
+proof.
+move=> O0_init_sl O1_init_sl.
 proc; inline *.
-seq 2 4 : (={glob S, glob A, pk0, sk0, pk1, sk1}); 2: by sim.
-call{2} O1_init_ll; call{2} O0_init_ll.
-by do 2! call (: true).  
+seq 2 2 : (={glob S, glob A, pk0, sk0, pk1, sk1}); [ by sim | sim ].
+by exlim (glob S){2} => GS; call{2} (O1_init_sl GS); call{2} (O0_init_sl GS). 
 qed.
 
 
@@ -2892,8 +2898,9 @@ proof.
 proc; inline *.
 seq 5 7 : (={glob S, glob A, b, sk, k, c, k'}); 2: by sim.
 rnd{2}; rnd.
-call (: true); call (: ={glob O}); 1: by sim.
-by wp; do 2! call (: true).
+call (: true); call (: ={glob O, glob S}); 1: by sim.
+wp; call (: ={glob S}); 1..3: by sim.
+by call (: true). 
 qed. 
 
 
@@ -2924,10 +2931,13 @@ lemma Eqv_NMCCA2_SNMCCA2 (S <: Scheme) (O1 <: Oracles_CCA1i{-S}) (O2 <: Oracles_
 proof.
 proc; inline *.
 seq 7 11 : (={glob S, b, sk, k, c, k'} /\ rel{1} = rel0{2} /\ cl{1} = cl0{2}); 2: by sim.
-call (: ={glob O2}); 1: by sim.
-wp; rnd{2}; call (: true); rnd; call (: true).
-call (: ={glob O1}); 1: by sim.
-by wp; do 2! call (: true).
+call (: ={glob O2, glob S}); 1: by sim.
+wp; rnd{2}. 
+call (: ={glob S}); 1..3: by sim. 
+rnd; call (: true).
+call (: ={glob O1, glob S}); 1: by sim.
+wp; call (: ={glob S}); 1..3: by sim.
+by call (: true).
 qed.
 
 
@@ -2953,8 +2963,8 @@ lemma Eqv_NMCCA_SNMCCA (S <: Scheme) (O <: Oracles_CCA2i{-S})
           ={glob S, glob O, glob A, arg} ==> ={res}].
 proof.
 proc; inline *.
-seq 4 5 : (={glob S, glob O, glob A, b, sk, pk, k, c, k'}); 2: by sim. 
-by rnd{2}; call (: true); rnd; call (: true); call (: true).
+seq 4 4 : (={glob S, glob O, glob A, b, sk, pk, k, c, k'}); [ by sim | sim ]. 
+by rnd{2}.
 qed.
 
 
@@ -3011,8 +3021,9 @@ lemma Eqv_WANOCCA1_ANOCCA1 (S <: Scheme) (O0 <: Oracles_CCA1i{-S}) (O1 <: Oracle
 proof.
 proc; inline *.
 wp; call (: true); wp; call (: true); rnd.
-call (: ={glob O0, glob O1}); 1,2: by sim.
-by wp; do 4! call (: true). 
+call (: ={glob O0, glob O1, glob S}); 1,2: by sim.
+wp; do 2! (call (: ={glob S}); 1..3: by sim).
+by do 2! call (: true). 
 qed.
 
 
@@ -3043,11 +3054,12 @@ lemma Eqv_WANOCCA2_ANOCCA2 (S <: Scheme)
           ={glob S, glob O01, glob O11, glob O02, glob O12, glob A} ==> ={res}].
 proof.
 proc; inline *.
-wp; call (: ={glob O02, glob O12}); 1,2: by sim.
-wp; do 2! call (: true).
+wp; call (: ={glob O02, glob O12, glob S}); 1,2: by sim.
+wp; do 2! (call (: ={glob S}); 1..3: by sim).
 call (: true); rnd. 
-call (: ={glob O01, glob O11}); 1,2: by sim.
-by wp; do 4! call (: true).
+call (: ={glob O01, glob O11, glob S}); 1,2: by sim.
+wp; do 2! (call (: ={glob S}); 1..3: by sim).
+by do 2! call (: true). 
 qed.
 
 
@@ -3072,10 +3084,10 @@ lemma Eqv_WANOCCA_ANOCCA (S <: Scheme) (O0 <: Oracles_CCA2i{-S}) (O1 <: Oracles_
           ={glob S, glob O0, glob O1, glob A} ==> ={res}].
 proof.
 proc; inline *.
-wp; call (: ={glob O0, glob O1}); 1,2: by sim.
-wp; do 2! call (: true). 
+wp; call (: ={glob O0, glob O1, glob S}); 1,2: by sim.
+wp; do 2! (call (: ={glob S}); 1..3: by sim).
 call (: true); rnd.
-by do 2! call (: true).
+by do 2! call (: true). 
 qed.
 
 
@@ -3437,14 +3449,14 @@ module Keygen_Equal_PK (S : Scheme) = {
 }.
 
 (** Reduction adversary reducing from LEAK-BIND to HON-BIND **)
-module R_LEAK_HON (O0 : Oracles_CCA1i, O1 : Oracles_CCA1i) (A : Adv_HONBIND) : Adv_LEAKBIND = {
+module R_LEAK_HON (S : Scheme) (O0 : Oracles_CCA1i, O1 : Oracles_CCA1i) (A : Adv_HONBIND) : Adv_LEAKBIND = {
   proc find(bc : bindconf, pk0 : pk_t, sk0 : sk_t, pk1 : pk_t, sk1 : sk_t) : ctxt_t * ctxt_t = {
     var c0, c1 : ctxt_t;
     
-    O0.init(sk0);
-    O1.init(sk1);
+    O0(S).init(sk0);
+    O1(S).init(sk1);
     
-    (c0, c1) <@ A(O0, O1).find(bc, pk0, pk1);
+    (c0, c1) <@ A(O0(S), O1(S)).find(bc, pk0, pk1);
     
     return (c0, c1);
   }
@@ -3456,15 +3468,15 @@ module R_LEAK_HON (O0 : Oracles_CCA1i, O1 : Oracles_CCA1i) (A : Adv_HONBIND) : A
 **)
 lemma Eqv_HONBIND_LEAKBIND (S <: Scheme) (O0 <: Oracles_CCA1i{-S}) (O1 <: Oracles_CCA1i{-S, -O0})
                            (A <: Adv_HONBIND{-S, -O0, -O1}) :
-  equiv[HON_BIND(S, O0, O1, A).main ~ LEAK_BIND(S, R_LEAK_HON(O0, O1, A)).main :
+  equiv[HON_BIND(S, O0, O1, A).main ~ LEAK_BIND(S, R_LEAK_HON(S, O0, O1, A)).main :
           ={glob S, glob O0, glob O1, glob A, arg} ==> ={res}].
 proof.
 proc; inline *.
 wp; call (: true); call (: true).
-wp; call (: ={glob O0, glob O1}); 1,2: by sim. 
-do 2! call (: true); wp. 
+wp; call (: ={glob O0, glob O1, glob S}); 1,2: by sim. 
+do 2! (call (: ={glob S}); 1..3: by sim).  
 seq 1 1 : (#pre /\ ={pk0, sk0}); 1: by sim.
-by if => //; [wp | call (: true)]. 
+by wp; if => //; [wp | call (: true)]. 
 qed.
 
 (** Reduction adversary reducing from MAL-BIND (Decaps Decaps case) to LEAK-BIND **)
@@ -3522,7 +3534,7 @@ module (R_HON_K_PKK_CT (S : Scheme) (A : Adv_HONBIND) : Adv_HONBIND) (O0 : Oracl
     
     (pk1', sk1') <@ S.keygen();
     
-    (c0, c1) <@ A(O0, O1).find(PKK_Binds_CT, pk0, pk1');
+    (c0, c1) <@ A(O0(S), O1(S)).find(PKK_Binds_CT, pk0, pk1');
     
     return (c0, c1);
   } 
@@ -3531,8 +3543,8 @@ module (R_HON_K_PKK_CT (S : Scheme) (A : Adv_HONBIND) : Adv_HONBIND) (O0 : Oracl
 lemma Eqv_HON_PKK_K_CT (S <: Scheme) (O0 <: Oracles_CCA1i{-S}) (O1 <: Oracles_CCA1i{-S, -O0})
                        (A <: Adv_HONBIND{-S, -O0, -O1}):
   (forall GS, phoare[S.keygen : glob S = GS ==> glob S = GS] = 1%r) =>
-  equiv[O0.init ~ O0.init : ={glob S, glob A} ==> ={glob O0}] =>
-  equiv[O1.init ~ O1.init : ={glob S, glob A} ==> ={glob O1}] =>
+  equiv[O0(S).init ~ O0(S).init : ={glob S, glob A} ==> ={glob O0}] =>
+  equiv[O1(S).init ~ O1(S).init : ={glob S, glob A} ==> ={glob O1}] =>
   equiv[HON_BIND(S, O0, O1, A).main ~ HON_BIND(S, O0, O1, R_HON_PKK_K_CT(S, A)).main :
           ={glob S, glob A} /\ arg{1} = K_Binds_CT /\ arg{2} = PKK_Binds_CT ==> ={res}].
 proof. admit. qed.
@@ -3562,8 +3574,8 @@ lemma Eqv_HON_KCT_K_CT_PK (S <: Scheme) (O0 <: Oracles_CCA1i{-S}) (O1 <: Oracles
 proof. 
 proc; inline *.
 wp; call (: true); call (: true).
-wp; call (: ={glob O0, glob O1}); 1,2: by sim.
-wp; do 2! call (: true).
+wp; call (: ={glob O0, glob O1, glob S}); 1,2: by sim.
+wp; do 2! (call (: ={glob S}); 1..3: by sim).
 seq 1 1 : (#pre /\ ={pk0, sk0}); 1: by call (: true).
 rcondf{1} 1; 1: by auto.
 rcondf{2} 1; 1: by auto => /> /#.
@@ -3595,14 +3607,14 @@ declare module O0 <: Oracles_CCA1i{-S}.
 declare module O1 <: Oracles_CCA1i{-S, -O0}.
 
 (* Losslessness (i.e., termination) assumption on the oracles' initialization *)
-declare axiom O0_init_ll : islossless O0.init.
-declare axiom O1_init_ll : islossless O1.init.
+declare axiom O0_init_ll : islossless O0(S).init.
+declare axiom O1_init_ll : islossless O1(S).init.
 
 (* Declare arbtirary HON-BIND adversary A *)
 declare module A <: Adv_HONBIND{-S, -O0, -O1}.
 
 (* Losslessness (i.e., termination) assumption on A's finding *)
-declare axiom A_find_ll : islossless A(O0, O1).find. 
+declare axiom A_find_ll : islossless A(O0(S), O1(S)).find. 
 
 (* 
   Auxiliary module equivalent to HON_BIND, but with certain variables 
@@ -3629,10 +3641,10 @@ local module HON_BIND_V = {
       (pk1, sk1) <@ S.keygen();
     }
     
-    O0.init(sk0);
-    O1.init(sk1);
+    O0(S).init(sk0);
+    O1(S).init(sk1);
     
-    (c0, c1) <@ A(O0, O1).find(bc, pk0, pk1);
+    (c0, c1) <@ A(O0(S), O1(S)).find(bc, pk0, pk1);
     
     k0 <@ S.decaps(sk0, c0);
     k1 <@ S.decaps(sk1, c1);
@@ -3672,8 +3684,8 @@ rewrite EqPr_HONBIND_V Pr[mu_split HON_BIND_V.pk0 <> HON_BIND_V.pk1] StdOrder.Re
   proc; inline *.
   seq 1 1 : (#pre /\ ={sk0} /\ HON_BIND_V.pk0{1} = pk0{2}); 1: by call (: true).
   wp; call (: true); call (: true); wp.
-  call (: ={glob O0, glob O1}); 1,2: by sim.
-  wp; call (: true); call (: true).
+  call (: ={glob O0, glob O1, glob S}); 1,2: by sim.
+  wp; do 2! (call (: ={glob S}); 1..3: by sim).
   rcondf{1} 1; 1: by auto.
   rcondf{2} 1; 1: by auto.
   by call (: true).
@@ -3951,5 +3963,6 @@ if => //.
 wp; call (: true); call (: true).
 by wp; call(: true); skip => /> /#.
 qed. 
-   
+
+ 
 end Relations.

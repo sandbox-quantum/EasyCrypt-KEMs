@@ -1,0 +1,117 @@
+(*^
+  This library generically defines Public-Key Encryption (PKE) schemes
+  and their properties (both correctness and security) for proofs 
+  in the Random Oracle Model (ROM). In essence, these are the 
+  regular definitions (defined in PublicKeyEncryption.eca) extended
+  with a (single) random oracle compatible with the ones in PROM.ec.
+  For further details about the definitions for PKE schemes and/or
+  random oracles, refer to the respective, aforementioned theories.
+^*)  
+(* Require/Import libraries *)
+require import AllCore List.
+require (*--*) PublicKeyEncryption.
+
+
+(* Types *)
+(** Public keys **)
+type pk_t.
+
+(** Secret keys **)
+type sk_t.
+
+(** Plaintext/messages **)
+type ptxt_t.
+
+(** Ciphertexts **)
+type ctxt_t.
+
+(* Inputs to the random oracle *)
+type in_t.
+
+(* Outputs of the random oracle *)
+type out_t.
+
+
+(* Clones and imports *)
+(** Definitions and properties for public key encryption schemes (non-ROM) **)
+clone import PublicKeyEncryption as PKE with
+  type pk_t <- pk_t,
+  type sk_t <- sk_t,
+  type ptxt_t <- ptxt_t,
+  type ctxt_t <- ctxt_t
+  
+  proof *.
+
+
+(* 
+  (Random) Oracles.
+  The definitions in this file only require regular random oracle that provide 
+  an initialization functionality (for when the oracle is stateful) and a 
+  query functionality. In particular, for the definitions in this file, the used 
+  random oracles are not required to be (re-)programmable. 
+  Nevertheless, for flexibility purposes, the utilized random oracles are compatible
+  with the random oracles considered in PROM.ec.
+*)
+(* 
+  Type for (random) oracles used in security games, 
+  exposing both the initialization functionality and the query functionality 
+*)
+module type Oraclei = {
+  proc init() : unit
+  proc get(x : in_t) : out_t
+}.
+
+(* 
+  Type for (random) oracles used in schemes and given to adversaries, 
+  exposing only the query functionality
+*)
+module type Oracle = {
+  proc get(x : in_t) : out_t
+}.
+
+
+(* Schemes *)
+(** PKE Schemes (interface with RO) **)
+module type Scheme_ROM (RO : Oracle) = {
+  include Scheme
+}.
+
+
+(* Correctness *)
+(** Correctness (probabilistic) program/game in the ROM **)
+module Correctness_ROM (RO : Oraclei, S : Scheme_ROM) = {
+  proc main(p : ptxt_t) : bool = {
+    var r : bool;
+    
+    RO.init();
+    
+    r <@ Correctness(S(RO)).main(p);
+    
+    return r;
+  }
+}.
+
+module S : Scheme = {
+  var x : int
+  proc keygen() : pk_t * sk_t = { return witness; }
+  proc enc(pk : pk_t, p : ptxt_t) : ctxt_t = { return witness; }
+  proc dec(sk : sk_t, c : ctxt_t) : ptxt_t option = { var t : int <- x; return witness; }
+
+}.
+
+
+print glob O_CCA1_Default(S).
+
+
+lemma test (S <: Scheme) (O <: Oracles_CCA1i{-S}) : true. admit. qed.
+
+
+lemma test2 (S <: Scheme{-O_CCA1_Default}) : true. move: (test S (O_CCA1_Default(S))). .h
+require DigitalSignatures.
+
+clone import DigitalSignatures as DS.
+import Stateless. 
+print Oracle_CMA.
+print O_CMA_Default.
+
+print glob O_CMA_Default.
