@@ -296,7 +296,7 @@ module type Adv_OWCCA2 (O : Oracles_CCA) = {
 }.
 
 (** OW-CCA2 security game **)
-module OW_CCA2 (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_OWCCA1) = {
+module OW_CCA2 (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_OWCCA2) = {
   proc main() : bool = {
     var pk : pk_t;
     var sk : sk_t;
@@ -632,7 +632,7 @@ module type Adv_NMCCA2 (O : Oracles_CCA) = {
 }.
 
 (** NM-CCA2 security game **)
-module NM_CCA2_P (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_NMCCA2) = {
+module NM_CCA2 (S : Scheme, O1 : Oracles_CCA1i, O2 : Oracles_CCA2i, A : Adv_NMCCA2) = {
   proc main(b : bool) : bool = {
     var pk : pk_t;
     var sk : sk_t;
@@ -694,7 +694,7 @@ module type Adv_ANOCPA = {
 
 (** ANO-CPA security game (sampled bit) **)
 module ANO_CPA (S : Scheme, A : Adv_ANOCPA) = {
-  proc main() = {
+  proc main() : bool = {
     var pk0, pk1 : pk_t;
     var sk0, sk1 : sk_t;
     var b, b' : bool;
@@ -718,7 +718,7 @@ module ANO_CPA (S : Scheme, A : Adv_ANOCPA) = {
 
 (** ANO-CPA security game (provided bit) **)
 module ANO_CPA_P (S : Scheme, A : Adv_ANOCPA) = {
-  proc main(b : bool) = {
+  proc main(b : bool) : bool = {
     var pk0, pk1 : pk_t;
     var sk0, sk1 : sk_t;
     var b' : bool;
@@ -756,7 +756,7 @@ module type Adv_ANOCCA1 (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
 
 (** ANO-CCA1 security game (sampled bit) **)
 module ANO_CCA1 (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_ANOCCA1) = {
-  proc main() = {
+  proc main() : bool = {
     var pk0, pk1 : pk_t;
     var sk0, sk1 : sk_t;
     var b, b' : bool;
@@ -780,7 +780,7 @@ module ANO_CCA1 (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_ANO
   }
 }.
 
-(** ANO-CCA1 security game (sampled bit) **)
+(** ANO-CCA1 security game (provided bit) **)
 module ANO_CCA1_P (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_ANOCCA1) = {
   proc main(b : bool) = {
     var pk0, pk1 : pk_t;
@@ -825,7 +825,7 @@ module ANO_CCA2 (S : Scheme)
                 (O01 : Oracles_CCA1i, O11 : Oracles_CCA1i)
                 (O02 : Oracles_CCA2i, O12 : Oracles_CCA2i)
                 (A : Adv_ANOCCA2) = {
-  proc main() = {
+  proc main() : bool = {
     var pk0, pk1 : pk_t;
     var sk0, sk1 : sk_t;
     var b, b' : bool;
@@ -851,7 +851,7 @@ module ANO_CCA2 (S : Scheme)
   }
 }.
 
-(** ANO-CCA2 security game (sampled bit) **)
+(** ANO-CCA2 security game (provided bit) **)
 module ANO_CCA2_P (S : Scheme)
                   (O01 : Oracles_CCA1i, O11 : Oracles_CCA1i)
                   (O02 : Oracles_CCA2i, O12 : Oracles_CCA2i)
