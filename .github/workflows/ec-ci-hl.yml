@@ -2,11 +2,16 @@ name: High-Level (Coordinating) Workflow Continuous Integration EasyCrypt Projec
 run-name: ${{ format('Branch "{0}" | Execute test "{1}" (in file "{2}") | See details for EasyCrypt version/branch.', github.ref_name, github.event.inputs.test-name || vars.DEFAULT_TEST_NAME, github.event.inputs.test-file || vars.DEFAULT_TEST_FILE) }}
 
 on:
-    # Always trigger on push and pull request to any branch. 
+    # Always trigger on push and pull request to any branch.
     # Checks related to executing branch/triggering event are delegated to jobs themselves.
-    # (Reason for this is that we cannot access contexts in on.push and on.pull_request.)   
+    # (Reason for this is that we cannot access contexts in on.push and on.pull_request.)
     push:
+      branches:
+        - 'main'
     pull_request:
+      branches:
+        - 'main', '*'
+
     # Enable manual execution of jobs (possibly with non-default configuration).
     workflow_dispatch:
         inputs:
@@ -29,14 +34,16 @@ jobs:
             ec-branch: ${{ github.event.inputs.ec-branch || vars.DEFAULT_EC_BRANCH }}
             test-file: ${{ github.event.inputs.test-file || vars.DEFAULT_TEST_FILE }}
             test-name: ${{ github.event.inputs.test-name || vars.DEFAULT_TEST_NAME }}
-    # Automatically executed job (on any push or pull request) for the default branch.
+
+    # Automatically executed job (on any push or pull request).
     check-default:
-        if: ${{ github.event_name != 'workflow_dispatch' && github.ref_name == github.event.repository.default_branch }}
+        if: ${{ github.event_name != 'workflow_dispatch' # && github.ref_name == github.event.repository.default_branch }}
         uses: ./.github/workflows/ec-ci-ll.yml
         with: # Use default configuration (defined in repository variables).
-            ec-branch: ${{ vars.DEFAULT_EC_BRANCH }} 
+            ec-branch: ${{ vars.DEFAULT_EC_BRANCH }}
             test-file: ${{ vars.DEFAULT_TEST_FILE }}
             test-name: ${{ vars.DEFAULT_TEST_NAME }}
+
     # Preprocessing step for check-merge-x job: Extracts 'x' from 'merge-x'.
     preprocess-merge-x:
         if: ${{ github.event_name != 'workflow_dispatch' && startsWith(github.ref_name, 'merge-') }}
