@@ -10,7 +10,8 @@ on:
         - 'main'
     pull_request:
       branches:
-        - 'main', '*'
+        - 'main'
+        - '*'
 
     # Enable manual execution of jobs (possibly with non-default configuration).
     workflow_dispatch:
