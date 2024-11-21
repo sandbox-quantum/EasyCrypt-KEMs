@@ -11,7 +11,7 @@
   - [Anonymous, Robust Post-Quantum Public Key Encryption](https://eprint.iacr.org/2021/708)
   - [A Modular Analysis of the Fujisaki-Okamoto Transformation](https://eprint.iacr.org/2017/604)
   - [Completely Non-Malleable Encryption Revisited](https://iacr.org/archive/pkc2008/49390068/49390068.pdf)
-    (TODO: Add more niche properties (complete non-malleability, plaintext awareness)))
+    (Missing properties: complete non-malleability, plaintext awareness)
 ^*)
 
 (* Require/Import libraries *)

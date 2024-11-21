@@ -12,7 +12,7 @@
   - [Keeping Up with the KEMs: Stronger Security Notions for KEMs and Automated Analysis of KEM-based Protocols](https://eprint.iacr.org/2023/1933)
   - [Unbindable Kemmy Schmidt: ML-KEM is neither MAL-BIND-K-CT nor MAL-BIND-K-PK](https://eprint.iacr.org/2024/523)
   - [On the Complete Non-Malleability of the Fujisaki-Okamoto Transform](https://eprint.iacr.org/2022/1654)
-    (TODO: Add complete non-malleability)
+    (Missing properties: complete non-malleability)
 ^*)
 
 (* Require/Import libraries *)
@@ -1837,8 +1837,15 @@ type bindconf = [
   Checks whether binding configuration considers
   the public key as a binding source element 
 **)
-op is_pkbc (bc : bindconf) =
+op is_pkbsc (bc : bindconf) =
   bc = PKK_Binds_CT \/ bc = PKCT_Binds_K.
+
+(** 
+  Checks whether binding configuration considers
+  the public key as a binding source element 
+**)
+op is_pkbtc (bc : bindconf) =
+  bc = K_Binds_PK \/ bc = CT_Binds_PK \/ bc = KCT_Binds_PK.    
 
 (** 
   Checks whether the provided values consitute a binding break w.r.t. the
@@ -1871,6 +1878,7 @@ op is_bindbreak (bc : bindconf) (k0 k1 : key_t) (pk0 pk1 : pk_t) (c0 c1 : ctxt_t
 *)
 (** Adversary class considered for HON-BIND **)
 module type Adv_HONBIND (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  proc choose(bc : bindconf) : bool { }
   proc find(bc : bindconf, pk0 : pk_t, pk1 : pk_t) : ctxt_t * ctxt_t
 }.
 
@@ -1879,16 +1887,24 @@ module HON_BIND (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_HON
   proc main(bc : bindconf) = {
     var pk0, pk1 : pk_t;
     var sk0, sk1 : sk_t;
+    var b : bool;
     var c0, c1 : ctxt_t;
     var k0, k1 : key_t option;
     var no_fail: bool;
     
     (pk0, sk0) <@ S.keygen();
     
-    if (is_pkbc bc) { 
+    if (is_pkbsc bc) { (* public key is binding source, equalize key pairs *)
       (pk1, sk1) <- (pk0, sk0);
-    } else {
+    } elif (is_pkbtc bc) { (* public key is binding target, independently generate key pairs *)
       (pk1, sk1) <@ S.keygen();
+    } else { (* neither of the above, let adversary choose what to do with key pairs *)
+      b <@ A(O0(S), O1(S)).choose(bc);
+      if (b) {
+        (pk1, sk1) <@ S.keygen();
+      } else {
+        (pk1, sk1) <- (pk0, sk0);
+      }
     }
     
     O0(S).init(sk0);
@@ -1913,6 +1929,7 @@ module HON_BIND (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_HON
 *)
 (** Adversary class considered for LEAK-BIND **)
 module type Adv_LEAKBIND = {
+  proc choose(bc : bindconf) : bool
   proc find(bc : bindconf, pk0 : pk_t, sk0 : sk_t, pk1 : pk_t, sk1 : sk_t) : ctxt_t * ctxt_t
 }.
 
@@ -1921,16 +1938,24 @@ module LEAK_BIND (S : Scheme, A : Adv_LEAKBIND) = {
   proc main(bc : bindconf) = {
     var pk0, pk1 : pk_t;
     var sk0, sk1 : sk_t;
+    var b : bool;
     var c0, c1 : ctxt_t;
     var k0, k1 : key_t option;
     var no_fail : bool;
     
     (pk0, sk0) <@ S.keygen();
     
-    if (is_pkbc bc) { 
+    if (is_pkbsc bc) { (* public key is binding source, equalize key pairs *)
       (pk1, sk1) <- (pk0, sk0);
-    } else {
+    } elif (is_pkbtc bc) { (* public key is binding target, independently generate key pairs *)
       (pk1, sk1) <@ S.keygen();
+    } else { (* neither of the above, let adversary choose what to do with key pairs *)
+      b <@ A.choose(bc);
+      if (b) {
+        (pk1, sk1) <@ S.keygen();
+      } else {
+        (pk1, sk1) <- (pk0, sk0);
+      }
     }
     
     (c0, c1) <@ A.find(bc, pk0, sk0, pk1, sk1);
@@ -3450,6 +3475,14 @@ module Keygen_Equal_PK (S : Scheme) = {
 
 (** Reduction adversary reducing from LEAK-BIND to HON-BIND **)
 module R_LEAK_HON (S : Scheme) (O0 : Oracles_CCA1i, O1 : Oracles_CCA1i) (A : Adv_HONBIND) : Adv_LEAKBIND = {
+  proc choose(bc : bindconf) : bool = {
+    var b : bool;
+    
+    b <@ A(O0(S), O1(S)).choose(bc);
+    
+    return b;
+  }
+   
   proc find(bc : bindconf, pk0 : pk_t, sk0 : sk_t, pk1 : pk_t, sk1 : sk_t) : ctxt_t * ctxt_t = {
     var c0, c1 : ctxt_t;
     
@@ -3476,7 +3509,10 @@ wp; call (: true); call (: true).
 wp; call (: ={glob O0, glob O1, glob S}); 1,2: by sim. 
 do 2! (call (: ={glob S}); 1..3: by sim).  
 seq 1 1 : (#pre /\ ={pk0, sk0}); 1: by sim.
-by wp; if => //; [wp | call (: true)]. 
+wp; if => //=; 1: by wp. 
+if => //=; 1: by call (: true).
+seq 1 3 : (#pre /\ ={b}); 1: by wp; call (: true); wp.
+by if => //; [call (: true) | wp]. 
 qed.
 
 (** Reduction adversary reducing from MAL-BIND (Decaps Decaps case) to LEAK-BIND **)
@@ -3484,16 +3520,24 @@ module R_MALDD_LEAK (S : Scheme) (A : Adv_LEAKBIND) : Adv_MALBIND_DD = {
   proc find(bc : bindconf) : sk_t * sk_t * ctxt_t * ctxt_t = {
     var pk0, pk1 : pk_t;
     var sk0, sk1 : sk_t;
+    var b : bool;
     var c0, c1 : ctxt_t;
     
     (pk0, sk0) <@ S.keygen();
     
-    if (is_pkbc bc) {
+    if (is_pkbsc bc) { (* public key is binding source, equalize key pairs *)
       (pk1, sk1) <- (pk0, sk0);
-    } else {
+    } elif (is_pkbtc bc) { (* public key is binding target, independently generate key pairs *)
       (pk1, sk1) <@ S.keygen();
-    }
-    
+    } else { (* neither of the above, let adversary choose what to do with key pairs *)
+      b <@ A.choose(bc);
+      if (b) {
+        (pk1, sk1) <@ S.keygen();
+      } else {
+        (pk1, sk1) <- (pk0, sk0);
+      }
+    } 
+       
     (c0, c1) <@ A.find(bc, pk0, sk0, pk1, sk1);
     
     return (sk0, sk1, c0, c1);
@@ -3513,44 +3557,65 @@ lemma Eqv_LEAKBIND_MALBINDDD (S <: Scheme) (A <: Adv_LEAKBIND{-S}) :
           ={glob S, glob A, arg} ==> ={res}].
 proof.
 move=> kg_sem.
-proc; inline *. 
+proc; inline *.
 wp; call (: true); call (: true).
 wp; call (: true); sp 0 1.
 seq 1 1 : (#pre /\ pk0{1} = pk00{2} /\ sk0{1} = sk00{2} /\ sk2pk sk0{1} = pk0{1}). 
 + call (: ={glob S} ==> ={glob S, res} /\ sk2pk res{1}.`2 = res{1}.`1) => //.
   by conseq (: ={glob S} ==> ={glob S, res}) kg_sem; proc true.
 if => //; 1: by wp.
+if => //=.
++ call (: ={glob S} ==> ={glob S, res} /\ sk2pk res{1}.`2 = res{1}.`1) => //.
+  + by conseq (: ={glob S} ==> ={glob S, res}) kg_sem; proc true.
+  by skip => /> /#. 
+seq 1 1 : (#pre /\ ={b}); 1: by wp; call (: true); wp.
+if => //; 2: by wp. 
 call (: ={glob S} ==> ={glob S, res} /\ sk2pk res{1}.`2 = res{1}.`1) => //.
 + by conseq (: ={glob S} ==> ={glob S, res}) kg_sem; proc true.
 by skip => /> /#.
 qed.
 
-(* Impossible?
+(** Reduction adversary reducing HON-BIND-K-CT and HON-BIND-PKK-CT **)
 module (R_HON_K_PKK_CT (S : Scheme) (A : Adv_HONBIND) : Adv_HONBIND) (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  proc choose(bc : bindconf) : bool = {
+    return false;
+  }
+    
   proc find(bc : bindconf, pk0 : pk_t, pk1 : pk_t) : ctxt_t * ctxt_t = {
     var c0, c1 : ctxt_t;
-    var pk1' : pk_t;
-    var sk1' : sk_t;
     
-    (pk1', sk1') <@ S.keygen();
-    
-    (c0, c1) <@ A(O0(S), O1(S)).find(PKK_Binds_CT, pk0, pk1');
+    (c0, c1) <@ A(O0, O1).find(PKK_Binds_CT, pk0, pk1);
     
     return (c0, c1);
   } 
 }.
 
+(**
+  Equivalence between HON-BIND-PKK-CT (for arbitrary adversary)
+  and HON-BIND-K-CT (with above reduction adversary).
+  (Shows HON-BIND-K-CT --> HON-BIND-PKK-CT.) 
+**)
 lemma Eqv_HON_PKK_K_CT (S <: Scheme) (O0 <: Oracles_CCA1i{-S}) (O1 <: Oracles_CCA1i{-S, -O0})
                        (A <: Adv_HONBIND{-S, -O0, -O1}):
-  (forall GS, phoare[S.keygen : glob S = GS ==> glob S = GS] = 1%r) =>
-  equiv[O0(S).init ~ O0(S).init : ={glob S, glob A} ==> ={glob O0}] =>
-  equiv[O1(S).init ~ O1(S).init : ={glob S, glob A} ==> ={glob O1}] =>
-  equiv[HON_BIND(S, O0, O1, A).main ~ HON_BIND(S, O0, O1, R_HON_PKK_K_CT(S, A)).main :
-          ={glob S, glob A} /\ arg{1} = K_Binds_CT /\ arg{2} = PKK_Binds_CT ==> ={res}].
-proof. admit. qed.
-*)
+  equiv[HON_BIND(S, O0, O1, A).main ~ HON_BIND(S, O0, O1, R_HON_K_PKK_CT(S, A)).main :
+          ={glob S, glob O0, glob O1, glob A} /\ arg{1} = PKK_Binds_CT /\ arg{2} = K_Binds_CT ==> ={res}].
+proof.
+proc; inline *.
+wp; call (: true); call (: true) => /=.
+wp; call (: ={glob S, glob O0, glob O1}); 1,2: by sim.
+wp; do 2! (call(: ={glob S}); 1..3: by sim).
+rcondt{1} 2; 1: by move=> &m; call (: true). 
+do 2! (rcondf{2} 2; 1: by move=> &m; call (: true)).  
+rcondf{2} 4; 1: by move=> &m; wp; call (: true).
+by wp; call (: true).
+qed.
+
 (** Reduction adversary reducing HON-BIND-K-PK and HON-BIND-CT-PK to HON-BIND-KCT-PK **)
 module (R_HON_K_CT_KCT_PK (A : Adv_HONBIND) : Adv_HONBIND) (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  proc choose(bc : bindconf) : bool = {
+    return witness;
+  }
+  
   proc find(bc : bindconf, pk0 : pk_t, pk1 : pk_t) : ctxt_t * ctxt_t = {
     var c0, c1 : ctxt_t;
     
@@ -3579,15 +3644,22 @@ wp; do 2! (call (: ={glob S}); 1..3: by sim).
 seq 1 1 : (#pre /\ ={pk0, sk0}); 1: by call (: true).
 rcondf{1} 1; 1: by auto.
 rcondf{2} 1; 1: by auto => /> /#.
-by call(: true); skip => /> /#.
-qed.
+rcondt{1} 1; 2: rcondt{2} 1; 1,2: by auto => /> /#. 
+by call (: true); skip => /> /#. 
+qed.  
 
 
 (** Reduction adversary reducing HON-BIND-CT-PK to HON-BIND-CT-K **)
-module (R_HON_CT_PK_K(A : Adv_HONBIND) : Adv_HONBIND) (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+module (R_HON_CT_PK_K (A : Adv_HONBIND) : Adv_HONBIND) (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  proc choose(bc : bindconf) : bool = {
+    return witness;
+  }
+  
   proc find(bc : bindconf, pk0 : pk_t, pk1 : pk_t) : ctxt_t * ctxt_t = {
+    var b : bool;
     var c0, c1 : ctxt_t;
     
+    b <@ A(O0, O1).choose(CT_Binds_K);
     (c0, c1) <@ A(O0, O1).find(CT_Binds_K, pk0, pk1);
     
     return (c0, c1);
@@ -3600,7 +3672,13 @@ section.
 declare module S <: Scheme.
 
 (* Losslessness (i.e., termination) assumption on S's decapsulation *)
+declare axiom S_keygen_ll : islossless S.keygen. 
 declare axiom S_decaps_ll : islossless S.decaps. 
+
+(* Determinism assumption on S's decapsulation *)
+declare op s_decaps : sk_t -> ctxt_t -> key_t option. 
+declare axiom S_decaps_det (sk' : sk_t) (c' : ctxt_t) : 
+  hoare[S.decaps : arg = (sk', c') ==> res = s_decaps sk' c'].
 
 (* Declare arbitrary CCA1 oracles O0 and O1 (with initialization) *)
 declare module O0 <: Oracles_CCA1i{-S}.
@@ -3614,6 +3692,7 @@ declare axiom O1_init_ll : islossless O1(S).init.
 declare module A <: Adv_HONBIND{-S, -O0, -O1}.
 
 (* Losslessness (i.e., termination) assumption on A's finding *)
+declare axiom A_choose_ll : islossless A(O0(S), O1(S)).choose. 
 declare axiom A_find_ll : islossless A(O0(S), O1(S)).find. 
 
 (* 
@@ -3621,25 +3700,29 @@ declare axiom A_find_ll : islossless A(O0(S), O1(S)).find.
   defined global instead of local (so we can refer to them in proofs).
 *)
 local module HON_BIND_V = {
-  var pk0 : pk_t
-  var pk1 : pk_t
+  var pk0, pk1 : pk_t
+  var b : bool
   
   proc main(bc : bindconf) : bool = {
-
-    var sk0 : sk_t;
-    var sk1 : sk_t;
-    var c0 : ctxt_t;
-    var c1 : ctxt_t;
-    var k0 : key_t option;
-    var k1 : key_t option;
+    var sk0, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
     var no_fail : bool;
     
     (pk0, sk0) <@ S.keygen();
-    if (is_pkbc bc) {
+    
+    if (is_pkbsc bc) { (* public key is binding source, equalize key pairs *)
       (pk1, sk1) <- (pk0, sk0);
-    } else { 
+    } elif (is_pkbtc bc) { (* public key is binding target, independently generate key pairs *)
       (pk1, sk1) <@ S.keygen();
-    }
+    } else { (* neither of the above, let adversary choose what to do with key pairs *)
+      b <@ A(O0(S), O1(S)).choose(bc);
+      if (b) {
+        (pk1, sk1) <@ S.keygen();
+      } else {
+        (pk1, sk1) <- (pk0, sk0);
+      }
+    } 
     
     O0(S).init(sk0);
     O1(S).init(sk1);
@@ -3679,29 +3762,100 @@ lemma Bnd_HON_CT_K_PK &m :
   +
   Pr[Keygen_Equal_PK(S).main() @ &m : res].
 proof.
-rewrite EqPr_HONBIND_V Pr[mu_split HON_BIND_V.pk0 <> HON_BIND_V.pk1] StdOrder.RealOrder.ler_add.
+rewrite EqPr_HONBIND_V Pr[mu_split HON_BIND_V.b].
+have -> /=:
+  Pr[HON_BIND_V.main(CT_Binds_K) @ &m : res /\ !HON_BIND_V.b] = 0%r. 
++ byphoare (: arg = CT_Binds_K ==> _) => //=. 
+  hoare; proc.
+  do 2! (rcondf 2; 1: by call (: true)). 
+  seq 2 : #pre; 1: by call (: true); call (: true). 
+  case HON_BIND_V.b; 1: by conseq (: _ ==> true) => />. 
+  rcondf 1 => //.
+  seq 4 : (#pre /\ sk0 = sk1 /\ HON_BIND_V.pk0 = HON_BIND_V.pk1).
+  + by sp 1; conseq (: _ ==> true) => />. 
+  case (c0 = c1); 2: by conseq (: _ ==> true) => />.
+  exlim sk0, c0 => skt ct. 
+  by wp; do 2! (call (S_decaps_det skt ct)).
+rewrite Pr[mu_split HON_BIND_V.pk0 <> HON_BIND_V.pk1] StdOrder.RealOrder.ler_add.
 + byequiv (: ={glob S, glob O0, glob O1, glob A} /\ bc{1} = CT_Binds_K /\ bc{2} = CT_Binds_PK ==> _) => //.
   proc; inline *.
   seq 1 1 : (#pre /\ ={sk0} /\ HON_BIND_V.pk0{1} = pk0{2}); 1: by call (: true).
+  do 2! (rcondf{1} 1; 1: by auto).
+  rcondf{2} 1; 1: by auto.
+  rcondt{2} 1; 1: by auto.
+  swap{2} 7 -6.
+  seq 1 1 : (#pre /\ HON_BIND_V.b{1} = b0{2}); 1: by call (: true). 
+  case (!HON_BIND_V.b{1}).
+  + conseq (: _ ==> true) => //.
+    rcondf{1} 1; 1: by auto.
+    wp; do 2! (call{1} S_decaps_ll; call{2} S_decaps_ll). 
+    wp; call{1} A_find_ll; call{2} A_find_ll. 
+    wp; call{1} O1_init_ll; call{2} O1_init_ll.
+    call{1} O0_init_ll; call{2} O0_init_ll.
+    by wp; call{2} S_keygen_ll.     
   wp; call (: true); call (: true); wp.
   call (: ={glob O0, glob O1, glob S}); 1,2: by sim.
   wp; do 2! (call (: ={glob S}); 1..3: by sim).
-  rcondf{1} 1; 1: by auto.
-  rcondf{2} 1; 1: by auto.
-  by call (: true).
-byequiv => //.
+  rcondt{1} 1; 1: by auto.
+  by call (: true); skip => />.
+byequiv (: ={glob S} /\ bc{1} = CT_Binds_K ==> _) => //.
 proc; inline *.
-rcondf{1} 2; 1: by move=> ?; call(: true).
+do 2! (rcondf{1} 2; 1: by move=> ?; call(: true)).
+swap{1} 2 -1; seq 1 0 : #pre; 1: by call{1} A_choose_ll.
 wp; call{1} S_decaps_ll; call{1} S_decaps_ll; call{1} A_find_ll.
 call{1} O1_init_ll; call{1} O0_init_ll.
-by do 2! call (: true).
+seq 1 1 : (#pre /\ HON_BIND_V.pk0{1} = pk0{2}); 1: by call (: true). 
+case (!HON_BIND_V.b{1}).
++ conseq (: _ ==> true) => //.
+  rcondf{1} 1; 1: by auto. 
+  by wp; call{2} S_keygen_ll. 
+rcondt{1} 1; 1: by auto. 
+by call (: true).
 qed.
 
 end section.
 
 
+(** Reduction adversary reducing LEAK-BIND-K-CT and LEAK-BIND-PKK-CT **)
+module (R_LEAK_K_PKK_CT (A : Adv_LEAKBIND) : Adv_LEAKBIND) = {
+  proc choose(bc : bindconf) : bool = {
+    return false;
+  }
+    
+  proc find(bc : bindconf, pk0 : pk_t, sk0 : sk_t, pk1 : pk_t, sk1 : sk_t) : ctxt_t * ctxt_t = {
+    var c0, c1 : ctxt_t;
+    
+    (c0, c1) <@ A.find(PKK_Binds_CT, pk0, sk0, pk1, sk1);
+    
+    return (c0, c1);
+  } 
+}.
+
+(**
+  Equivalence between LEAK-BIND-PKK-CT (for arbitrary adversary)
+  and LEAK-BIND-K-CT (with above reduction adversary).
+  (Shows LEAK-BIND-K-CT --> LEAK-BIND-PKK-CT.) 
+**)
+lemma Eqv_LEAK_PKK_K_CT (S <: Scheme) (A <: Adv_LEAKBIND{-S}):
+  equiv[LEAK_BIND(S, A).main ~ LEAK_BIND(S, R_LEAK_K_PKK_CT(A)).main :
+          ={glob S, glob A} /\ arg{1} = PKK_Binds_CT /\ arg{2} = K_Binds_CT ==> ={res}].
+proof.
+proc; inline *.
+wp; call (: true); call (: true) => /=.
+wp; call (: true); wp.
+rcondt{1} 2; 1: by move=> &m; call (: true). 
+do 2! (rcondf{2} 2; 1: by move=> &m; call (: true)).  
+rcondf{2} 4; 1: by move=> &m; wp; call (: true).
+by wp; call (: true).
+qed.
+
+
 (** Reduction adversary reducing LEAK-BIND-K-PK and LEAK-BIND-CT-PK to LEAK-BIND-KCT-PK **)
 module R_LEAK_K_CT_KCT_PK (A : Adv_LEAKBIND) : Adv_LEAKBIND = {
+  proc choose(bc : bindconf) : bool = {
+    return witness;
+  }
+   
   proc find(bc : bindconf, pk0 : pk_t, sk0 : sk_t, pk1 : pk_t, sk1 : sk_t) : ctxt_t * ctxt_t = {
     var c0, c1 : ctxt_t;
     
@@ -3721,22 +3875,29 @@ lemma Eqv_LEAK_KCT_K_CT_PK (S <: Scheme) (A <: Adv_LEAKBIND{-S}):
           ={glob S, glob A} /\ arg{1} = KCT_Binds_PK /\ (arg{2} = K_Binds_PK \/ arg{2} = CT_Binds_PK) 
           ==> 
           res{1} => res{2}].
-proof. 
+proof.
 proc; inline *.
 wp; call (: true); call (: true).
 wp; call (: true); wp. 
 seq 1 1 : (#pre /\ ={pk0, sk0}); 1: by call (: true).
 rcondf{1} 1; 1: by auto.
 rcondf{2} 1; 1: by auto => /> /#.
-by call(: true); skip => /> /#.
+rcondt{1} 1; 2: rcondt{2} 1; 1,2: by auto => /> /#. 
+by call (: true); skip => /> /#.
 qed.
 
 
 (** Reduction adversary reducing LEAK-BIND-CT-PK to LEAK-BIND-CT-K **)
 module R_LEAK_CT_PK_K (A : Adv_LEAKBIND) : Adv_LEAKBIND = {
+  proc choose(bc : bindconf) : bool = {
+    return witness;
+  }
+  
   proc find(bc : bindconf, pk0 : pk_t, sk0 : sk_t, pk1 : pk_t, sk1 : sk_t) : ctxt_t * ctxt_t = {
+    var b : bool;
     var c0, c1 : ctxt_t;
     
+    b <@ A.choose(CT_Binds_K);
     (c0, c1) <@ A.find(CT_Binds_K, pk0, sk0, pk1, sk1);
     
     return (c0, c1);
@@ -3749,12 +3910,19 @@ section.
 declare module S <: Scheme.
 
 (* Losslessness (i.e., termination) assumption on S's decapsulation *)
+declare axiom S_keygen_ll : islossless S.keygen. 
 declare axiom S_decaps_ll : islossless S.decaps. 
 
+(* Determinism assumption on S's decapsulation *)
+declare op s_decaps : sk_t -> ctxt_t -> key_t option. 
+declare axiom S_decaps_det (sk' : sk_t) (c' : ctxt_t) : 
+  hoare[S.decaps : arg = (sk', c') ==> res = s_decaps sk' c'].
+  
 (* Declare arbtirary LEAK-BIND adversary A *)
 declare module A <: Adv_LEAKBIND{-S}.
 
-(* Losslessness (i.e., termination) assumption on A's finding *)
+(* Losslessness (i.e., termination) assumption on A's choosing and finding *)
+declare axiom A_choose_ll : islossless A.choose. 
 declare axiom A_find_ll : islossless A.find. 
 
 (* 
@@ -3762,25 +3930,29 @@ declare axiom A_find_ll : islossless A.find.
   defined global instead of local (so we can refer to them in proofs).
 *)
 local module LEAK_BIND_V = {
-  var pk0 : pk_t
-  var pk1 : pk_t
+  var pk0, pk1 : pk_t
+  var b : bool
   
   proc main(bc : bindconf) : bool = {
-
-    var sk0 : sk_t;
-    var sk1 : sk_t;
-    var c0 : ctxt_t;
-    var c1 : ctxt_t;
-    var k0 : key_t option;
-    var k1 : key_t option;
+    var sk0, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
     var no_fail : bool;
     
     (pk0, sk0) <@ S.keygen();
-    if (is_pkbc bc) {
+    
+    if (is_pkbsc bc) { (* public key is binding source, equalize key pairs *)
       (pk1, sk1) <- (pk0, sk0);
-    } else { 
+    } elif (is_pkbtc bc) { (* public key is binding target, independently generate key pairs *)
       (pk1, sk1) <@ S.keygen();
-    }
+    } else { (* neither of the above, let adversary choose what to do with key pairs *)
+      b <@ A.choose(bc);
+      if (b) {
+        (pk1, sk1) <@ S.keygen();
+      } else {
+        (pk1, sk1) <- (pk0, sk0);
+      }
+    } 
     
     (c0, c1) <@ A.find(bc, pk0, sk0, pk1, sk1);
     
@@ -3817,20 +3989,51 @@ lemma Bnd_LEAK_CT_K_PK &m :
   +
   Pr[Keygen_Equal_PK(S).main() @ &m : res].
 proof.
-rewrite EqPr_LEAKBIND_V Pr[mu_split LEAK_BIND_V.pk0 <> LEAK_BIND_V.pk1] StdOrder.RealOrder.ler_add.
+rewrite EqPr_LEAKBIND_V Pr[mu_split LEAK_BIND_V.b].
+have -> /=:
+  Pr[LEAK_BIND_V.main(CT_Binds_K) @ &m : res /\ !LEAK_BIND_V.b] = 0%r. 
++ byphoare (: arg = CT_Binds_K ==> _) => //=. 
+  hoare; proc.
+  do 2! (rcondf 2; 1: by call (: true)). 
+  seq 2 : #pre; 1: by call (: true); call (: true). 
+  case LEAK_BIND_V.b; 1: by conseq (: _ ==> true) => />. 
+  rcondf 1 => //.
+  seq 2 : (#pre /\ sk0 = sk1 /\ LEAK_BIND_V.pk0 = LEAK_BIND_V.pk1).
+  + by sp 1; conseq (: _ ==> true) => />. 
+  case (c0 = c1); 2: by conseq (: _ ==> true) => />.
+  exlim sk0, c0 => skt ct. 
+  by wp; do 2! (call (S_decaps_det skt ct)).
+rewrite Pr[mu_split LEAK_BIND_V.pk0 <> LEAK_BIND_V.pk1] StdOrder.RealOrder.ler_add.
 + byequiv (: ={glob S, glob A} /\ bc{1} = CT_Binds_K /\ bc{2} = CT_Binds_PK ==> _) => //.
   proc; inline *.
   seq 1 1 : (#pre /\ ={sk0} /\ LEAK_BIND_V.pk0{1} = pk0{2}); 1: by call (: true).
-  wp; call (: true); call (: true); wp.
-  call (: true); wp.
-  rcondf{1} 1; 1: by auto.
+  do 2! (rcondf{1} 1; 1: by auto).
   rcondf{2} 1; 1: by auto.
-  by call (: true).
-byequiv => //.
+  rcondt{2} 1; 1: by auto.
+  swap{2} 7 -6.
+  seq 1 1 : (#pre /\ LEAK_BIND_V.b{1} = b0{2}); 1: by call (: true). 
+  case (!LEAK_BIND_V.b{1}).
+  + conseq (: _ ==> true) => //.
+    rcondf{1} 1; 1: by auto.
+    wp; do 2! (call{1} S_decaps_ll; call{2} S_decaps_ll). 
+    wp; call{1} A_find_ll; call{2} A_find_ll. 
+    by wp; call{2} S_keygen_ll.     
+  wp; call (: true); call (: true).
+  wp; call (: true).
+  rcondt{1} 1; 1: by auto.
+  by wp; call (: true); skip => />.
+byequiv (: ={glob S} /\ bc{1} = CT_Binds_K ==> _) => //.
 proc; inline *.
-rcondf{1} 2; 1: by move=> ?; call(: true).
+do 2! (rcondf{1} 2; 1: by move=> ?; call(: true)).
+swap{1} 2 -1; seq 1 0 : #pre; 1: by call{1} A_choose_ll.
 wp; call{1} S_decaps_ll; call{1} S_decaps_ll; call{1} A_find_ll.
-by do 2! call (: true).
+seq 1 1 : (#pre /\ LEAK_BIND_V.pk0{1} = pk0{2}); 1: by call (: true). 
+case (!LEAK_BIND_V.b{1}).
++ conseq (: _ ==> true) => //.
+  rcondf{1} 1; 1: by auto. 
+  by wp; call{2} S_keygen_ll. 
+rcondt{1} 1; 1: by auto. 
+by call (: true).
 qed.
 
 end section.
@@ -3964,5 +4167,5 @@ wp; call (: true); call (: true).
 by wp; call(: true); skip => /> /#.
 qed. 
 
- 
+
 end Relations.

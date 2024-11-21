@@ -1,5 +1,7 @@
 require import AllCore.
 require KeyEncapsulationMechanisms PublicKeyEncryption.
+require PublicKeyEncryptionROM.
+
 
 
 (* Types *)
@@ -12,10 +14,26 @@ type sk_t.
 (** Shared/session keys (symmetric) **)
 type key_t.
 
+(** Plaintexts **)
+type ptxt_t = key_t.
+
 (** Ciphertexts/Encapsulations **)
 type ctxt_t.
 
+(** Randomness **)
+type rand_t.
 
 
+(* Clones and imports *)
 (** Import basic PKE and KEM definitions **)
-clone import PublicKeyEncryption as PKE.
+clone import PublicKeyEncryptionROM as PKEROM with
+  type pk_t <- pk_t,
+  type sk_t <- sk_t,
+  type ptxt_t <- ptxt_t,
+  type ctxt_t <- ctxt_t,
+  
+  type in_t <- ptxt_t,
+  type out_t <- rand_t.
+
+import PKE F_RO.
+import DeltaCorrectROM.

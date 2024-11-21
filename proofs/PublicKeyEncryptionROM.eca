@@ -5,7 +5,7 @@
   regular definitions (defined in PublicKeyEncryption.eca) extended
   with a (single) random oracle compatible with the ones in PROM.ec.
   For further details about the definitions for PKE schemes and/or
-  random oracles, refer to the respective, aforementioned theories.
+  random oracles, refer to the respective theories.
 ^*)  
 (* Require/Import libraries *)
 require import AllCore List PROM.
@@ -33,7 +33,7 @@ type out_t.
 
 
 (* Clones and imports *)
-(** Definitions and properties for public key encryption schemes (non-ROM) **)
+(* Definitions and properties for public key encryption schemes (non-ROM) *)
 clone import PublicKeyEncryption as PKE with
   type pk_t <- pk_t,
   type sk_t <- sk_t,
@@ -42,7 +42,7 @@ clone import PublicKeyEncryption as PKE with
   
   proof *.
 
-(** Definitions for random oracles **)
+(* Definitions for random oracles *)
 clone import FullRO as F_RO with 
   type in_t <- in_t,
   type out_t <- out_t
@@ -77,15 +77,15 @@ module type RandomOracle = {
 }.
 
 
-(* Schemes *)
-(** PKE Schemes (interface with RO) **)
+(* Schemes in ROM *)
+(** PKE in ROM **)
 module type Scheme_ROM (RO : RandomOracle) = {
   include Scheme
 }.
 
 
-(* Correctness *)
-(** Correctness (probabilistic) program/game in the ROM **)
+(* Correctness in ROM *)
+(** Correctness (probabilistic) program/game in ROM **)
 module Correctness_ROM (RO : RandomOraclei, S : Scheme_ROM) = {
   proc main(p : ptxt_t) : bool = {
     var r : bool;
@@ -99,44 +99,43 @@ module Correctness_ROM (RO : RandomOraclei, S : Scheme_ROM) = {
 }.
 
 
-(* Attacker capabilities/models *)
+(* Attacker capabilities/models in ROM *)
 (* 
-  Chosen-Plaintext Attacks (CPA).
+  Chosen-Plaintext Attacks (CPA) in ROM.
   The adversary is given the considered public key and, hence, 
   is able to produce ciphertexts corresponding to chosen plaintexts.
 *)
 
 (* 
-  non-adaptive Chosen-Ciphertext Attacks (CCA1)
+  non-adaptive Chosen-Ciphertext Attacks (CCA1) in ROM.
   The adversary is given the considered public key and access to a decryption oracle
   *before* the stage in which it is expected to distinguish/return a break.
   Hence, the adversary is able to produce ciphertext corresponding to chosen plaintexts
   *and* query for decryptions of chosen ciphertexts.
 *)
-(* Oracles *)
-(** Interface for oracles employed in CCA1 security games, w.r.t. random oracle **)
+(** Interface for oracles employed in CCA1 security games in ROM **)
 module type Oracles_CCA1i_ROM (RO : RandomOracle) (S : Scheme)  = {
   proc init(sk_init : sk_t) : unit
   proc dec(c : ctxt_t) : ptxt_t option
 }.
 
 (* 
-  adaptive Chosen-Ciphertext Attacks (CCA2)
+  adaptive Chosen-Ciphertext Attacks (CCA2) in ROM.
   The adversary is given the considered public key and access to a decryption oracle throughout.  
   Hence, the adversary is able to produce ciphertext corresponding to chosen plaintexts
   *and* query for decryptions of chosen ciphertexts (potentially barring ciphertexts
   that are part of the challenge).
 *)
-(** Interface for oracles employed in (the second stage of) CCA2 security games, w.r.t. random oracle **)
+(** Interface for oracles employed in (the second stage of) CCA2 security games in ROM **)
 module type Oracles_CCA2i_ROM (RO : RandomOracle) (S : Scheme) = {
   proc init(sk_init : sk_t, c'_init : ctxt_t) : unit
   proc dec(c : ctxt_t) : ptxt_t option
 }.
 
 
-(* Properties (regular) *)
+(* Security (regular) in ROM *)
 (**
-  One-Wayness (OW).
+  One-Wayness (OW) in ROM.
   The adversary is asked to produce the message/plaintext 
   encrypted by a given ciphertext.
 **)
@@ -150,14 +149,16 @@ abstract theory OWROM.
 **)
 op dptxtm : pk_t -> ptxt_t distr.
 
+
 (* Clone and import definitions from OW theory (in non-ROM PKE scheme theory) *)
 clone import OW with 
   op dptxtm <- dptxtm
   
   proof *.
 
+
 (*
-  One-Wayness under Chosen-Plaintext Attacks (OW-CPA).
+  One-Wayness under Chosen-Plaintext Attacks (OW-CPA) in ROM.
   In a CPA setting, the adversary is asked to produce the message/plaintext 
   encrypted by a given ciphertext.
 *)
@@ -180,7 +181,7 @@ module OW_CPA_ROM (RO : RandomOraclei, S : Scheme_ROM, A : Adv_OWCPA_ROM) = {
 }.
 
 (*
-  One-Wayness under non-adaptive Chosen-Ciphertext Attacks (OW-CCA1).
+  One-Wayness under non-adaptive Chosen-Ciphertext Attacks (OW-CCA1) in ROM.
   In a CCA1 setting, the adversary is asked to produce the message/plaintext 
   encrypted by a given ciphertext.
 *)
@@ -205,7 +206,7 @@ module OW_CCA1_ROM (RO : RandomOraclei, S : Scheme_ROM, O : Oracles_CCA1i_ROM, A
 
 
 (*
-  One-Wayness under adaptive Chosen-Ciphertext Attacks (OW-CCA2).
+  One-Wayness under adaptive Chosen-Ciphertext Attacks (OW-CCA2) in ROM.
   In a CCA2 setting, the adversary is asked to produce the message/plaintext 
   encrypted by a given ciphertext.
 *)
@@ -216,9 +217,9 @@ module type Adv_OWCCA2_ROM (RO : RandomOracle) (O : Oracles_CCA) = {
 }.
 
 (** OW-CCA2 security game in ROM **)
-module OW_CCA2_ROM (RO : RandomOraclei, S : Scheme_ROM, 
-                    O1 : Oracles_CCA1i_ROM, O2 : Oracles_CCA2i_ROM, 
-                    A : Adv_OWCCA2_ROM) = {
+module OW_CCA2_ROM (RO : RandomOraclei) (S : Scheme_ROM) 
+                   (O1 : Oracles_CCA1i_ROM, O2 : Oracles_CCA2i_ROM) 
+                   (A : Adv_OWCCA2_ROM) = {
   proc main() : bool = {
     var r : bool; 
     
@@ -234,12 +235,12 @@ end OWROM.
 
 
 (* 
-  (ciphertext) INDistinguishability (IND).
+  (ciphertext) INDistinguishability (IND) in ROM.
   The adversary is asked to provide two plaintexts and, subsequently,
   determine which of these plaintexts is encrypted by a given ciphertext.
 *)
 (*
-  (ciphertext) INDistinguishability under Chosen-Plaintext Attacks (IND-CPA).
+  (ciphertext) INDistinguishability under Chosen-Plaintext Attacks (IND-CPA) in ROM.
   In a CPA setting, the adversary is asked to provide two plaintexts and, subsequently,
   determine which of these plaintexts is encrypted by a given ciphertext.
 *)
@@ -276,7 +277,7 @@ module IND_CPA_P_ROM (RO: RandomOraclei, S : Scheme_ROM, A : Adv_INDCPA_ROM) = {
 
 
 (*
-  (ciphertext) INDistinguishability under non-adaptive Chosen-Ciphertext Attacks (IND-CCA1).
+  (ciphertext) INDistinguishability under non-adaptive Chosen-Ciphertext Attacks (IND-CCA1) in ROM.
   In a CCA1 setting, the adversary is asked to provide two plaintexts and, subsequently,
   determine which of these plaintexts is encrypted by a given ciphertext.
 *)
@@ -314,7 +315,7 @@ module IND_CCA1_P_ROM (RO : RandomOraclei, S : Scheme_ROM, O : Oracles_CCA1i_ROM
 
 
 (*
-  (ciphertext) INDistinguishability under adaptive Chosen-Ciphertext Attacks (IND-CCA2).
+  (ciphertext) INDistinguishability under adaptive Chosen-Ciphertext Attacks (IND-CCA2) in ROM.
   In a CCA2 setting, the adversary is asked to provide two plaintexts and, subsequently,
   determine which of these plaintexts is encrypted by a given ciphertext.
 *)
@@ -324,10 +325,10 @@ module type Adv_INDCCA2_ROM (RO : RandomOracle) (O : Oracles_CCA) = {
   proc distinguish(c : ctxt_t) : bool
 }.
 
-(** IND-CCA2 security game (sampled bit) **)
-module IND_CCA2_ROM (RO : RandomOraclei, S : Scheme_ROM, 
-                     O1 : Oracles_CCA1i_ROM,  O2 : Oracles_CCA2i_ROM,
-                     A : Adv_INDCCA2_ROM) = {
+(** IND-CCA2 security game (sampled bit) in ROM **)
+module IND_CCA2_ROM (RO : RandomOraclei) (S : Scheme_ROM) 
+                    (O1 : Oracles_CCA1i_ROM, O2 : Oracles_CCA2i_ROM)
+                    (A : Adv_INDCCA2_ROM) = {
   proc main() : bool = {
     var r : bool; 
     
@@ -339,10 +340,10 @@ module IND_CCA2_ROM (RO : RandomOraclei, S : Scheme_ROM,
   }
 }.
 
-(** IND-CCA2 security game (provided bit) **)
-module IND_CCA2_P_ROM (RO : RandomOraclei, S : Scheme_ROM, 
-                       O1 : Oracles_CCA1i_ROM,  O2 : Oracles_CCA2i_ROM,
-                       A : Adv_INDCCA2_ROM) = {
+(** IND-CCA2 security game (provided bit) in ROM **)
+module IND_CCA2_P_ROM (RO : RandomOraclei) (S : Scheme_ROM) 
+                      (O1 : Oracles_CCA1i_ROM, O2 : Oracles_CCA2i_ROM)
+                      (A : Adv_INDCCA2_ROM) = {
   proc main(b : bool) : bool = {
     var r : bool; 
     
@@ -356,7 +357,7 @@ module IND_CCA2_P_ROM (RO : RandomOraclei, S : Scheme_ROM,
 
 
 (** 
-  Non-Malleability (NM).
+  Non-Malleability (NM) in ROM.
   The adversary is asked to provide a relation (say R) and
   a list of ciphertexts such that the plaintexts obtained from decrypting these
   ciphertexts are related (under R) to the plaintext corresponding to a given ciphertext.
@@ -385,9 +386,9 @@ clone import NM with
   proof *.
   
   
-(* Properties *)
+(* Properties in ROM *)
 (*
-  Non-Malleability under Chosen-Plaintext Attacks (NM-CPA)
+  Non-Malleability under Chosen-Plaintext Attacks (NM-CPA) in ROM.
   In a CPA setting, the adversary is asked to provide a relation (say R) and
   a list of ciphertexts such that the plaintexts obtained from decrypting these
   ciphertexts are related (under R) to the plaintext corresponding to a given ciphertext.
@@ -412,7 +413,7 @@ module NM_CPA_ROM (RO : RandomOraclei, S : Scheme_ROM, A : Adv_NMCPA_ROM) = {
 
 
 (*
-  Non-Malleability under non-adaptive Chosen-Plaintext Attacks (NM-CCA1)
+  Non-Malleability under non-adaptive Chosen-Plaintext Attacks (NM-CCA1) in ROM.
   In a CCA1 setting, the adversary is asked to provide a relation (say R) and
   a list of ciphertexts such that the plaintexts obtained from decrypting these
   ciphertexts are related (under R) to the plaintext corresponding to a given ciphertext.
@@ -438,7 +439,7 @@ module NM_CCA1_ROM (RO : RandomOraclei, S : Scheme_ROM, O : Oracles_CCA1i_ROM, A
 
 
 (*
-  Non-Malleability under adaptive Chosen-Plaintext Attacks (NM-CCA2)
+  Non-Malleability under adaptive Chosen-Plaintext Attacks (NM-CCA2) in ROM.
   In a CCA2 setting, the adversary is asked to provide a relation (say R) and
   a list of ciphertexts such that the plaintexts obtained from decrypting these
   ciphertexts are related (under R) to the plaintext corresponding to a given ciphertext.
@@ -468,16 +469,16 @@ end NMROM.
 
 
 (* 
-  ANOnymity (ANO). 
-  (Alternatively: Indistinguishability of (public) Keys (IK).)
+  ANOnymity (ANO) in ROM. 
+  (Alternatively: Indistinguishability of (public) Keys (IK) in ROM.)
   First, the adversary is given two (honestly generated) public keys and asked
   to provide a plaintext. Subsequently, the adversary is given the encryption (under one of
   the aforementioned public keys) of the plaintext it provided and asked to determine which
   public key was used for the encryption.
 *)
 (*
-  ANOnymity under Chosen-Plaintext attack (ANO-CPA).
-  (Alternatively: Indistinguishability of (public) Keys under Chosen-Plaintext Attack (IK-CPA).)
+  ANOnymity under Chosen-Plaintext attack (ANO-CPA) in ROM.
+  (Alternatively: Indistinguishability of (public) Keys under Chosen-Plaintext Attack (IK-CPA) in ROM.)
   In a CPA setting, first, the adversary is given two (honestly generated) public keys and asked
   to provide a plaintext. Subsequently, the adversary is given the encryption (under one of
   the aforementioned public keys) of the plaintext it provided and asked to determine which
@@ -516,9 +517,9 @@ module ANO_CPA_P_ROM (RO : RandomOraclei, S : Scheme_ROM, A : Adv_ANOCPA_ROM) = 
 
 
 (*
-  ANOnymity under non-adaptive Chosen-Plaintext attack (ANO-CCA1).
+  ANOnymity under non-adaptive Chosen-Plaintext attack (ANO-CCA1) in ROM.
   (Alternatively: Indistinguishability of (public) Keys under 
-   non-adaptive Chosen-Ciphertext Attack (IK-CCA1).)
+   non-adaptive Chosen-Ciphertext Attack (IK-CCA1) in ROM.)
   In a CCA1 setting, first, the adversary is given two (honestly generated) public keys and asked
   to provide a plaintext. Subsequently, the adversary is given the encryption (under one of
   the aforementioned public keys) of the plaintext it provided and asked to determine which
@@ -531,9 +532,9 @@ module type Adv_ANOCCA1_ROM (RO : RandomOracle) (O0 : Oracles_CCA, O1 : Oracles_
 }.
 
 (** ANO-CCA1 security game (sampled bit) in ROM **)
-module ANO_CCA1_ROM (RO : RandomOraclei, S : Scheme_ROM, 
-                     O0 : Oracles_CCA1i_ROM, O1 : Oracles_CCA1i_ROM, 
-                     A : Adv_ANOCCA1_ROM) = {
+module ANO_CCA1_ROM (RO : RandomOraclei) (S : Scheme_ROM) 
+                    (O0 : Oracles_CCA1i_ROM, O1 : Oracles_CCA1i_ROM) 
+                    (A : Adv_ANOCCA1_ROM) = {
   proc main() : bool = {
     var r : bool;
     
@@ -546,9 +547,9 @@ module ANO_CCA1_ROM (RO : RandomOraclei, S : Scheme_ROM,
 }.
 
 (** ANO-CCA1 security game (provided bit) in ROM **)
-module ANO_CCA1_P_ROM (RO : RandomOraclei, S : Scheme_ROM, 
-                       O0 : Oracles_CCA1i_ROM, O1 : Oracles_CCA1i_ROM, 
-                       A : Adv_ANOCCA1_ROM) = {
+module ANO_CCA1_P_ROM (RO : RandomOraclei) (S : Scheme_ROM) 
+                      (O0 : Oracles_CCA1i_ROM, O1 : Oracles_CCA1i_ROM) 
+                      (A : Adv_ANOCCA1_ROM) = {
   proc main(b : bool) : bool = {
     var r : bool;
     
@@ -562,9 +563,9 @@ module ANO_CCA1_P_ROM (RO : RandomOraclei, S : Scheme_ROM,
 
 
 (*
-  ANOnymity under adaptive Chosen-Plaintext attack (ANO-CCA2).
+  ANOnymity under adaptive Chosen-Plaintext attack (ANO-CCA2) in ROM.
   (Alternatively: Indistinguishability of (public) Keys under 
-   adaptive Chosen-Ciphertext Attack (IK-CCA2).)
+   adaptive Chosen-Ciphertext Attack (IK-CCA2) in ROM.)
   In a CCA2 setting, first, the adversary is given two (honestly generated) public keys and asked
   to provide a plaintext. Subsequently, the adversary is given the encryption (under one of
   the aforementioned public keys) of the plaintext it provided and asked to determine which
@@ -610,12 +611,12 @@ module ANO_CCA2_P_ROM (RO : RandomOraclei, S : Scheme_ROM)
 
 
 (*
-  Strong ROBustness (SROB).
+  Strong ROBustness (SROB) in ROM.
   The adversary is given two (honestly generated) public keys and is asked to
   provide a (single) ciphertext that decrypts to valid plaintexts under both 
   of the secret keys (corresponding to the provided public keys).
   
-  Weak ROBustness (WROB).
+  Weak ROBustness (WROB) in ROM.
   The adversary is given two (honestly generated) public keys and is asked to choose
   which one to use for encryption and which one to use (the corresponding secret key of)
   for decryption. Here, the goal is that the decryption (with the key appointed for
@@ -628,7 +629,7 @@ module ANO_CCA2_P_ROM (RO : RandomOraclei, S : Scheme_ROM)
   oracle like in CCA1, i.e., no considered challenge).
 *)
 (*
-  Strong ROBustness under Chosen-Plaintext Attacks (SROB-CPA).
+  Strong ROBustness under Chosen-Plaintext Attacks (SROB-CPA) in ROM.
   In a CPA setting, the adversary is given two (honestly generated) public keys and is asked to
   provide a (single) ciphertext that decrypts to valid plaintexts under both 
   of the secret keys (corresponding to the provided public keys).
@@ -652,7 +653,7 @@ module SROB_CPA_ROM (RO : RandomOraclei, S : Scheme_ROM, A : Adv_SROBCPA_ROM) = 
 }.
 
 (*
-  Weak ROBustness under Chosen-Plaintext Attacks (WROB-CPA).
+  Weak ROBustness under Chosen-Plaintext Attacks (WROB-CPA) in ROM.
   In a CPA setting, the adversary is given two (honestly generated) public keys and is asked to choose
   which one to use for encryption and which one to use (the corresponding secret key of)
   for decryption. Here, the goal is that the decryption (with the key appointed for
@@ -679,7 +680,7 @@ module WROB_CPA_ROM (RO : RandomOraclei, S : Scheme_ROM, A : Adv_WROBCPA_ROM) = 
 
 
 (*
-  Strong ROBustness under Chosen-Ciphertext Attacks (SROB-CCA).
+  Strong ROBustness under Chosen-Ciphertext Attacks (SROB-CCA) in ROM.
   In a CCA setting, the adversary is given two (honestly generated) public keys and is asked to
   provide a (single) ciphertext that decrypts to valid plaintexts under both 
   of the secret keys (corresponding to the provided public keys).
@@ -705,7 +706,7 @@ module SROB_CCA_ROM (RO : RandomOraclei, S : Scheme_ROM,
 }.
 
 (*
-  Weak ROBustness under Chosen-Ciphertext Attacks (WROB-CCA).
+  Weak ROBustness under Chosen-Ciphertext Attacks (WROB-CCA) in ROM.
   In a CCA setting, the adversary is given two (honestly generated) public keys and is asked to choose
   which one to use for encryption and which one to use (the corresponding secret key of)
   for decryption. Here, the goal is that the decryption (with the key appointed for
@@ -718,9 +719,9 @@ module type Adv_WROBCCA_ROM (RO : RandomOracle) (O0 : Oracles_CCA, O1 : Oracles_
 }.
 
 (** WROB-CCA security game in ROM **)
-module WROB_CCA_ROM (RO : RandomOraclei, S : Scheme_ROM, 
-                     O0 : Oracles_CCA1i_ROM, O1 : Oracles_CCA1i_ROM, 
-                     A : Adv_WROBCCA_ROM) = {
+module WROB_CCA_ROM (RO : RandomOraclei) (S : Scheme_ROM) 
+                    (O0 : Oracles_CCA1i_ROM, O1 : Oracles_CCA1i_ROM) 
+                    (A : Adv_WROBCCA_ROM) = {
   proc main() : bool = {
     var r : bool;
     
@@ -734,16 +735,16 @@ module WROB_CCA_ROM (RO : RandomOraclei, S : Scheme_ROM,
 
 
 (*
-  Strong Collision-FReeness (SCFR).
+  Strong Collision-FReeness (SCFR) in ROM.
   As SROB, but additionally requires the resulting plaintexts to be
   equal to eachother (instead of only requiring them to be valid).
   
-  Weak Collision-FReeness (WCFR).
+  Weak Collision-FReeness (WCFR) in ROM.
   As WROB, but additionally requires the resulting plaintexts to be
   equal to eachother (instead of only requiring the final plaintext to be valid).
 *)
 (*
-  Strong Collision-FReeness under Chosen-Plaintext Attacks (SCFR-CPA).
+  Strong Collision-FReeness under Chosen-Plaintext Attacks (SCFR-CPA) in ROM.
   In a CPA setting, the adversary is given two (honestly generated) public keys and is asked to
   provide a (single) ciphertext that decrypts to the same valid plaintext under both 
   of the secret keys (corresponding to the provided public keys).
@@ -767,7 +768,7 @@ module SCFR_CPA_ROM (RO : RandomOraclei, S : Scheme_ROM, A : Adv_SCFRCPA_ROM) = 
 }.
 
 (*
-  Weak Collision-FReeness under Chosen-Plaintext Attacks (WCFR-CPA).
+  Weak Collision-FReeness under Chosen-Plaintext Attacks (WCFR-CPA) in ROM.
   In a CPA setting, the adversary is given two (honestly generated) public keys and is asked to choose
   which one to use for encryption and which one to use (the corresponding secret key of)
   for decryption. Here, the goal is that the decryption (with the key appointed for
@@ -805,9 +806,9 @@ module type Adv_SCFRCCA_ROM (RO : RandomOracle) (O0 : Oracles_CCA, O1 : Oracles_
 }.
 
 (** SCFR-CCA security game in ROM **)
-module SCFR_CCA_ROM (RO : RandomOraclei, S : Scheme_ROM, 
-                     O0 : Oracles_CCA1i_ROM, O1 : Oracles_CCA1i_ROM, 
-                     A : Adv_SCFRCCA_ROM) = {
+module SCFR_CCA_ROM (RO : RandomOraclei) (S : Scheme_ROM) 
+                    (O0 : Oracles_CCA1i_ROM, O1 : Oracles_CCA1i_ROM) 
+                    (A : Adv_SCFRCCA_ROM) = {
   proc main() : bool = {
     var r : bool;
     
@@ -820,7 +821,7 @@ module SCFR_CCA_ROM (RO : RandomOraclei, S : Scheme_ROM,
 }.
 
 (*
-  Weak ROBustness under Chosen-Ciphertext Attacks (WCFR-CCA).
+  Weak ROBustness under Chosen-Ciphertext Attacks (WCFR-CCA) in ROM.
   In a CCA setting, the adversary is given two (honestly generated) public keys and is asked to choose
   which one to use for encryption and which one to use (the corresponding secret key of)
   for decryption. Here, the goal is that the decryption (with the key appointed for
@@ -833,9 +834,9 @@ module type Adv_WCFRCCA_ROM (RO : RandomOracle) (O0 : Oracles_CCA, O1 : Oracles_
 }.
 
 (** WCFR-CCA security game in ROM **)
-module WCFR_CCA_ROM (RO : RandomOraclei, S : Scheme_ROM, 
-                     O0 : Oracles_CCA1i_ROM, O1 : Oracles_CCA1i_ROM, 
-                     A : Adv_WCFRCCA_ROM) = {
+module WCFR_CCA_ROM (RO : RandomOraclei) (S : Scheme_ROM) 
+                    (O0 : Oracles_CCA1i_ROM, O1 : Oracles_CCA1i_ROM) 
+                    (A : Adv_WCFRCCA_ROM) = {
   proc main() : bool = {
     var r : bool;
     
@@ -848,12 +849,13 @@ module WCFR_CCA_ROM (RO : RandomOraclei, S : Scheme_ROM,
 }.
 
 
-(** Delta-correct (i.e., partially-correct) PKE schemes. **)
+(** Delta-correct (i.e., partially-correct) PKE schemes in ROM. **)
 theory DeltaCorrectROM.
 (* Import definitions from delta-correctness theory (in non-ROM PKE theory) *)
 import DeltaCorrect.
 
-(* Correctness *)
+
+(* Correctness in ROM *)
 (** Adversary class considered for (partial/delta) correctness in ROM **)
 module type Adv_Cor_ROM (RO : RandomOracle) = {
   include Adv_Cor
@@ -873,8 +875,7 @@ module Correctness_Delta_ROM (RO : RandomOraclei, S : Scheme_ROM, A : Adv_Cor_RO
 }.
 
 
-(* Attacker capabilities/models (additional) *)
-(* Oracles *)
+(* Attacker capabilities/models (additional) in ROM *)
 (** Interface for Plaintext-Checking (PC) oracles used by games in ROM **)
 module type Oracles_PCi_ROM (RO : RandomOracle) (S : Scheme) = {
   proc init(sk_init : sk_t) : unit
@@ -888,9 +889,9 @@ module type Oracles_CVi_ROM (RO : RandomOracle) (S : Scheme) = {
 }.
 
 
-(* Properties (regular) *)
+(* Security (delta-correct) in ROM *)
 (**
-  One-Wayness (OW).
+  One-Wayness (OW) in ROM.
   The adversary is asked to produce the message/plaintext 
   encrypted by a given ciphertext.
 **)
@@ -912,7 +913,7 @@ clone import OW with
   proof *.
 
   
-(* One-Wayness under Chosen-Plaintext Attack (OW-CPA) *)
+(* One-Wayness under Chosen-Plaintext Attack (OW-CPA) in ROM *)
 (** Adversary type considered for OW-CPA in ROM **)
 module type Adv_OWCPA_ROM (RO : RandomOracle) = {
   include Adv_OWCPA
@@ -932,7 +933,7 @@ module OW_CPA_ROM (RO : RandomOraclei, S : Scheme_ROM, O : Oracles_PCi_ROM, A : 
 }.
 
 
-(* One-Wayness under Plaintext-Checking Attacks (OW-PCA) *)
+(* One-Wayness under Plaintext-Checking Attacks (OW-PCA) in ROM *)
 (** Adversary type considered for OW-PCA in ROM **)
 module type Adv_OWPCA_ROM (RO : RandomOracle) (O : Oracles_PC) = {
   proc find(pk : pk_t, c : ctxt_t) : ptxt_t
@@ -952,16 +953,16 @@ module OW_PCA_ROM (RO : RandomOraclei, S : Scheme_ROM, O : Oracles_PCi_ROM, A : 
 }.
 
 
-(* One-Wayness under Validity-Checking Attacks (OW-VCA) *)
+(* One-Wayness under Validity-Checking Attacks (OW-VCA) in ROM *)
 (** Adversary type considered for OW-VCA in ROM **)
 module type Adv_OWVCA_ROM (RO : RandomOracle) (O : Oracles_CV) = {
   proc find(pk : pk_t, c : ctxt_t) : ptxt_t
 }.
 
 (** OW-VCA security game in ROM **)
-module OW_VCA_ROM (RO : RandomOraclei, S : Scheme_ROM, 
-                   OPC : Oracles_PCi_ROM, OCV : Oracles_CVi_ROM, 
-                   A : Adv_OWVCA_ROM) = {
+module OW_VCA_ROM (RO : RandomOraclei) (S : Scheme_ROM) 
+                  (OPC : Oracles_PCi_ROM, OCV : Oracles_CVi_ROM) 
+                  (A : Adv_OWVCA_ROM) = {
   proc main() : bool = {
     var r : bool;
     
@@ -974,16 +975,16 @@ module OW_VCA_ROM (RO : RandomOraclei, S : Scheme_ROM,
 }.
 
 
-(* One-Wayness under Validity-Checking Attacks (OW-PVCA) *)
+(* One-Wayness under Validity-Checking Attacks (OW-PVCA) in ROM *)
 (** Adversary type considered for OW-PVCA in ROM **)
 module type Adv_OWPVCA_ROM (RO : RandomOracle) (OPC : Oracles_PC, OCV : Oracles_CV) = {
   proc find(pk : pk_t, c : ctxt_t) : ptxt_t
 }.
 
 (** OW-PVCA security game in ROM **)
-module OW_PVCA_ROM (RO : RandomOraclei, S : Scheme_ROM, 
-                    OPC : Oracles_PCi_ROM, OCV : Oracles_CVi_ROM, 
-                    A : Adv_OWPVCA_ROM) = {
+module OW_PVCA_ROM (RO : RandomOraclei) (S : Scheme_ROM) 
+                   (OPC : Oracles_PCi_ROM, OCV : Oracles_CVi_ROM) 
+                   (A : Adv_OWPVCA_ROM) = {
   proc main() = {
     var r : bool;
     
@@ -998,4 +999,3 @@ module OW_PVCA_ROM (RO : RandomOraclei, S : Scheme_ROM,
 end OWROM.
 
 end DeltaCorrectROM.
-

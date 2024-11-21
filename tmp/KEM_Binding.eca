@@ -1,0 +1,70 @@
+(* Require/Import libraries *)
+require import AllCore.
+require (*--*) KeyedHashFunctions KeyEncapsulationMechanisms.
+
+
+(* Types *)
+(* Keyed hash functions *)
+(** (Indexing) Keys **)
+type ik_t.
+
+(** Inputs **)
+type in_t.
+
+(** Outputs **)
+type out_t.
+
+(* Key encapsulation mechanisms *)
+(** Public keys (asymmetric) **)
+type pk_t.
+
+(** Secret keys (asymmetric) **)
+type sk_t.
+
+(** Shared/session keys (symmetric) **)
+type key_t.
+
+(** Ciphertexts/Encapsulations **)
+type ctxt_t.
+
+
+(* Operators *)
+(** Keyed hash function **)
+op kdf : ik_t -> in_t -> out_t.
+
+
+(* Distributions *)
+(** (Proper) distribution over (indexing) keys **)
+op [lossless] dik : ik_t distr.
+
+
+(* Clones and imports *)
+(* Import basic definitions and properties for KHFs *)
+clone import KeyedHashFunctions as KHFs with
+  type key_t <- ik_t,
+  type in_t <- in_t,
+  type out_t <- out_t,
+  
+  op f <- kdf
+  
+  proof *.
+  
+(* Import basic definitions and properties for KEMs *)
+clone import KeyEncapsulationMechanisms as KEMs with
+  type pk_t <- pk_t,
+  type sk_t <- sk_t,
+  type key_t <- key_t,
+  type ctxt_t <- ctxt_t
+  
+  proof *.
+
+(* Import basic definitions and properties for KEMs with post-processing *)    
+clone import KeyEncapsulationMechanisms as KEMPPs with
+  type pk_t <- pk_t * ik_t,
+  type sk_t <- sk_t * ik_t,
+  type key_t <- key_t,
+  type ctxt_t <- ctxt_t
+  
+  proof *.
+
+  (* *)
