@@ -1,0 +1,155 @@
+require import AllCore Distr.
+require KeyEncapsulationMechanismsROM.
+require KeyedHashFunctions.
+
+
+(* Types *)
+(** Public keys (asymmetric) **)
+type pk_t.
+
+(** Secret keys (asymmetric) **)
+type sk_t.
+
+(** Shared/session keys (symmetric) **)
+type key_t.
+
+(** Ciphertexts/Encapsulations **)
+type ctxt_t.
+
+(* Inputs to the random oracle *)
+type in_t.
+
+(* Outputs of the random oracle *)
+type out_t.
+
+
+(* Operators *)
+(** Key derivation function (keyed hash function) **)
+op kdf : key_t -> ctxt_t -> key_t.
+
+  
+(* Clones and imports *)
+(* Definitions and properties for KEMs in ROM *)
+clone import KeyEncapsulationMechanismsROM as KEMsROM with
+  type pk_t <- pk_t,
+  type sk_t <- sk_t,
+  type key_t <- key_t,
+  type ctxt_t <- ctxt_t,
+  
+  type in_t <- in_t,
+  type out_t <- out_t
+  
+  proof *.
+
+(* Also import definitions and properteis for non-ROM KEMs and random oracles *)  
+import KEMs F_RO.
+
+op dkeypm : pk_t -> key_t distr.
+
+(* Indistinguishability properties *)
+clone import IND with
+  op dkeym <- dkeypm
+  
+  proof *. 
+
+
+(** Definitions and properties for keyed hash functions **)
+clone import KeyedHashFunctions as KHFs with
+  type key_t <- key_t,
+  type in_t <- ctxt_t,
+  type out_t <- key_t
+  
+  proof *. 
+
+
+print PRF. 
+
+op [lossless] dkey : key_t distr.
+op dkeycm : { ctxt_t -> key_t distr | forall c, is_lossless (dkeycm c) } as dkeycm_ll.
+ 
+clone import PRF as KDFPRF with
+  op dkey <- dkey,
+  op doutm <- dkeycm 
+  
+  proof *. 
+  realize dkey_ll by exact: dkey_ll. 
+  realize doutm_ll by exact: dkeycm_ll. 
+
+  
+module KEM_KDF_PP (S : Scheme) : Scheme = {
+  proc keygen = S.keygen
+  
+  proc encaps(pk : pk_t) : key_t * ctxt_t = {
+    var k, kpp : key_t;
+    var c : ctxt_t;
+    
+    (k, c) <@ S.encaps(pk);
+    kpp <- kdf k c;
+    
+    return (kpp, c);
+  }
+  
+  proc decaps(sk : sk_t, c : ctxt_t) : key_t option = {
+    var ko, kppo : key_t option;
+    
+    ko <@ S.decaps(sk, c);
+    kppo <- if ko = None then None else Some (kdf (oget ko) c);
+    
+    return kppo;
+  }
+}.
+
+
+module (R_INDCCA_INDCCA (A : Adv_INDCCA) : Adv_INDCCA) (O : Oracles_CCA) = {
+  module O_R_CCA : Oracles_CCA = {
+    proc decaps(c : ctxt_t) : key_t option = {
+      var ko, kppo : key_t option;
+    
+      ko <@ O.decaps(c);
+      kppo <- if ko = None then None else Some (kdf (oget ko) c);
+      
+      return kppo; 
+    }
+  }
+    
+  proc distinguish(pk : pk_t, k : key_t, c : ctxt_t) : bool = {
+    var b : bool;
+    var kpp : key_t;
+    
+    kpp <- kdf k c;
+    
+    b <@ A(O_R_CCA).distinguish(pk, kpp, c);
+    
+    return b;
+  }
+}.
+
+module (R_PRF_INDCCA (S : Scheme, A : Adv_INDCCA) : Adv_PRF) (O : Oracle_PRF) = {
+  module O_R_CCA = { 
+    var sk : sk_t
+    
+    proc decaps(c : ctxt_t) : key_t option = {
+      
+    }
+  }
+  
+  proc distinguish() : bool = {
+    var pk : pk_t;
+    
+    
+    (pk, sk) <@ S.keygen();
+    k <$ dkey;
+    
+    
+  }
+}.
+
+module 
+
+section.
+
+declare module S <: Scheme.
+
+
+
+end section.

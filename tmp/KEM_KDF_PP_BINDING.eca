@@ -1,0 +1,164 @@
+require import AllCore Distr.
+require KeyEncapsulationMechanismsROM.
+require KeyedHashFunctions.
+
+
+(* Types *)
+(** Public keys (asymmetric) **)
+type pk_t.
+
+(** Secret keys (asymmetric) **)
+type sk_t.
+
+(** Shared/session keys (symmetric) **)
+type key_t.
+
+(** Ciphertexts/Encapsulations **)
+type ctxt_t.
+
+(* Inputs to the random oracle *)
+type in_t.
+
+(* Outputs of the random oracle *)
+type out_t.
+
+
+(* Operators *)
+(** Key derivation function (keyed hash function) **)
+op kdf : key_t -> ctxt_t -> key_t.
+
+
+(* Distributions *)
+(**  **)
+op dkeym : pk_t -> key_t distr.
+
+  
+(* Clones and imports *)
+(* Definitions and properties for KEMs in ROM *)
+clone import KeyEncapsulationMechanismsROM as KEMsROM with
+  type pk_t <- pk_t,
+  type sk_t <- sk_t,
+  type key_t <- key_t,
+  type ctxt_t <- ctxt_t,
+  
+  type in_t <- key_t * ctxt_t,
+  type out_t <- key_t
+  
+  proof *.
+
+import KEMs F_RO.
+    
+(* Indistinguishability properties (in ROM) *)
+clone import INDROM with
+  op dkeym <- dkeym
+  
+  proof *. 
+
+import IND. 
+
+
+module (KEM_KDF_PP (S : Scheme) : Scheme_ROM) (RO : RandomOracle) = {
+  proc keygen = S.keygen
+  
+  proc encaps(pk : pk_t) : key_t * ctxt_t = {
+    var k, kpp : key_t;
+    var c : ctxt_t;
+    
+    (k, c) <@ S.encaps(pk);
+    kpp <@ RO.get((k, c));
+    
+    return (kpp, c);
+  }
+  
+  proc decaps(sk : sk_t, c : ctxt_t) : key_t option = {
+    var ko, kppo : key_t option;
+    var kpp : key_t;
+    
+    ko <@ S.decaps(sk, c);
+    
+    if (ko = None) {
+      kppo <- None;
+    } else {
+      kpp <@ RO.get((oget ko, c));
+      kppo <- Some kpp;
+    }
+    
+    return kppo;
+  }
+}.
+
+(* Class of adversaries againt CR (of a random oracle) *)
+module type Adv_CR_ROM (RO : RandomOracle) = {
+  proc find() : (key_t * ctxt_t) * (key_t * ctxt_t)
+}.
+
+(* CR (of a random oracle) game *)
+module CR_ROM (RO : RandomOraclei, A : Adv_CR_ROM) = {
+  proc main() = {
+    var kc, kc' : key_t * ctxt_t;
+    var k, k' : key_t;
+    
+    RO.init();
+    
+    (kc, kc') <@ A(RO).find();
+    
+    k <@ RO.get(kc);
+    k' <@ RO.get(kc');
+    
+    return kc <> kc' /\ k = k';
+  }
+}.
+
+
+module (R_INDCCA_INDCCAROM (RO : RandomOraclei) (A : Adv_INDCCA_ROM) : Adv_INDCCA) (O : Oracles_CCA) = {
+  module O_R_CCA : Oracles_CCA = { 
+    proc decaps(c : ctxt_t) : key_t option = {
+      var ko, kppo : key_t option;
+      var kpp : key_t;
+      
+      ko <@ O.decaps(c);
+      if (ko = None) {
+        kppo <- None;
+      } else {
+        kpp <@ RO.get((oget ko, c));
+        kppo <- Some kpp;
+      }
+      
+      return kppo;
+    }
+  }
+  
+  proc distinguish(pk : pk_t, k : key_t, c : ctxt_t) : bool = { 
+    var b : bool;
+    var kpp : key_t;
+    
+    RO.init();
+    
+    kpp <@ RO.get((k, c));
+    
+    b <@ A(RO, O_R_CCA).distinguish(pk, kpp, c);
+    
+    return b;
+  } 
+}.
+
+
+section.
+
+declare module S <: Scheme{-RO, -O_CCA2_Default}.
+
+declare module A <: Adv_INDCCA_ROM{-S, -RO, -O_CCA2_Default}.
+
+module O_CCA2_Default_ROM (RO : RandomOracle) (S : Scheme) = O_CCA2_Default(S).
+
+local lemma test : 
+  equiv[IND_CCA_ROM(RO, KEM_KDF_PP(S), O_CCA2_Default_ROM, A).main ~ IND_CCA(S, O_CCA2_Default, R_INDCCA_INDCCAROM(RO, A)).main : ={glob S, glob A} ==> ={res}]. 
+proof.  
+proc. 
+inline{1} 2; inline{2} 6.
+inline{1} 3.
+(** Idea: If b = 0, match random oracle gets, if b = 1, match sampling LHS with random oracle get on RHS; might be easier to do provided bit variant **)
+admit.
+qed.
+
+end section.
