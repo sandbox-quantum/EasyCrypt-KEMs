@@ -1,0 +1,748 @@
+require import AllCore Distr.
+require KeyEncapsulationMechanismsROM.
+
+
+(* Types *)
+(** Public keys (asymmetric) **)
+type pk_t.
+
+(** Secret keys (asymmetric) **)
+type sk_t.
+
+(** Shared/session keys (symmetric) **)
+type key_t.
+
+(** Ciphertexts/Encapsulations **)
+type ctxt_t.
+
+(** Randomness **)
+type rand_t.
+
+
+(** 
+  Considers the case where the post-processing is done 
+  by passing the symmetric key and encapsulation (obtained from any other KEM) 
+  to a KDF (modeled as a RO).
+**)
+theory PPKDFKCT.
+(* Clones and imports *)
+(* Definitions for KEMs in ROM *)
+clone import KeyEncapsulationMechanismsROM as KEMsROM with
+  type pk_t <- pk_t,
+  type sk_t <- sk_t,
+  type key_t <- key_t,
+  type ctxt_t <- ctxt_t,
+  
+  type in_t <- key_t * ctxt_t,
+  type out_t <- key_t
+  
+  proof *.
+
+(* Definitions for malicious binding in ROM *)
+clone import MALBINDROM with
+  type rand_t <- rand_t.
+
+import MALBIND KEMs F_RO.
+
+
+(* Properties (other) *)
+(** Class of adversaries againt CR in ROM **)
+module type Adv_CR_ROM (RO : RandomOracle) = {
+  proc find() : (key_t * ctxt_t) * (key_t * ctxt_t)
+}.
+
+(** CR game in ROM **)
+module CR_ROM (RO : RandomOraclei, A : Adv_CR_ROM) = {
+  proc main() = {
+    var kc, kc' : key_t * ctxt_t;
+    var k, k' : key_t;
+    
+    RO.init();
+    
+    (kc, kc') <@ A(RO).find();
+    
+    k <@ RO.get(kc);
+    k' <@ RO.get(kc');
+    
+    return kc <> kc' /\ k = k';
+  }
+}.
+
+
+(* Scheme *)
+(** 
+  KEM that simply adds a post-processing step to the encapsulation and decapsulation
+  of the provided KEM (processing the symmetric key and encapsulation/ciphertext).
+**)
+(**
+  Note, the KEMs (both provided and constructed) are of the "derandomized KEM" type
+  because we will mainly be considering malicious binding properties.
+**)
+module (KEM_KDF_PP_CT (S : SchemeDerand) : SchemeDerand_ROM) (RO : RandomOracle) = {
+  proc keygen = S.keygen
+  
+  proc encaps(pk : pk_t, r : rand_t) : key_t * ctxt_t = {
+    var k, kpp : key_t;
+    var c : ctxt_t;
+    
+    (k, c) <@ S.encaps(pk, r);
+    kpp <@ RO.get((k, c));
+    
+    return (kpp, c);
+  }
+  
+  proc decaps(sk : sk_t, c : ctxt_t) : key_t option = {
+    var ko, kppo : key_t option;
+    var kpp : key_t;
+    
+    ko <@ S.decaps(sk, c);
+    
+    if (ko = None) {
+      kppo <- None;
+    } else {
+      kpp <@ RO.get((oget ko, c));
+      kppo <- Some kpp;
+    }
+    
+    return kppo;
+  }
+}.
+
+
+(** Reduction adversary reducing from CR (in ROM) to MAL-BIND-K-CT (in ROM) **) 
+module (R_KCT_CR (S : SchemeDerand) (A : Adv_MALBIND_ROM) : Adv_CR_ROM) (RO : RandomOracle) = {
+  proc find() : (key_t * ctxt_t) * (key_t * ctxt_t) = {
+    var mbs : malbind_scenario;
+    var sk0, sk1 : sk_t;
+    var r0, r1 : rand_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t;
+    var k0o, k1o : key_t option;
+    var pk0, pk1 : pk_t;
+    var kc0, kc1 : key_t * ctxt_t;
+        
+    mbs <@ A(RO).choose(K_Binds_CT);
+    
+    if (mbs = DECAPS_DECAPS) {
+      (sk0, sk1, c0, c1) <@ A(RO).find_dd();
+    
+      pk0 <- sk2pk sk0;
+      pk1 <- sk2pk sk1;
+
+      k0o <@ S.decaps(sk0, c0);
+      k1o <@ S.decaps(sk1, c1);
+      
+      kc0 <- (oget k0o, c0);
+      kc1 <- (oget k1o, c1);
+    } elif (mbs = ENCAPS_DECAPS) {
+      (sk0, sk1, r0, c1) <@ A(RO).find_ed();
+
+      pk0 <- sk2pk sk0;
+      pk1 <- sk2pk sk1;
+
+      (k0, c0) <@ S.encaps(pk0, r0);
+      k1o <@ S.decaps(sk1, c1);
+      
+      kc0 <- (k0, c0);
+      kc1 <- (oget k1o, c1);
+    } else { (* mbs = ENCAPS_ENCAPS *)
+      (sk0, sk1, r0, r1) <@ A(RO).find_ee();
+    
+      pk0 <- sk2pk sk0;
+      pk1 <- sk2pk sk1;
+
+      (k0, c0) <@ S.encaps(pk0, r0);
+      (k1, c1) <@ S.encaps(pk1, r1);
+      
+      kc0 <- (k0, c0);
+      kc1 <- (k1, c1);
+    }
+
+    return (kc0, kc1);
+  }  
+}.
+
+
+
+section.
+(* Declare arbitrary ("derandomized") KEM *)
+declare module S <: SchemeDerand{-RO}.
+
+(* Declare arbitrary MAL-BIND adversary (in ROM)*)
+declare module A <: Adv_MALBIND_ROM{-S, -RO}.
+
+(* By assumption, the distribution(s) that the random oracle samples from is (are) Lossless *)
+declare axiom dout_ll (kc : key_t * ctxt_t) : is_lossless (dout kc).
+
+(** 
+  Equivalence between MAL-BIND-K-CT of post-processing KEM (for arbitrary adversary)
+  and CR (for above reduction adversary). (Shows CR --> MAL-BIND-K-CT, in ROM)
+**)
+equiv Eqv_MALBINDKCT_CR_ROM : 
+  MAL_BIND_ROM(RO, KEM_KDF_PP_CT(S), A).main ~ CR_ROM(RO, R_KCT_CR(S, A)).main : 
+    ={glob S, glob A} /\ arg{1} = K_Binds_CT ==> res{1} => res{2}. 
+proof.
+proc.
+inline{1} 2; inline{2} 2. 
+seq 3 2 : (#pre /\ ={RO.m, mbs} /\ bc0{1} = bc{1}).
++ call (: ={RO.m}); 1: by sim. 
+  by inline *; wp.
+inline KEM_KDF_PP_CT(S, RO).decaps KEM_KDF_PP_CT(S, RO).encaps.
+wp; if => //.
++ wp. 
+  seq 6 4 : (   ={glob S, glob RO, sk0, sk1, c0, c1, pk0, pk1} 
+             /\ sk{1} = sk0{1}
+             /\ c{1} = c0{1}
+             /\ bc0{1} = K_Binds_CT
+             /\ ko{1} = k0o{2}) => [/> |]. 
+  + by call (: true); wp; call (: ={RO.m}); 1: sim.
+  case (ko{1} = None).
+  + rcondt{1} ^if; 1: by auto.
+    sp; conseq (: _ ==> true) => //. 
+    inline RO.get; seq 1 1 : (#pre /\ ko0{1} = k1o{2}); 1: by call (: true).
+    if{1}; 1: by wp; rnd{2}; wp; rnd{2}; wp; skip => />; smt(dout_ll).
+    by wp; rnd; wp; rnd{2}; wp; skip => />; smt(dout_ll).     
+  rcondf{1} ^if; 1: by auto.
+  swap{1} [4..6] -3; sp; seq 1 1 : (#pre /\ ko0{1} = k1o{2}); 1: by call (: true).
+  sp 0 3; seq 1 1 : (#pre /\ kpp{1} = k{2}); 1: by inline RO.get; wp; rnd; wp.
+  sp; case (ko0{1} = None).
+  + rcondt{1} ^if; 1: by auto.
+    by inline RO.get; wp; rnd{2}; wp; skip => />; smt(dout_ll).    
+  rcondf{1} ^if; 1: by auto.
+  by inline RO.get; wp; rnd; wp; skip => />.
+if => //.
++ seq 1 1 : (#pre /\ ={sk0, sk1, r0, c1}); 1: by call (: ={RO.m}); 1: sim.
+  wp; sp.
+  seq 1 1 : (#pre /\ k{1} = k0{2} /\ c3{1} = c0{2}); 1: by call (: true).
+  swap{1} [1..2] 3; sp.
+  seq 1 1 : (#pre /\ ko1{1} = k1o{2}); 1: by call (: true).
+  sp; seq 1 1: (#pre /\ kpp1{1} = k{2}); 1: by inline RO.get; wp; rnd; wp.  
+  sp; case (ko1{1} = None).
+  + rcondt{1} ^if; 1: by auto.
+    by inline RO.get; wp; rnd{2}; wp; skip => />; smt(dout_ll).
+  rcondf{1} ^if; 1: by auto.
+  by inline RO.get; wp; rnd; wp; skip => />.
+inline RO.get; wp; rnd; wp.
+swap{1} [12..14] -4; wp; rnd.
+wp; call (: true); wp; call (: true). 
+wp; call (: ={RO.m}); 1: by sim.  
+by skip => />.
+qed.
+
+end section.
+
+end PPKDFKCT.
+
+
+
+(** 
+  Considers the case where the post-processing is done 
+  by passing the symmetric key and public key (obtained from any other KEM) 
+  to a KDF (modeled as a RO).
+**)
+theory PPKDFKPK.
+(* Clones and imports *)
+(* Definitions for KEMs in ROM *)
+clone import KeyEncapsulationMechanismsROM as KEMsROM with
+  type pk_t <- pk_t,
+  type sk_t <- sk_t,
+  type key_t <- key_t,
+  type ctxt_t <- ctxt_t,
+  
+  type in_t <- key_t * pk_t,
+  type out_t <- key_t
+  
+  proof *.
+
+(* Definitions for malicious binding in ROM *)
+clone import MALBINDROM with
+  type rand_t <- rand_t.
+
+import MALBIND KEMs F_RO.
+
+
+(* Properties (other) *)
+(** Class of adversaries againt CR in ROM **)
+module type Adv_CR_ROM (RO : RandomOracle) = {
+  proc find() : (key_t * pk_t) * (key_t * pk_t)
+}.
+
+(** CR game in ROM **)
+module CR_ROM (RO : RandomOraclei, A : Adv_CR_ROM) = {
+  proc main() = {
+    var kpk, kpk' : key_t * pk_t;
+    var k, k' : key_t;
+    
+    RO.init();
+    
+    (kpk, kpk') <@ A(RO).find();
+    
+    k <@ RO.get(kpk);
+    k' <@ RO.get(kpk');
+    
+    return kpk <> kpk' /\ k = k';
+  }
+}.
+
+
+(* Scheme *)
+(** 
+  KEM that simply adds a post-processing step to the encapsulation and decapsulation
+  of the provided KEM (processing the symmetric key and public key).
+**)
+(**
+  Note, the KEMs (both provided and constructed) are of the "derandomized KEM" type
+  because we will mainly be considering malicious binding properties.
+**)
+module (KEM_KDF_PP_PK (S : SchemeDerand) : SchemeDerand_ROM) (RO : RandomOracle) = {
+  proc keygen = S.keygen
+  
+  proc encaps(pk : pk_t, r : rand_t) : key_t * ctxt_t = {
+    var k, kpp : key_t;
+    var c : ctxt_t;
+    
+    (k, c) <@ S.encaps(pk, r);
+    kpp <@ RO.get((k, pk));
+    
+    return (kpp, c);
+  }
+  
+  proc decaps(sk : sk_t, c : ctxt_t) : key_t option = {
+    var ko, kppo : key_t option;
+    var kpp : key_t;
+    
+    ko <@ S.decaps(sk, c);
+    
+    if (ko = None) {
+      kppo <- None;
+    } else {
+      kpp <@ RO.get((oget ko, sk2pk sk));
+      kppo <- Some kpp;
+    }
+    
+    return kppo;
+  }
+}.
+
+
+(** Reduction adversary reducing from CR (in ROM) to MAL-BIND-K-PK (in ROM) **) 
+module (R_KPK_CR (S : SchemeDerand) (A : Adv_MALBIND_ROM) : Adv_CR_ROM) (RO : RandomOracle) = {
+  proc find() : (key_t * pk_t) * (key_t * pk_t) = {
+    var mbs : malbind_scenario;
+    var sk0, sk1 : sk_t;
+    var r0, r1 : rand_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t;
+    var k0o, k1o : key_t option;
+    var pk0, pk1 : pk_t;
+    var kpk0, kpk1 : key_t * pk_t;
+        
+    mbs <@ A(RO).choose(K_Binds_PK);
+    
+    if (mbs = DECAPS_DECAPS) {
+      (sk0, sk1, c0, c1) <@ A(RO).find_dd();
+    
+      pk0 <- sk2pk sk0;
+      pk1 <- sk2pk sk1;
+
+      k0o <@ S.decaps(sk0, c0);
+      k1o <@ S.decaps(sk1, c1);
+      
+      kpk0 <- (oget k0o, pk0);
+      kpk1 <- (oget k1o, pk1);
+    } elif (mbs = ENCAPS_DECAPS) {
+      (sk0, sk1, r0, c1) <@ A(RO).find_ed();
+
+      pk0 <- sk2pk sk0;
+      pk1 <- sk2pk sk1;
+
+      (k0, c0) <@ S.encaps(pk0, r0);
+      k1o <@ S.decaps(sk1, c1);
+      
+      kpk0 <- (k0, pk0);
+      kpk1 <- (oget k1o, pk1);
+    } else { (* mbs = ENCAPS_ENCAPS *)
+      (sk0, sk1, r0, r1) <@ A(RO).find_ee();
+    
+      pk0 <- sk2pk sk0;
+      pk1 <- sk2pk sk1;
+
+      (k0, c0) <@ S.encaps(pk0, r0);
+      (k1, c1) <@ S.encaps(pk1, r1);
+      
+      kpk0 <- (k0, pk0);
+      kpk1 <- (k1, pk1);
+    }
+
+    return (kpk0, kpk1);
+  }  
+}.
+
+
+
+section.
+(* Declare arbitrary ("derandomized") KEM *)
+declare module S <: SchemeDerand{-RO}.
+
+(* Declare arbitrary MAL-BIND adversary (in ROM) *)
+declare module A <: Adv_MALBIND_ROM{-S, -RO}.
+
+(* By assumption, the distribution(s) that the random oracle samples from is (are) lossless *)
+declare axiom dout_ll (kpk : key_t * pk_t) : is_lossless (dout kpk).
+
+(** 
+  Equivalence between MAL-BIND-K-PK of post-processing KEM (for arbitrary adversary)
+  and CR (for above reduction adversary). (Shows CR --> MAL-BIND-K-PK, in ROM)
+**)
+equiv Eqv_MALBINDKPK_CR_ROM : 
+  MAL_BIND_ROM(RO, KEM_KDF_PP_PK(S), A).main ~ CR_ROM(RO, R_KPK_CR(S, A)).main : 
+    ={glob S, glob A} /\ arg{1} = K_Binds_PK ==> res{1} => res{2}. 
+proof.
+proc.
+inline{1} 2; inline{2} 2. 
+seq 3 2 : (#pre /\ ={RO.m, mbs} /\ bc0{1} = bc{1}).
++ call (: ={RO.m}); 1: by sim. 
+  by inline *; wp.
+inline KEM_KDF_PP_PK(S, RO).decaps KEM_KDF_PP_PK(S, RO).encaps.
+wp; if => //.
++ wp. 
+  seq 6 4 : (   ={glob S, glob RO, sk0, sk1, c0, c1, pk0, pk1}
+             /\ pk0{1} = sk2pk sk0{1}
+             /\ pk1{1} = sk2pk sk1{1}
+             /\ sk{1} = sk0{1}
+             /\ c{1} = c0{1}
+             /\ bc0{1} = K_Binds_PK
+             /\ ko{1} = k0o{2}) => [/> |]. 
+  + by call (: true); wp; call (: ={RO.m}); 1: sim.
+  case (ko{1} = None).
+  + rcondt{1} ^if; 1: by auto.
+    sp; conseq (: _ ==> true) => //. 
+    inline RO.get; seq 1 1 : (#pre /\ ko0{1} = k1o{2}); 1: by call (: true).
+    if{1}; 1: by wp; rnd{2}; wp; rnd{2}; wp; skip => />; smt(dout_ll).
+    by wp; rnd; wp; rnd{2}; wp; skip => />; smt(dout_ll).    
+  rcondf{1} ^if; 1: by auto.
+  swap{1} [4..6] -3; sp; seq 1 1 : (#pre /\ ko0{1} = k1o{2}); 1: by call (: true).
+  sp 0 3; seq 1 1 : (#pre /\ kpp{1} = k{2}); 1: by inline RO.get; wp; rnd; wp.
+  sp; case (ko0{1} = None).
+  + rcondt{1} ^if; 1: by auto.
+    by inline RO.get; wp; rnd{2}; wp; skip => />; smt(dout_ll).    
+  rcondf{1} ^if; 1: by auto.
+  by inline RO.get; wp; rnd; wp; skip => />.
+if => //.
++ seq 1 1 : (#pre /\ ={sk0, sk1, r0, c1}); 1: by call (: ={RO.m}); 1: sim.
+  wp; sp.
+  seq 1 1 : (#pre /\ k{1} = k0{2} /\ c3{1} = c0{2}); 1: by call (: true).
+  swap{1} [1..2] 3; sp.
+  seq 1 1 : (#pre /\ ko1{1} = k1o{2}); 1: by call (: true).
+  sp; seq 1 1: (#pre /\ kpp1{1} = k{2}); 1: by inline RO.get; wp; rnd; wp.  
+  sp; case (ko1{1} = None).
+  + rcondt{1} ^if; 1: by auto.
+    by inline RO.get; wp; rnd{2}; wp; skip => />; smt(dout_ll).
+  rcondf{1} ^if; 1: by auto.
+  by inline RO.get; wp; rnd; wp; skip => />.
+inline RO.get; wp; rnd; wp.
+swap{1} [12..14] -4; wp; rnd.
+wp; call (: true); wp; call (: true). 
+wp; call (: ={RO.m}); 1: by sim.  
+by skip => />.
+qed.
+
+end section.
+
+end PPKDFKPK.
+
+
+(** 
+  Considers the case where the post-processing is done 
+  by passing the symmetric key, encapsulation, and public key 
+  (obtained from any other KEM) to a KDF (modeled as a RO).
+**)
+theory PPKDFKCTPK.
+(* Clones and imports *)
+(* Definitions for KEMs in ROM *)
+clone import KeyEncapsulationMechanismsROM as KEMsROM with
+  type pk_t <- pk_t,
+  type sk_t <- sk_t,
+  type key_t <- key_t,
+  type ctxt_t <- ctxt_t,
+  
+  type in_t <- key_t * ctxt_t * pk_t,
+  type out_t <- key_t
+  
+  proof *.
+
+(* Definitions for malicious binding in ROM *)
+clone import MALBINDROM with
+  type rand_t <- rand_t.
+
+import MALBIND KEMs F_RO.
+
+
+(* Properties (other) *)
+(** Class of adversaries againt CR in ROM **)
+module type Adv_CR_ROM (RO : RandomOracle) = {
+  proc find() : (key_t * ctxt_t * pk_t) * (key_t * ctxt_t * pk_t)
+}.
+
+(** CR game in ROM **)
+module CR_ROM (RO : RandomOraclei, A : Adv_CR_ROM) = {
+  proc main() = {
+    var kcpk, kcpk' : key_t * ctxt_t * pk_t;
+    var k, k' : key_t;
+    
+    RO.init();
+    
+    (kcpk, kcpk') <@ A(RO).find();
+    
+    k <@ RO.get(kcpk);
+    k' <@ RO.get(kcpk');
+    
+    return kcpk <> kcpk' /\ k = k';
+  }
+}.
+
+
+(* Scheme *)
+(** 
+  KEM that simply adds a post-processing step to the encapsulation and decapsulation
+  of the provided KEM (processing the symmetric key, encapsulation, and public key).
+**)
+(**
+  Note, the KEMs (both provided and constructed) are of the "derandomized KEM" type
+  because we will mainly be considering malicious binding properties.
+**)
+module (KEM_KDF_PP_CTPK (S : SchemeDerand) : SchemeDerand_ROM) (RO : RandomOracle) = {
+  proc keygen = S.keygen
+  
+  proc encaps(pk : pk_t, r : rand_t) : key_t * ctxt_t = {
+    var k, kpp : key_t;
+    var c : ctxt_t;
+    
+    (k, c) <@ S.encaps(pk, r);
+    kpp <@ RO.get((k, c, pk));
+    
+    return (kpp, c);
+  }
+  
+  proc decaps(sk : sk_t, c : ctxt_t) : key_t option = {
+    var ko, kppo : key_t option;
+    var kpp : key_t;
+    
+    ko <@ S.decaps(sk, c);
+    
+    if (ko = None) {
+      kppo <- None;
+    } else {
+      kpp <@ RO.get((oget ko, c, sk2pk sk));
+      kppo <- Some kpp;
+    }
+    
+    return kppo;
+  }
+}.
+
+
+(** Shared code between reduction adversaries **)
+module R_S (S : SchemeDerand) (A : Adv_MALBIND_ROM) (RO : RandomOracle) = {
+  proc main(bc : bindconf) : (key_t * ctxt_t * pk_t) * (key_t * ctxt_t * pk_t) = {
+    var mbs : malbind_scenario;
+    var sk0, sk1 : sk_t;
+    var r0, r1 : rand_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t;
+    var k0o, k1o : key_t option;
+    var pk0, pk1 : pk_t;
+    var kcpk0, kcpk1 : key_t * ctxt_t * pk_t;
+    
+    mbs <@ A(RO).choose(bc);
+    
+    if (mbs = DECAPS_DECAPS) {
+      (sk0, sk1, c0, c1) <@ A(RO).find_dd();
+    
+      pk0 <- sk2pk sk0;
+      pk1 <- sk2pk sk1;
+
+      k0o <@ S.decaps(sk0, c0);
+      k1o <@ S.decaps(sk1, c1);
+      
+      kcpk0 <- (oget k0o, c0, pk0);
+      kcpk1 <- (oget k1o, c1, pk1);
+    } elif (mbs = ENCAPS_DECAPS) {
+      (sk0, sk1, r0, c1) <@ A(RO).find_ed();
+
+      pk0 <- sk2pk sk0;
+      pk1 <- sk2pk sk1;
+
+      (k0, c0) <@ S.encaps(pk0, r0);
+      k1o <@ S.decaps(sk1, c1);
+      
+      kcpk0 <- (k0, c0, pk0);
+      kcpk1 <- (oget k1o, c1, pk1);
+    } else { (* mbs = ENCAPS_ENCAPS *)
+      (sk0, sk1, r0, r1) <@ A(RO).find_ee();
+    
+      pk0 <- sk2pk sk0;
+      pk1 <- sk2pk sk1;
+
+      (k0, c0) <@ S.encaps(pk0, r0);
+      (k1, c1) <@ S.encaps(pk1, r1);
+      
+      kcpk0 <- (k0, c0, pk0);
+      kcpk1 <- (k1, c1, pk1);
+    }
+
+    return (kcpk0, kcpk1);
+  }
+}.
+
+(** Reduction adversary reducing from CR (in ROM) to MAL-BIND-K-CT (in ROM) **) 
+module (R_KCT_CR (S : SchemeDerand) (A : Adv_MALBIND_ROM) : Adv_CR_ROM) (RO : RandomOracle) = {
+  proc find() : (key_t * ctxt_t * pk_t) * (key_t * ctxt_t * pk_t) = {
+    var kcpk0, kcpk1 : key_t * ctxt_t * pk_t;
+    
+    (kcpk0, kcpk1) <@ R_S(S, A, RO).main(K_Binds_CT);
+
+    return (kcpk0, kcpk1);
+  }  
+}.
+
+(** Reduction adversary reducing from CR (in ROM) to MAL-BIND-K-PK (in ROM) **) 
+module (R_KPK_CR (S : SchemeDerand) (A : Adv_MALBIND_ROM) : Adv_CR_ROM) (RO : RandomOracle) = {
+  proc find() : (key_t * ctxt_t * pk_t) * (key_t * ctxt_t * pk_t) = {
+    var kcpk0, kcpk1 : key_t * ctxt_t * pk_t;
+    
+    (kcpk0, kcpk1) <@ R_S(S, A, RO).main(K_Binds_PK);
+
+    return (kcpk0, kcpk1);
+  }  
+}.
+
+
+section.
+(* Declare arbitrary ("derandomized") KEM *)
+declare module S <: SchemeDerand{-RO}.
+
+(* Declare arbitrary MAL-BIND adversary (in ROM) *)
+declare module A <: Adv_MALBIND_ROM{-S, -RO}.
+
+(* By assumption, the distribution(s) that the random oracle samples from is (are) Lossless *)
+declare axiom dout_ll (kcpk : key_t * ctxt_t * pk_t) : is_lossless (dout kcpk).
+
+
+(** 
+  Equivalence between MAL-BIND-K-CT of post-processing KEM (for arbitrary adversary)
+  and CR (for above reduction adversary). (Shows CR --> MAL-BIND-K-CT, in ROM)
+**)
+equiv Eqv_MALBINDKCT_CR_ROM : 
+  MAL_BIND_ROM(RO, KEM_KDF_PP_CTPK(S), A).main ~ CR_ROM(RO, R_KCT_CR(S, A)).main : 
+    ={glob S, glob A} /\ arg{1} = K_Binds_CT ==> res{1} => res{2}. 
+proof.
+proc.
+inline{1} 2; inline{2} 2; inline{2} 2. 
+seq 3 3 : (#pre /\ ={RO.m, mbs} /\ bc0{1} = bc{1}).
++ call (: ={RO.m}); 1: by sim. 
+  by inline *; wp.
+inline KEM_KDF_PP_CTPK(S, RO).decaps KEM_KDF_PP_CTPK(S, RO).encaps.
+wp; if => //.
++ wp. 
+  seq 6 4 : (   ={glob S, glob RO, sk0, sk1, c0, c1, pk0, pk1}
+             /\ pk0{1} = sk2pk sk0{1}
+             /\ pk1{1} = sk2pk sk1{1}
+             /\ sk{1} = sk0{1}
+             /\ c{1} = c0{1}
+             /\ bc0{1} = K_Binds_CT
+             /\ ko{1} = k0o{2}) => [/> |]. 
+  + by call (: true); wp; call (: ={RO.m}); 1: sim.
+  case (ko{1} = None).
+  + rcondt{1} ^if; 1: by auto.
+    sp; conseq (: _ ==> true) => //. 
+    inline RO.get; seq 1 1 : (#pre /\ ko0{1} = k1o{2}); 1: by call (: true).
+    if{1}; 1: by wp; rnd{2}; wp; rnd{2}; wp; skip => />; smt(dout_ll).
+    by wp; rnd; wp; rnd{2}; wp; skip => />; smt(dout_ll).    
+  rcondf{1} ^if; 1: by auto.
+  swap{1} [4..6] -3; sp; seq 1 1 : (#pre /\ ko0{1} = k1o{2}); 1: by call (: true).
+  sp 0 4; seq 1 1 : (#pre /\ kpp{1} = k{2}); 1: by inline RO.get; wp; rnd; wp.
+  sp; case (ko0{1} = None).
+  + rcondt{1} ^if; 1: by auto.
+    by inline RO.get; wp; rnd{2}; wp; skip => />; smt(dout_ll).    
+  rcondf{1} ^if; 1: by auto.
+  by inline RO.get; wp; rnd; wp; skip => />.
+if => //.
++ seq 1 1 : (#pre /\ ={sk0, sk1, r0, c1}); 1: by call (: ={RO.m}); 1: sim.
+  wp; sp.
+  seq 1 1 : (#pre /\ k{1} = k0{2} /\ c3{1} = c0{2}); 1: by call (: true).
+  swap{1} [1..2] 3; sp.
+  seq 1 1 : (#pre /\ ko1{1} = k1o{2}); 1: by call (: true).
+  sp; seq 1 1: (#pre /\ kpp1{1} = k{2}); 1: by inline RO.get; wp; rnd; wp.  
+  sp; case (ko1{1} = None).
+  + rcondt{1} ^if; 1: by auto.
+    by inline RO.get; wp; rnd{2}; wp; skip => />; smt(dout_ll).
+  rcondf{1} ^if; 1: by auto.
+  by inline RO.get; wp; rnd; wp; skip => />.
+inline RO.get; wp; rnd; wp.
+swap{1} [12..14] -4; wp; rnd.
+wp; call (: true); wp; call (: true). 
+wp; call (: ={RO.m}); 1: by sim.  
+by skip => />.
+qed.
+
+(** 
+  Equivalence between MAL-BIND-K-PK of post-processing KEM (for arbitrary adversary)
+  and CR (for above reduction adversary). (Shows CR --> MAL-BIND-K-PK, in ROM)
+**)
+equiv Eqv_MALBINDKPK_CR_ROM : 
+  MAL_BIND_ROM(RO, KEM_KDF_PP_CTPK(S), A).main ~ CR_ROM(RO, R_KPK_CR(S, A)).main : 
+    ={glob S, glob A} /\ arg{1} = K_Binds_PK ==> res{1} => res{2}. 
+proof.
+proc.
+inline{1} 2; inline{2} 2; inline{2} 2. 
+seq 3 3 : (#pre /\ ={RO.m, mbs} /\ bc0{1} = bc{1}).
++ call (: ={RO.m}); 1: by sim. 
+  by inline *; wp.
+inline KEM_KDF_PP_CTPK(S, RO).decaps KEM_KDF_PP_CTPK(S, RO).encaps.
+wp; if => //.
++ wp. 
+  seq 6 4 : (   ={glob S, glob RO, sk0, sk1, c0, c1, pk0, pk1}
+             /\ pk0{1} = sk2pk sk0{1}
+             /\ pk1{1} = sk2pk sk1{1}
+             /\ sk{1} = sk0{1}
+             /\ c{1} = c0{1}
+             /\ bc0{1} = K_Binds_PK
+             /\ ko{1} = k0o{2}) => [/> |]. 
+  + by call (: true); wp; call (: ={RO.m}); 1: sim.
+  case (ko{1} = None).
+  + rcondt{1} ^if; 1: by auto.
+    sp; conseq (: _ ==> true) => //. 
+    inline RO.get; seq 1 1 : (#pre /\ ko0{1} = k1o{2}); 1: by call (: true).
+    if{1}; 1: by wp; rnd{2}; wp; rnd{2}; wp; skip => />; smt(dout_ll).
+    by wp; rnd; wp; rnd{2}; wp; skip => />; smt(dout_ll).    
+  rcondf{1} ^if; 1: by auto.
+  swap{1} [4..6] -3; sp; seq 1 1 : (#pre /\ ko0{1} = k1o{2}); 1: by call (: true).
+  sp 0 4; seq 1 1 : (#pre /\ kpp{1} = k{2}); 1: by inline RO.get; wp; rnd; wp.
+  sp; case (ko0{1} = None).
+  + rcondt{1} ^if; 1: by auto.
+    by inline RO.get; wp; rnd{2}; wp; skip => />; smt(dout_ll).    
+  rcondf{1} ^if; 1: by auto.
+  by inline RO.get; wp; rnd; wp; skip => />.
+if => //.
++ seq 1 1 : (#pre /\ ={sk0, sk1, r0, c1}); 1: by call (: ={RO.m}); 1: sim.
+  wp; sp.
+  seq 1 1 : (#pre /\ k{1} = k0{2} /\ c3{1} = c0{2}); 1: by call (: true).
+  swap{1} [1..2] 3; sp.
+  seq 1 1 : (#pre /\ ko1{1} = k1o{2}); 1: by call (: true).
+  sp; seq 1 1: (#pre /\ kpp1{1} = k{2}); 1: by inline RO.get; wp; rnd; wp.  
+  sp; case (ko1{1} = None).
+  + rcondt{1} ^if; 1: by auto.
+    by inline RO.get; wp; rnd{2}; wp; skip => />; smt(dout_ll).
+  rcondf{1} ^if; 1: by auto.
+  by inline RO.get; wp; rnd; wp; skip => />.
+inline RO.get; wp; rnd; wp.
+swap{1} [12..14] -4; wp; rnd.
+wp; call (: true); wp; call (: true). 
+wp; call (: ={RO.m}); 1: by sim.  
+by skip => />.
+qed.
+
+end section.
+
+end PPKDFKCTPK.
