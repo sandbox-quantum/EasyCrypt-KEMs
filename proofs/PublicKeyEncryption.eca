@@ -1194,7 +1194,7 @@ module type Adv_Cor = {
   proc find(pk : pk_t, sk : sk_t) : ptxt_t
 }.
 
-(** Correctness (partial/delta) program/game **)
+(** Correctness (partial/delta) game **)
 module Correctness_Delta (S : Scheme, A : Adv_Cor) = {
   proc main() : bool = {
     var pk : pk_t;
@@ -1210,7 +1210,7 @@ module Correctness_Delta (S : Scheme, A : Adv_Cor) = {
     c <@ S.enc(pk, p);
     p' <@ S.dec(sk, c);
     
-    return p' = Some p;
+    return p' <> Some p;
   }
 }.
 
