@@ -960,6 +960,19 @@ module OW_CPA_O_ROM (RO : RandomOraclei) (S : Scheme_ROM) (O : Oracles_PCi_ROM) 
   }
 }.
 
+(** OW-CPA (final check performed with oracle) security game in ROM **)
+module OW_CPA_O_ROM (RO : RandomOraclei, S : Scheme_ROM, O : Oracles_PCi_ROM, A : Adv_OWCPA_ROM) = {
+  proc main() : bool = {
+    var r : bool;
+    
+    RO.init();
+    
+    r <@ OW_CPA_O(S(RO), O(RO), A(RO)).main();
+    
+    return r;    
+  }
+}.
+
 
 (* 
   One-Wayness under Plaintext-Checking Attacks (OW-PCA) in ROM
