@@ -932,6 +932,19 @@ module OW_CPA_ROM (RO : RandomOraclei, S : Scheme_ROM, O : Oracles_PCi_ROM, A : 
   }
 }.
 
+(** OW-CPA (final check performed with oracle) security game in ROM **)
+module OW_CPA_O_ROM (RO : RandomOraclei, S : Scheme_ROM, O : Oracles_PCi_ROM, A : Adv_OWCPA_ROM) = {
+  proc main() : bool = {
+    var r : bool;
+    
+    RO.init();
+    
+    r <@ OW_CPA_O(S(RO), O(RO), A(RO)).main();
+    
+    return r;    
+  }
+}.
+
 
 (* One-Wayness under Plaintext-Checking Attacks (OW-PCA) in ROM *)
 (** Adversary type considered for OW-PCA in ROM **)
@@ -952,6 +965,18 @@ module OW_PCA_ROM (RO : RandomOraclei, S : Scheme_ROM, O : Oracles_PCi_ROM, A : 
   }
 }.
 
+(** OW-PCA (final check perfoemd with oracle) security game in ROM **)
+module OW_PCA_O_ROM (RO : RandomOraclei, S : Scheme_ROM, O : Oracles_PCi_ROM, A : Adv_OWPCA_ROM) = {
+  proc main() : bool = {
+    var r : bool;
+    
+    RO.init();
+    
+    r <@ OW_PCA_O(S(RO), O(RO), A(RO)).main();
+    
+    return r;    
+  }
+}.
 
 (* One-Wayness under Validity-Checking Attacks (OW-VCA) in ROM *)
 (** Adversary type considered for OW-VCA in ROM **)
@@ -974,6 +999,20 @@ module OW_VCA_ROM (RO : RandomOraclei) (S : Scheme_ROM)
   }
 }.
 
+(** OW-VCA (final check performed with oracle) security game in ROM **)
+module OW_VCA_O_ROM (RO : RandomOraclei) (S : Scheme_ROM) 
+                    (OPC : Oracles_PCi_ROM, OCV : Oracles_CVi_ROM) 
+                    (A : Adv_OWVCA_ROM) = {
+  proc main() : bool = {
+    var r : bool;
+    
+    RO.init();
+    
+    r <@ OW_VCA_O(S(RO), OPC(RO), OCV(RO), A(RO)).main();
+    
+    return r;    
+  }
+}.
 
 (* One-Wayness under Validity-Checking Attacks (OW-PVCA) in ROM *)
 (** Adversary type considered for OW-PVCA in ROM **)
@@ -991,6 +1030,21 @@ module OW_PVCA_ROM (RO : RandomOraclei) (S : Scheme_ROM)
     RO.init();
     
     r <@ OW_PVCA(S(RO), OPC(RO), OCV(RO), A(RO)).main();
+    
+    return r;
+  }
+}.
+
+(** OW-PVCA (final check performed with oracle) security game in ROM **)
+module OW_PVCA_O_ROM (RO : RandomOraclei) (S : Scheme_ROM) 
+                     (OPC : Oracles_PCi_ROM, OCV : Oracles_CVi_ROM) 
+                     (A : Adv_OWPVCA_ROM) = {
+  proc main() = {
+    var r : bool;
+    
+    RO.init();
+    
+    r <@ OW_PVCA_O(S(RO), OPC(RO), OCV(RO), A(RO)).main();
     
     return r;
   }

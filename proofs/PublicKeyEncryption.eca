@@ -1291,7 +1291,12 @@ module type Oracles_CV = {
 (**
   One-Wayness (OW).
   The adversary is asked to produce the message/plaintext 
-  encrypted by a given ciphertext.
+  encrypted by a given ciphertext. In the context of delta-correct schemes, there
+  have been two ways to perform the final check: directly checking equality
+  of messages (as for perfectly correct schemes), or via the plaintext-checking oracle.
+  Both are equivalent up to the challenge message inducing a correctness failure.
+  Here, we provide both definitions (an _O suffix indicates that the oracle is used for
+  the final check). 
 **)
 abstract theory OW.
 (* Distributions *)
@@ -1311,7 +1316,32 @@ module type Adv_OWCPA = {
 }.
 
 (** OW-CPA security game **)
+(**  
+  Identical to OW-CPA game for perfectly correct schemes.
+  Provided here for convenience.
+**)
 module OW_CPA (S : Scheme, O : Oracles_PCi, A : Adv_OWCPA) = {
+  proc main() = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var p, p' : ptxt_t;
+    var c : ctxt_t;
+    var is_pre : bool;
+    
+    (pk, sk) <@ S.keygen();
+    O(S).init(sk);
+    
+    p <$ dptxtm pk;
+    c <@ S.enc(pk, p);
+    
+    p' <@ A.find(pk, c);
+    
+    return p' = p; 
+  }
+}.
+
+(** OW-CPA (final check performed with oracle) security game  **)
+module OW_CPA_O (S : Scheme, O : Oracles_PCi, A : Adv_OWCPA) = {
   proc main() = {
     var pk : pk_t;
     var sk : sk_t;
@@ -1342,6 +1372,27 @@ module type Adv_OWPCA (O : Oracles_PC) = {
 
 (** OW-PCA security game **)
 module OW_PCA (S : Scheme, O : Oracles_PCi, A : Adv_OWPCA) = {
+  proc main() = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var p, p' : ptxt_t;
+    var c : ctxt_t;
+    var is_pre : bool;
+    
+    (pk, sk) <@ S.keygen();
+    O(S).init(sk);
+    
+    p <$ dptxtm pk;
+    c <@ S.enc(pk, p);
+    
+    p' <@ A(O(S)).find(pk, c);
+    
+    return p' = p; 
+  }
+}.
+
+(** OW-PCA (final check performed with oracle) security game **)
+module OW_PCA_O (S : Scheme, O : Oracles_PCi, A : Adv_OWPCA) = {
   proc main() = {
     var pk : pk_t;
     var sk : sk_t;
@@ -1388,6 +1439,28 @@ module OW_VCA (S : Scheme, OPC : Oracles_PCi, OCV : Oracles_CVi, A : Adv_OWVCA) 
     
     p' <@ A(OCV(S)).find(pk, c);
     
+    return p' = p; 
+  }
+}.
+
+(** OW-VCA (final check performed with oracle) security game **)
+module OW_VCA_O (S : Scheme, OPC : Oracles_PCi, OCV : Oracles_CVi, A : Adv_OWVCA) = {
+  proc main() = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var p, p' : ptxt_t;
+    var c : ctxt_t;
+    var is_pre : bool;
+    
+    (pk, sk) <@ S.keygen();
+    OPC(S).init(sk);
+    
+    p <$ dptxtm pk;
+    c <@ S.enc(pk, p);
+    OCV(S).init(sk, c);
+    
+    p' <@ A(OCV(S)).find(pk, c);
+    
     is_pre <@ OPC(S).check(p', c);
     
     return is_pre; 
@@ -1403,6 +1476,28 @@ module type Adv_OWPVCA (OPC : Oracles_PC, OCV : Oracles_CV) = {
 
 (** OW-PVCA security game **)
 module OW_PVCA (S : Scheme, OPC : Oracles_PCi, OCV : Oracles_CVi, A : Adv_OWPVCA) = {
+  proc main() = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var p, p' : ptxt_t;
+    var c : ctxt_t;
+    var is_pre : bool;
+    
+    (pk, sk) <@ S.keygen();
+    OPC(S).init(sk);
+    
+    p <$ dptxtm pk;
+    c <@ S.enc(pk, p);
+    OCV(S).init(sk, c);
+    
+    p' <@ A(OPC(S), OCV(S)).find(pk, c);
+    
+    return p' = p; 
+  }
+}.
+
+(** OW-PVCA (final check performed with oracle) security game **)
+module OW_PVCA_O (S : Scheme, OPC : Oracles_PCi, OCV : Oracles_CVi, A : Adv_OWPVCA) = {
   proc main() = {
     var pk : pk_t;
     var sk : sk_t;

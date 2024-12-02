@@ -23,8 +23,12 @@ type rand_t.
 (** Extracts public key from secret key **)
 op sk2pk : sk_t -> pk_t.
 
+(** Captures (semantics of) "de-randomized" encryption algorithm of considered PKE scheme **)
+op enc : pk_t -> ptxt_t -> rand_t -> ctxt_t.
+
 
 (* Distributions *)
+(** Distribution (mapping, based on plaintext) over randomness to be used by random oracle **)
 op drandm : ptxt_t -> rand_t distr. 
 
 
@@ -46,7 +50,7 @@ clone import PublicKeyEncryptionROM as PKEROM with
 import PKE F_RO.
 import DeltaCorrectROM DeltaCorrect.
 
-
+(*
 module type SchemeDerand = { 
   include Scheme [-enc]
   proc enc(pk : pk_t, p : ptxt_t, r : rand_t) : ctxt_t
@@ -54,7 +58,7 @@ module type SchemeDerand = {
 
 
 module S (SD : SchemeDerand) : Scheme = {
-  proc keygen = SD.keygen
+   proc keygen = SD.keygen
   
   proc enc(pk : pk_t, p : ptxt_t) : ctxt_t = {
     var r : rand_t;
@@ -69,10 +73,10 @@ module S (SD : SchemeDerand) : Scheme = {
   
   proc dec = SD.dec 
 }.
+*)
 
-
-
-module (T (S : SchemeDerand) : Scheme_ROM) (G : RandomOracle) = {
+(** (Modular FO) T transform **)
+module (T (S : Scheme) : Scheme_ROM) (G : RandomOracle) = {
   proc keygen = S.keygen
 
   proc enc(pk : pk_t, p : ptxt_t) : ctxt_t = {
@@ -81,7 +85,7 @@ module (T (S : SchemeDerand) : Scheme_ROM) (G : RandomOracle) = {
     
     r <@ G.get(p);
     
-    c <@ S.enc(pk, p, r);
+    c <- enc pk p r;
     
     return c;
   }
@@ -97,7 +101,7 @@ module (T (S : SchemeDerand) : Scheme_ROM) (G : RandomOracle) = {
       ret <- None;
     } else {
       r <@ G.get(oget po); 
-      c' <@ S.enc(sk2pk sk, oget po, r);
+      c' <- enc (sk2pk sk) (oget po) r;
       ret <- if c' <> c then None else po;
     }  
       
@@ -105,7 +109,7 @@ module (T (S : SchemeDerand) : Scheme_ROM) (G : RandomOracle) = {
   }
 }.
 
-
+(*
 module R_Cor_CorROM (RO : RandomOraclei) (A : Adv_Cor_ROM) : Adv_Cor  = {
   proc find(pk : pk_t, sk : sk_t) : ptxt_t = {
     var p : ptxt_t; 
@@ -117,18 +121,13 @@ module R_Cor_CorROM (RO : RandomOraclei) (A : Adv_Cor_ROM) : Adv_Cor  = {
     return p; 
   }
 }.  
-
+*)
 
 section Correctness.
-
-declare module SD <: SchemeDerand{-RO}.
+(*
+declare module S <: SchemeDerand{-RO}.
 
 declare module A <: Adv_Cor_ROM{-RO, -SD}.
-
-
-
-
-
 
 lemma test &m :
   Pr[Correctness_Delta_ROM(RO, T(SD), A).main() @ &m : res] 
@@ -148,9 +147,10 @@ sim.
 admit. 
 qed.  
 
-(*
 declare op encsem : pk_t -> ptxt_t -> rand_t -> ctxt_t.  
 
 declare axiom S_enc_encsem (pk' : pk_t) (p' : ptxt_t) (r' : rand_t) :
   hoare[S.enc : arg = (pk', p', r') ==> res = encsem pk' p' r'].
 *)
+end section Correctness.
+
