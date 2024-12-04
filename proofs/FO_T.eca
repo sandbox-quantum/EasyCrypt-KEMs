@@ -152,5 +152,9 @@ declare op encsem : pk_t -> ptxt_t -> rand_t -> ctxt_t.
 declare axiom S_enc_encsem (pk' : pk_t) (p' : ptxt_t) (r' : rand_t) :
   hoare[S.enc : arg = (pk', p', r') ==> res = encsem pk' p' r'].
 *)
-end section Correctness.
 
+
+
+
+
+end section Correctness.

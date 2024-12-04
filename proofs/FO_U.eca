@@ -1,0 +1,155 @@
+require import AllCore Distr.
+require PublicKeyEncryption KeyEncapsulationMechanisms.
+
+
+
+(* Types *)
+(** Public keys (asymmetric) **)
+type pk_t.
+
+(** Secret keys (asymmetric) **)
+type sk_t.
+
+(** Plaintexts **)
+type ptxt_t.
+
+(** Ciphertexts/Encapsulations **)
+type ctxt_t.
+
+(** (Shared) Symmetric keys **)
+type key_t. 
+
+
+(* Operators *)
+(** Hash function to compute shared keys **)
+op h : ptxt_t * ctxt_t -> key_t.
+
+
+(* Distributions *)
+op [lossless] dptxt : ptxt_t distr.
+
+(* Clones and imports *)
+(*
+clone import KeyedHashFunctions as H with
+  type key_t <- ik_t,
+  type in_t <- in_t,
+  type out_t <- key_t
+  
+  proof *.
+*)
+  
+clone import PublicKeyEncryption as PKE with
+  type pk_t <- pk_t,
+  type sk_t <- sk_t,
+  type ptxt_t <- ptxt_t,
+  type ctxt_t <- ctxt_t
+  
+  proof *. 
+
+clone import KeyEncapsulationMechanisms as KEM with
+  type pk_t <- pk_t,
+  type sk_t <- sk_t,
+  type key_t <- key_t,
+  type ctxt_t <- ctxt_t
+  
+  proof *.
+
+(*
+clone import CR as CRH with
+  op dkey <- dik
+  
+  proof *.
+  realize dkey_ll by exact dik_ll.  
+*)
+
+module FO_Umc_Explicit (S : PKE.Scheme) : KEM.Scheme = {
+  proc keygen = S.keygen
+  
+  proc encaps(pk : pk_t) : key_t * ctxt_t = {
+    var p : ptxt_t;
+    var c : ctxt_t;
+    var k : key_t;
+    
+    p <$ dptxt;
+    
+    c <@ S.enc(pk, p);
+    
+    k <- h (p, c);
+    
+    return (k, c);
+  }
+  
+  proc decaps(sk : sk_t, c : ctxt_t) : key_t option = { 
+    var po : ptxt_t option;
+    var k : key_t;
+    var ko : key_t option;
+    
+    po <@ S.dec(sk, c);
+    
+    ko <- if po = None then None else Some (h ((oget po), c)); 
+    
+    return ko; 
+  }  
+}.
+
+module type Adv_CR = {
+  proc find() : (ptxt_t * ctxt_t) * (ptxt_t * ctxt_t)
+}.
+
+module CR(A : Adv_CR) = {
+  proc main() : bool = {
+    var x : ptxt_t * ctxt_t;
+    var x' : ptxt_t * ctxt_t;
+    
+    (x, x') <@ A.find();
+
+    return x' <> x /\ h x' = h x;
+  }
+}.
+
+
+module R_CR_HONBINDKCT (S : PKE.Scheme) (O0 : Oracles_CCA1i, O1 : Oracles_CCA1i) (A : Adv_HONBIND) : Adv_CR = {
+  proc find() = {
+    var pk0 : pk_t;
+    var pk1 : pk_t;
+    var sk0 : sk_t;
+    var sk1 : sk_t;
+    var p0, p1 : ptxt_t option;
+    var b : bool;
+    var c0 : ctxt_t;
+    var c1 : ctxt_t;
+    var k0 : key_t option;
+    var k1 : key_t option;
+    var no_fail : bool;
+    
+    (pk0, sk0) <@  FO_Umc_Explicit(S).keygen();
+    b <@ A(O0( FO_Umc_Explicit(S)), O1( FO_Umc_Explicit(S))).choose(K_Binds_CT);
+    if (b) { 
+      (pk1, sk1) <@ S.keygen();
+    } else {
+      (pk1, sk1) <- (pk0, sk0);
+    }
+         
+    O0( FO_Umc_Explicit(S)).init(sk0);
+    O1( FO_Umc_Explicit(S)).init(sk1);
+    
+    (c0, c1) <@ A(O0( FO_Umc_Explicit(S)), O1( FO_Umc_Explicit(S))).find(K_Binds_CT, pk0, pk1);
+    
+    p0 <@ S.dec(sk0, c0);
+    p1 <@ S.dec(sk1, c1);
+    
+    return ((oget p0, c0), (oget p1, c1));
+  }
+}.
+
+
+
+section.
+
+declare module S <: PKE.Scheme.
+
+declare module A <: Adv_HONBIND{-S}. 
+
+
+end section.
+
