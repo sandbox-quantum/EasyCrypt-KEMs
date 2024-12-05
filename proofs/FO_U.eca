@@ -1,5 +1,5 @@
 require import AllCore Distr.
-require PublicKeyEncryption KeyEncapsulationMechanisms.
+require HashFunctions PublicKeyEncryption KeyEncapsulationMechanisms.
 
 
 
@@ -19,25 +19,10 @@ type ctxt_t.
 (** (Shared) Symmetric keys **)
 type key_t. 
 
-
-(* Operators *)
-(** Hash function to compute shared keys **)
-op h : ptxt_t * ctxt_t -> key_t.
-
-
 (* Distributions *)
-op [lossless] dptxt : ptxt_t distr.
+op dptxtm : pk_t -> ptxt_t distr.
 
-(* Clones and imports *)
-(*
-clone import KeyedHashFunctions as H with
-  type key_t <- ik_t,
-  type in_t <- in_t,
-  type out_t <- key_t
-  
-  proof *.
-*)
-  
+(* Instantiate and import definitions for PKE schemes (shared by all variants) *)   
 clone import PublicKeyEncryption as PKE with
   type pk_t <- pk_t,
   type sk_t <- sk_t,
@@ -46,6 +31,26 @@ clone import PublicKeyEncryption as PKE with
   
   proof *. 
 
+  
+(** FO U tranform that hashes both message and ciphertext. **)
+abstract theory Umc.
+(* Operators *)
+(** Hash function to compute shared keys **)
+op h : ptxt_t * ctxt_t -> key_t.
+
+(* Instantiate and import definitions for hash functions *)
+clone import HashFunctions as H with
+  type in_t <- ptxt_t * ctxt_t,
+  type out_t <- key_t,
+  
+  op f <- h
+  
+  proof *.
+  
+ 
+(** Explicit rejection variant of the FO U tranform that hashes both message and ciphertext **)
+theory Explicit.
+(* Instantiate and import definitions for KEMs *)
 clone import KeyEncapsulationMechanisms as KEM with
   type pk_t <- pk_t,
   type sk_t <- sk_t,
@@ -54,15 +59,9 @@ clone import KeyEncapsulationMechanisms as KEM with
   
   proof *.
 
-(*
-clone import CR as CRH with
-  op dkey <- dik
   
-  proof *.
-  realize dkey_ll by exact dik_ll.  
-*)
-
-module FO_Umc_Explicit (S : PKE.Scheme) : KEM.Scheme = {
+(** Transformation U, hashing both message and ciphertext, with explicit rejection **)
+module Umc_Explicit (S : PKE.Scheme) : KEM.Scheme = {
   proc keygen = S.keygen
   
   proc encaps(pk : pk_t) : key_t * ctxt_t = {
@@ -70,7 +69,7 @@ module FO_Umc_Explicit (S : PKE.Scheme) : KEM.Scheme = {
     var c : ctxt_t;
     var k : key_t;
     
-    p <$ dptxt;
+    p <$ dptxtm pk;
     
     c <@ S.enc(pk, p);
     
@@ -92,22 +91,241 @@ module FO_Umc_Explicit (S : PKE.Scheme) : KEM.Scheme = {
   }  
 }.
 
-module type Adv_CR = {
-  proc find() : (ptxt_t * ctxt_t) * (ptxt_t * ctxt_t)
-}.
+  
+end Explicit.
 
-module CR(A : Adv_CR) = {
-  proc main() : bool = {
-    var x : ptxt_t * ctxt_t;
-    var x' : ptxt_t * ctxt_t;
+
+(** Implicit rejection variant of the FO U tranform that hashes both message and ciphertext **)
+theory Implicit.
+(* Instantiate and import definitions for KEMs *)
+clone import KeyEncapsulationMechanisms as KEM with
+  type pk_t <- pk_t,
+  type sk_t <- sk_t * ptxt_t,
+  type key_t <- key_t,
+  type ctxt_t <- ctxt_t
+  
+  proof *.
+
+(* Scheme/transform *)
+(** Transformation U, hashing both message and ciphertext, with implicit rejection **)
+module Umc_Implicit (S : PKE.Scheme) : KEM.Scheme = {
+  proc keygen() : pk_t * (sk_t * ptxt_t) = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var s : ptxt_t;
     
-    (x, x') <@ A.find();
-
-    return x' <> x /\ h x' = h x;
+    (pk, sk) <@ S.keygen();
+    
+    s <$ dptxtm pk;
+    
+    return (pk, (sk, s));
   }
+  
+  proc encaps(pk : pk_t) : key_t * ctxt_t = {
+    var p : ptxt_t;
+    var c : ctxt_t;
+    var k : key_t;
+    
+    p <$ dptxtm pk;
+    
+    c <@ S.enc(pk, p);
+    
+    k <- h (p, c);
+    
+    return (k, c);
+  }
+  
+  proc decaps(sks : sk_t * ptxt_t, c : ctxt_t) : key_t option = { 
+    var sk : sk_t;
+    var s : ptxt_t;
+    var po : ptxt_t option;
+    var k : key_t;
+    var ko : key_t option;
+    
+    (sk, s) <- sks;
+    
+    po <@ S.dec(sk, c);
+    
+    ko <- if po = None then Some (h (s, c)) else Some (h ((oget po), c)); 
+    
+    return ko; 
+  }  
+}.
+  
+  
+end Implicit.
+
+
+end Umc.
+
+
+(** FO U tranform, hashing both message and ciphertext with implicit rejection **)  
+theory Um.
+(** Explicit rejection variant of the FO U tranform that hashes both message and ciphertext **)
+abstract theory Explicit.
+(* Operators *)
+(** Hash function to compute shared keys **)
+op h : ptxt_t -> key_t.
+
+(* Instantiate and import definitions for hash functions *)
+clone import HashFunctions as H with
+  type in_t <- ptxt_t,
+  type out_t <- key_t,
+  
+  op f <- h
+  
+  proof *.
+  
+(* Instantiate and import definitions for KEMs *)
+clone import KeyEncapsulationMechanisms as KEM with
+  type pk_t <- pk_t,
+  type sk_t <- sk_t,
+  type key_t <- key_t,
+  type ctxt_t <- ctxt_t
+  
+  proof *.
+
+  
+(** Transformation U, hashing both message and ciphertext, with explicit rejection **)
+module Um_Explicit (S : PKE.Scheme) : KEM.Scheme = {
+  proc keygen = S.keygen
+  
+  proc encaps(pk : pk_t) : key_t * ctxt_t = {
+    var p : ptxt_t;
+    var c : ctxt_t;
+    var k : key_t;
+    
+    p <$ dptxtm pk;
+    
+    c <@ S.enc(pk, p);
+    
+    k <- h p;
+    
+    return (k, c);
+  }
+  
+  proc decaps(sk : sk_t, c : ctxt_t) : key_t option = { 
+    var po : ptxt_t option;
+    var k : key_t;
+    var ko : key_t option;
+    
+    po <@ S.dec(sk, c);
+    
+    ko <- if po = None then None else Some (h (oget po)); 
+    
+    return ko; 
+  }  
 }.
 
+  
+end Explicit.
 
+
+(** Implicit rejection variant of the FO U tranform that hashes both message and ciphertext **)
+abstract theory Implicit.
+(* Types *)
+(** Inputs (to hash function) **)
+(** 
+  In this case, the (same) hash function may be given inputs of different types
+  (specifically: only a message in case of acceptance, a message and a ciphertext in case of rejection), 
+  meaning we need a way to combine both input.
+  Here, we achieve this by means of a separate input type and operators mapping the different types
+  that are actually used as input to this type.  
+**)
+type in_t.
+
+(* Operators *)
+(** Hash function to compute shared keys **)
+op h : in_t -> key_t.
+
+(** Operator mapping plaintexts to the input type of the hash function **)
+(** 
+  Concretely, this will most likely be instantiated with simple lifings/casts 
+  (e.g., from fixed-length bitstrings to arbitrary-length bitstrings) 
+**)
+op p2in : ptxt_t -> in_t.
+
+(** Operator mapping (pairs of) plaintexts and ciphertexts to the input type of the hash function **)
+(** 
+  Concretely, this will most likely be instantiated with simple lifings/casts 
+  (e.g., from pairs of fixed-length bitstrings to arbitrary-length bitstrings) 
+**)
+op pc2in : ptxt_t * ctxt_t -> in_t.
+
+
+(* Instantiate and import definitions for hash functions *)
+clone import HashFunctions as H with
+  type in_t <- in_t,
+  type out_t <- key_t,
+  
+  op f <- h
+  
+  proof *.
+  
+(* Instantiate and import definitions for KEMs *)
+clone import KeyEncapsulationMechanisms as KEM with
+  type pk_t <- pk_t,
+  type sk_t <- sk_t * ptxt_t,
+  type key_t <- key_t,
+  type ctxt_t <- ctxt_t
+  
+  proof *.
+
+(* Scheme/transform *)
+(** Transformation U, hashing both message and ciphertext, with implicit rejection **)
+module Umc_Implicit (S : PKE.Scheme) : KEM.Scheme = {
+  proc keygen() : pk_t * (sk_t * ptxt_t) = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var s : ptxt_t;
+    
+    (pk, sk) <@ S.keygen();
+    
+    s <$ dptxtm pk;
+    
+    return (pk, (sk, s));
+  }
+  
+  proc encaps(pk : pk_t) : key_t * ctxt_t = {
+    var p : ptxt_t;
+    var c : ctxt_t;
+    var k : key_t;
+    
+    p <$ dptxtm pk;
+    
+    c <@ S.enc(pk, p);
+    
+    k <- h (p2in p);
+    
+    return (k, c);
+  }
+  
+  proc decaps(sks : sk_t * ptxt_t, c : ctxt_t) : key_t option = { 
+    var sk : sk_t;
+    var s : ptxt_t;
+    var po : ptxt_t option;
+    var k : key_t;
+    var ko : key_t option;
+    
+    (sk, s) <- sks;
+    
+    po <@ S.dec(sk, c);
+    
+    ko <- if po = None then Some (h (pc2in (s, c))) else Some (h (pc2in ((oget po), c))); 
+    
+    return ko; 
+  }  
+}.
+ 
+end Implicit.
+
+
+end Um.
+
+
+
+
+(*
 module R_CR_HONBINDKCT (S : PKE.Scheme) (O0 : Oracles_CCA1i, O1 : Oracles_CCA1i) (A : Adv_HONBIND) : Adv_CR = {
   proc find() = {
     var pk0 : pk_t;
@@ -122,8 +340,8 @@ module R_CR_HONBINDKCT (S : PKE.Scheme) (O0 : Oracles_CCA1i, O1 : Oracles_CCA1i)
     var k1 : key_t option;
     var no_fail : bool;
     
-    (pk0, sk0) <@  FO_Umc_Explicit(S).keygen();
-    b <@ A(O0( FO_Umc_Explicit(S)), O1( FO_Umc_Explicit(S))).choose(K_Binds_CT);
+    (pk0, sk0) <@ FO_Umc_Explicit(S).keygen();
+    b <@ A(O0(FO_Umc_Explicit(S)), O1(FO_Umc_Explicit(S))).choose(K_Binds_CT);
     if (b) { 
       (pk1, sk1) <@ S.keygen();
     } else {
@@ -133,7 +351,7 @@ module R_CR_HONBINDKCT (S : PKE.Scheme) (O0 : Oracles_CCA1i, O1 : Oracles_CCA1i)
     O0( FO_Umc_Explicit(S)).init(sk0);
     O1( FO_Umc_Explicit(S)).init(sk1);
     
-    (c0, c1) <@ A(O0( FO_Umc_Explicit(S)), O1( FO_Umc_Explicit(S))).find(K_Binds_CT, pk0, pk1);
+    (c0, c1) <@ A(O0(FO_Umc_Explicit(S)), O1(FO_Umc_Explicit(S))).find(K_Binds_CT, pk0, pk1);
     
     p0 <@ S.dec(sk0, c0);
     p1 <@ S.dec(sk1, c1);
@@ -146,10 +364,94 @@ module R_CR_HONBINDKCT (S : PKE.Scheme) (O0 : Oracles_CCA1i, O1 : Oracles_CCA1i)
 
 section.
 
-declare module S <: PKE.Scheme.
+declare module S <: PKE.Scheme{-O_CCA1_Default, -O_CCA1_DDefault}.
 
-declare module A <: Adv_HONBIND{-S}. 
+declare module A <: Adv_HONBIND{-S, -O_CCA1_Default, -O_CCA1_DDefault}. 
 
+lemma test &m :
+  Pr[HON_BIND(FO_Umc_Explicit(S), KEM.O_CCA1_Default, KEM.O_CCA1_DDefault, A).main(K_Binds_CT) @ &m : res]
+  <=
+  Pr[CR(R_CR_HONBINDKCT(S, KEM.O_CCA1_Default, KEM.O_CCA1_DDefault, A)).main() @ &m : res].
+proof.
+byequiv => //.
+proc.
+inline{2} 1.
+seq 1 1 : (={glob A, glob S, pk0, sk0} /\ bc{1} = K_Binds_CT); 1: by call (: true).
+do 2! (rcondf{1} ^if; 1: auto).
+inline{1} FO_Umc_Explicit(S).decaps. 
+wp; call (: true); wp; call (: true); wp. 
+conseq (: _ ==> ={c0, c1, glob S, sk1}); 1: smt().
+call (: ={glob O_CCA1_Default, glob O_CCA1_DDefault, glob S}); 1..2: by sim.  
+conseq />.
+seq 1 1 : (#pre /\ ={b}); 1: by call (: true).
+by sim.
+qed.
 
 end section.
 
+
+print PKE.SROB_CCA.
+
+module (R_SROBCCA_HONBINDCTPK (S : PKE.Scheme) (A : Adv_HONBIND) : Adv_SROBCCA) (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  proc find(pk0 : pk_t, pk1 : pk_t) = {
+    var pk0 : pk_t;
+    var pk1 : pk_t;
+    var sk0 : sk_t;
+    var sk1 : sk_t;
+    var p0, p1 : ptxt_t option;
+    var b : bool;
+    var c0 : ctxt_t;
+    var c1 : ctxt_t;
+    var k0 : key_t option;
+    var k1 : key_t option;
+    var no_fail : bool;
+    
+    (pk0, sk0) <@ FO_Umc_Explicit(S).keygen();
+    b <@ A(O0(FO_Umc_Explicit(S)), O1(FO_Umc_Explicit(S))).choose(K_Binds_CT);
+    if (b) { 
+      (pk1, sk1) <@ S.keygen();
+    } else {
+      (pk1, sk1) <- (pk0, sk0);
+    }
+         
+    O0( FO_Umc_Explicit(S)).init(sk0);
+    O1( FO_Umc_Explicit(S)).init(sk1);
+    
+    (c0, c1) <@ A(O0(FO_Umc_Explicit(S)), O1(FO_Umc_Explicit(S))).find(K_Binds_CT, pk0, pk1);
+    
+    p0 <@ S.dec(sk0, c0);
+    p1 <@ S.dec(sk1, c1);
+    
+    return ((oget p0, c0), (oget p1, c1));
+  }
+}.
+
+
+
+section.
+
+declare module S <: PKE.Scheme{-O_CCA1_Default, -O_CCA1_DDefault}.
+
+declare module A <: Adv_HONBIND{-S, -O_CCA1_Default, -O_CCA1_DDefault}. 
+
+lemma test &m :
+  Pr[HON_BIND(FO_Umc_Explicit(S), KEM.O_CCA1_Default, KEM.O_CCA1_DDefault, A).main(K_Binds_CT) @ &m : res]
+  <=
+  Pr[CR(R_CR_HONBINDKCT(S, KEM.O_CCA1_Default, KEM.O_CCA1_DDefault, A)).main() @ &m : res].
+proof.
+byequiv => //.
+proc.
+inline{2} 1.
+seq 1 1 : (={glob A, glob S, pk0, sk0} /\ bc{1} = K_Binds_CT); 1: by call (: true).
+do 2! (rcondf{1} ^if; 1: auto).
+inline{1} FO_Umc_Explicit(S).decaps. 
+wp; call (: true); wp; call (: true); wp. 
+conseq (: _ ==> ={c0, c1, glob S, sk1}); 1: smt().
+call (: ={glob O_CCA1_Default, glob O_CCA1_DDefault, glob S}); 1..2: by sim.  
+conseq />.
+seq 1 1 : (#pre /\ ={b}); 1: by call (: true).
+by sim.
+qed.
+
+end section.
+*)

@@ -178,7 +178,7 @@ declare module S <: SchemeDerand{-RO}.
 (* Declare arbitrary MAL-BIND adversary (in ROM)*)
 declare module A <: Adv_MALBIND_ROM{-S, -RO}.
 
-(* By assumption, the distribution(s) that the random oracle samples from is (are) Lossless *)
+(* By assumption, the distribution(s) that the random oracle samples from is (are) lossless *)
 declare axiom dout_ll (kc : key_t * ctxt_t) : is_lossless (dout kc).
 
 (** 
@@ -644,7 +644,7 @@ declare module S <: SchemeDerand{-RO}.
 (* Declare arbitrary MAL-BIND adversary (in ROM) *)
 declare module A <: Adv_MALBIND_ROM{-S, -RO}.
 
-(* By assumption, the distribution(s) that the random oracle samples from is (are) Lossless *)
+(* By assumption, the distribution(s) that the random oracle samples from is (are) lossless *)
 declare axiom dout_ll (kcpk : key_t * ctxt_t * pk_t) : is_lossless (dout kcpk).
 
 
