@@ -91,6 +91,74 @@ module Umc_Explicit (S : PKE.Scheme) : KEM.Scheme = {
   }  
 }.
 
+
+(*
+Properties:
+> X-BIND-K-CT break gives CR break: 
+  Different ct, which is input to h, but equal k, which is output of h.
+> HON-BIND-K-PK break gives SROB-CCA or CR break: 
+  Equal non-None k means equal outcome of hash, so if c are different (input of hash), then CR break;
+  else, c are equal, and since k are non-None (and PK are different), c breaks SROB-CCA.
+> HON-BIND-K-PK break gives SCFR-CCA or (one of two) CR break: 
+  Equal non-None k means equal outcome of hash, so if c are different (input of hash), then CR break;
+  else, c are equal, but if p are unequal, then another CR break; else, c and p are equal, and 
+  p are non-None, so SCFR-CCA.
+> LEAK-BIND-K-PK break gives SROB-LEAK or CR break: 
+  Same as HON case.
+> LEAK-BIND-K-PK break gives SCFR-LEAK or (one of two) CR break: 
+  Same as HON case.
+> HON-BIND-CT-K break gives SROB-CCA break:
+  If adversary chooses "equal key pair", then advantage equals 0, because decryption is deterministic
+  (so the dec calls give equal p and c are equal --> equal input to h --> equal k --> fail).
+  Else, adversary chooses "independently generated key pair", and c are equal and k are non-None,
+  we get break of SROB-CCA.
+> LEAK-BIND-CT-K break gives SROB-LEAK break:
+  Same as HON case.
+> HON-BIND-CT-PK break gives SROB-CCA break:
+  non-None k and equal c means decryption of c with both sk gives non-None p and --> SROB-CCA break.
+> LEAK-BIND-CT-PK break gives SROB-LEAK break:
+  Same as HON case.
+> HON-BIND-K,CT-PK break gives SCFR-CCA break or CR break:
+  Equal non-None k and equal c means decryption of c with both sk gives non-None p and 
+  and hashing these p (with c) gives the equal k. So, if these p are unequal --> collision;
+  if these p are equal --> SCFR-CCA break.
+> LEAK-BIND-K,CT-PK break gives SCFR-LEAK break or CR break:
+  Same as HON case.
+> X-BIND-K,PK-CT break gives CR break:
+  Follows from X-BIND-K-CT break gives CR break. 
+*)
+
+(* LEAK-BIND-K-CT break for Umc-Explicit gives CR break for h *)
+(** Reduction adversary reducing CR (for h) to LEAK-BIND-K-CT (for Umc-Explicit) **)
+module R_CR_HONBINDKCT (S : PKE.Scheme) (O0 : Oracles_CCA1i, O1 : Oracles_CCA1i) (A : Adv_HONBIND) : Adv_CR = {
+  proc find() = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var p0, p1 : ptxt_t option;
+    var b : bool;
+    var c0, c1 : ctxt_t;
+    
+    (pk0, sk0) <@ Umc_Explicit(S).keygen();
+    b <@ A(O0(Umc_Explicit(S)), O1(Umc_Explicit(S))).choose(K_Binds_CT);
+    if (b) { 
+      (pk1, sk1) <@ S.keygen();
+    } else {
+      (pk1, sk1) <- (pk0, sk0);
+    }
+         
+    O0(Umc_Explicit(S)).init(sk0);
+    O1(Umc_Explicit(S)).init(sk1);
+    
+    (c0, c1) <@ A(O0(Umc_Explicit(S)), O1(Umc_Explicit(S))).find(K_Binds_CT, pk0, pk1);
+    
+    p0 <@ S.dec(sk0, c0);
+    p1 <@ S.dec(sk1, c1);
+    
+    return ((oget p0, c0), (oget p1, c1));
+  }
+}.
+
+
   
 end Explicit.
 
@@ -152,6 +220,30 @@ module Umc_Implicit (S : PKE.Scheme) : KEM.Scheme = {
   }  
 }.
   
+(*
+Properties:
+> X-BIND-K-CT break gives CR break: 
+  Different ct, which is input to h, but equal k, which is output of h.
+> HON-BIND-K-PK break gives SROB-CCA or (one of two) CR break (unless equal s or s equals po): 
+  Equal k means equal outcome of hash, so if c are different (input of hash), then CR break. 
+  Else (c are equal), if po0 or po1 is none, then CR break unless equal s or s equal to po.
+  Else (c are equal and po are non-None), SROB-CCA break. 
+> HON-BIND-K-PK break gives SCFR-CCA or (one of multiple) CR break (unless equal s or s equals po): 
+  Same as SROB-CCA case, but split "po are non-None" further into "equal po" and "unequal po";
+  in the former SCFR-CCA break, in the latter CR break.  
+> LEAK-BIND-K-PK break gives SROB-LEAK or CR break: 
+  Same as HON case.
+> LEAK-BIND-K-PK break gives SCFR-LEAK or (one of two) CR break: 
+  Same as HON case.
+> HON-BIND-K,CT-PK break gives SCFR-CCA break or CR break:
+  Same as HON-BIND-K-PK, but collision can only come from s/po being unequal (instead of also from
+  c being unequal).
+> LEAK-BIND-K,CT-PK break gives SCFR-LEAK break or CR break:
+  Same as HON case.
+> X-BIND-K,PK-CT break gives CR break:
+  Follows from X-BIND-K-CT break gives CR break. 
+*)
+
   
 end Implicit.
 
@@ -159,9 +251,9 @@ end Implicit.
 end Umc.
 
 
-(** FO U tranform, hashing both message and ciphertext with implicit rejection **)  
+(** FO U tranform, hashing only the message **)  
 theory Um.
-(** Explicit rejection variant of the FO U tranform that hashes both message and ciphertext **)
+(** Explicit rejection variant of the FO U tranform that hashes only the message **)
 abstract theory Explicit.
 (* Operators *)
 (** Hash function to compute shared keys **)
@@ -217,11 +309,37 @@ module Um_Explicit (S : PKE.Scheme) : KEM.Scheme = {
   }  
 }.
 
+
+(*
+Properties:
+> X-BIND-K-CT --> ?
+> HON-BIND-K-PK --> ?
+> LEAK-BIND-K-PK --> ?
+> HON-BIND-CT-K break gives SROB-CCA break:
+  If adversary chooses "equal key pair", then advantage equals 0, because decryption is deterministic
+  (so the dec calls give equal p and c are equal --> equal input to h --> equal k --> fail).
+  Else, adversary chooses "independently generated key pair", and c are equal and k are non-None,
+  we get break of SROB-CCA.
+> LEAK-BIND-CT-K break gives SROB-LEAK break:
+  Same as HON case.
+> HON-BIND-CT-PK break gives SROB-CCA break:
+  non-None k and equal c means decryption of c with both sk gives non-None p --> SROB-CCA break.
+> LEAK-BIND-CT-PK break gives SROB-LEAK break:
+  Same as HON case.
+> HON-BIND-K,CT-PK break gives SCFR-CCA break or CR break:
+  Equal non-None k and equal c means decryption of c with both sk gives non-None p and 
+  and hashing these p gives equal k. So, if these p are unequal --> collision;
+  if these p are equal --> SCFR-CCA break.
+> LEAK-BIND-K,CT-PK break gives SCFR-LEAK break or CR break:
+  Same as HON case.
+> X-BIND-K,PK-CT --> ?
+*)
+
   
 end Explicit.
 
 
-(** Implicit rejection variant of the FO U tranform that hashes both message and ciphertext **)
+(** Implicit rejection variant of the FO U tranform that hashes only the message **)
 abstract theory Implicit.
 (* Types *)
 (** Inputs (to hash function) **)
@@ -272,8 +390,8 @@ clone import KeyEncapsulationMechanisms as KEM with
   proof *.
 
 (* Scheme/transform *)
-(** Transformation U, hashing both message and ciphertext, with implicit rejection **)
-module Umc_Implicit (S : PKE.Scheme) : KEM.Scheme = {
+(** Transformation U, hashing only the message, with implicit rejection **)
+module Um_Implicit (S : PKE.Scheme) : KEM.Scheme = {
   proc keygen() : pk_t * (sk_t * ptxt_t) = {
     var pk : pk_t;
     var sk : sk_t;
