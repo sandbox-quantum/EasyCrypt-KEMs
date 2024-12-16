@@ -1040,6 +1040,38 @@ module WROB_CCA (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_WRO
 
 
 (*
+  Strong ROBustness under (secret key) LEAKage (SROB-LEAK).
+  The adversary is given two (honestly generated) key pairs and is asked to
+  provide a (single) ciphertext that decrypts to valid plaintexts under both 
+  of the secret keys (corresponding to the provided public keys).
+*)
+(** Adversary class considered for SROB-LEAK **)
+module type Adv_SROBLEAK = {
+  proc find(pk0 : pk_t, sk0 : sk_t, pk1 : pk_t, sk1 : sk_t) : ctxt_t
+}.
+
+(** SROB-LEAK security game **)
+module SROB_LEAK (S : Scheme, A : Adv_SROBLEAK) = {
+  proc main() : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var p0, p1 : ptxt_t option;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    
+    c <@ A.find(pk0, sk0, pk1, sk1);
+    
+    p0 <@ S.dec(sk0, c);
+    p1 <@ S.dec(sk1, c);
+    
+    return p0 <> None /\ p1 <> None;
+  }
+}.
+
+
+(*
   Strong Collision-FReeness (SCFR).
   As SROB, but additionally requires the resulting plaintexts to be
   equal to eachother (instead of only requiring them to be valid).
@@ -1084,7 +1116,7 @@ module SCFR_CPA (S : Scheme, A : Adv_SCFRCPA) = {
   In a CPA setting, the adversary is given two (honestly generated) public keys and is asked to choose
   which one to use for encryption and which one to use (the corresponding secret key of)
   for decryption. Here, the goal is that the decryption (with the key appointed for
-  decryption) of the encryption (created with the key appointed for decryption) returns
+  decryption) of the encryption (created with the key appointed for encryption) returns
   a valid plaintext that is equal to the encrypted one.
 *)
 (** Adversary class considered for WCFR-CPA **)
@@ -1149,11 +1181,11 @@ module SCFR_CCA (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_SCF
 }.
 
 (*
-  Weak ROBustness under Chosen-Ciphertext Attacks (WCFR-CCA).
+  Weak Collision-FReeness under Chosen-Ciphertext Attacks (WCFR-CCA).
   In a CCA setting, the adversary is given two (honestly generated) public keys and is asked to choose
   which one to use for encryption and which one to use (the corresponding secret key of)
   for decryption. Here, the goal is that the decryption (with the key appointed for
-  decryption) of the encryption (created with the key appointed for decryption) returns
+  decryption) of the encryption (created with the key appointed for encryption) returns
   a valid plaintext that is equal to the encrypted one.
 *)
 (** Adversary class considered for WCFR-CCA **)
@@ -1181,7 +1213,39 @@ module WCFR_CCA (S : Scheme, O0 : Oracles_CCA1i, O1 : Oracles_CCA1i, A : Adv_WCF
     c <@ S.enc(if b then pk1 else pk0, p);
     p' <@ S.dec(if b then sk0 else sk1, c);
     
-    return p' <> Some p;
+    return p' = Some p;
+  }
+}.
+
+
+(*
+  Strong Collision-FReeness under (secret key) LEAKage (SCFR-LEAK).
+  The adversary is given two (honestly generated) key pairs and is asked to
+  provide a (single) ciphertext that decrypts to the same valid plaintext under both 
+  of the secret keys (corresponding to the provided public keys).
+*)
+(** Adversary class considered for SCFR-LEAK **)
+module type Adv_SCFRLEAK = {
+  proc find(pk0 : pk_t, sk0 : sk_t, pk1 : pk_t, sk1 : sk_t) : ctxt_t
+}.
+
+(** SCFR-LEAK security game **)
+module SCFR_LEAK (S : Scheme, A : Adv_SCFRLEAK) = {
+  proc main() : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var p0, p1 : ptxt_t option;
+    var c : ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    (pk1, sk1) <@ S.keygen();
+    
+    c <@ A.find(pk0, sk0, pk1, sk1);
+    
+    p0 <@ S.dec(sk0, c);
+    p1 <@ S.dec(sk1, c);
+    
+    return p0 <> None /\ p1 <> None /\ p0 = p1;
   }
 }.
 
