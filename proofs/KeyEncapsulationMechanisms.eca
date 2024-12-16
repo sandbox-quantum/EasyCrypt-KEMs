@@ -146,7 +146,7 @@ module (O_CCA1_DDefault : Oracles_CCA1i) (S : Scheme) = {
   non-restricted decapsulation oracle), and one after receiving the challenge (given access to a
   restricted decapsulation oracle, i.e., one that prohibited querying the challenge).
   Over time, the formalization shifted toward only considering the second adversary stage 
-  (provding the public key(s) to this stage as well).
+  (providing the public key(s) to this stage as well).
   Here, we denote the traditional one by CCA2 (as we do for PKE schemes), and the modern one by CCA.
 *)
 (** Interface for oracles employed in CCA2 (CCA) security games **)

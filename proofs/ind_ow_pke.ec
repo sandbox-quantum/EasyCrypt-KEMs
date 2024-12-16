@@ -9,8 +9,8 @@ require PublicKeyEncryption.
 clone import PublicKeyEncryption as PKE.
 
 
-op pmax_pk (dptxtm : pk_t -> ptxt_t distr) =  
-  flub (fun pk => p_max (dptxtm pk)).
+op pmax_pk (dpm : pk_t -> ptxt_t distr) =  
+  flub (fun pk => p_max (dpm pk)).
 
 
 
