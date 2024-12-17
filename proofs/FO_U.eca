@@ -158,12 +158,6 @@ module R_CR_HONBINDKCT (S : PKE.Scheme) (O0 : Oracles_CCA1i, O1 : Oracles_CCA1i)
   }
 }.
 
-section CR_HONBINDKCT.
-
-
-
-
-
 
   
 end Explicit.
@@ -226,6 +220,30 @@ module Umc_Implicit (S : PKE.Scheme) : KEM.Scheme = {
   }  
 }.
   
+(*
+Properties:
+> X-BIND-K-CT break gives CR break: 
+  Different ct, which is input to h, but equal k, which is output of h.
+> HON-BIND-K-PK break gives SROB-CCA or (one of two) CR break (unless equal s or s equals po): 
+  Equal k means equal outcome of hash, so if c are different (input of hash), then CR break. 
+  Else (c are equal), if po0 or po1 is none, then CR break unless equal s or s equal to po.
+  Else (c are equal and po are non-None), SROB-CCA break. 
+> HON-BIND-K-PK break gives SCFR-CCA or (one of multiple) CR break (unless equal s or s equals po): 
+  Same as SROB-CCA case, but split "po are non-None" further into "equal po" and "unequal po";
+  in the former SCFR-CCA break, in the latter CR break.  
+> LEAK-BIND-K-PK break gives SROB-LEAK or CR break: 
+  Same as HON case.
+> LEAK-BIND-K-PK break gives SCFR-LEAK or (one of two) CR break: 
+  Same as HON case.
+> HON-BIND-K,CT-PK break gives SCFR-CCA break or CR break:
+  Same as HON-BIND-K-PK, but collision can only come from s/po being unequal (instead of also from
+  c being unequal).
+> LEAK-BIND-K,CT-PK break gives SCFR-LEAK break or CR break:
+  Same as HON case.
+> X-BIND-K,PK-CT break gives CR break:
+  Follows from X-BIND-K-CT break gives CR break. 
+*)
+
   
 end Implicit.
 
@@ -290,6 +308,32 @@ module Um_Explicit (S : PKE.Scheme) : KEM.Scheme = {
     return ko; 
   }  
 }.
+
+
+(*
+Properties:
+> X-BIND-K-CT --> ?
+> HON-BIND-K-PK --> ?
+> LEAK-BIND-K-PK --> ?
+> HON-BIND-CT-K break gives SROB-CCA break:
+  If adversary chooses "equal key pair", then advantage equals 0, because decryption is deterministic
+  (so the dec calls give equal p and c are equal --> equal input to h --> equal k --> fail).
+  Else, adversary chooses "independently generated key pair", and c are equal and k are non-None,
+  we get break of SROB-CCA.
+> LEAK-BIND-CT-K break gives SROB-LEAK break:
+  Same as HON case.
+> HON-BIND-CT-PK break gives SROB-CCA break:
+  non-None k and equal c means decryption of c with both sk gives non-None p --> SROB-CCA break.
+> LEAK-BIND-CT-PK break gives SROB-LEAK break:
+  Same as HON case.
+> HON-BIND-K,CT-PK break gives SCFR-CCA break or CR break:
+  Equal non-None k and equal c means decryption of c with both sk gives non-None p and 
+  and hashing these p gives equal k. So, if these p are unequal --> collision;
+  if these p are equal --> SCFR-CCA break.
+> LEAK-BIND-K,CT-PK break gives SCFR-LEAK break or CR break:
+  Same as HON case.
+> X-BIND-K,PK-CT --> ?
+*)
 
   
 end Explicit.
