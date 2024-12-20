@@ -113,9 +113,7 @@ Properties:
 > LEAK-BIND-CT-PK break gives SROB-LEAK break:
   Same as HON case.
 > HON-BIND-K,CT-PK break gives SCFR-CCA break or CR break:
-  Equal non-None k and equal c means decryption of c with both sk gives non-None p and 
-  and hashing these p (with c) gives the equal k. So, if these p are unequal --> collision;
-  if these p are equal --> SCFR-CCA break.
+  Follows from HON-BIND-K-PK
 > LEAK-BIND-K,CT-PK break gives SCFR-LEAK break or CR break:
   Same as HON case.
 > X-BIND-K,PK-CT break gives CR break:
