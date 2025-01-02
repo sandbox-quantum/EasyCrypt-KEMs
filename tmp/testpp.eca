@@ -1,0 +1,36 @@
+require KeyEncapsulationMechanisms.
+
+clone import KeyEncapsulationMechanisms as KEMs.
+
+print HON_BIND.
+
+
+module T = {
+  proc main(bc : bindconf) : unit = {
+    var pk0 : pk_t;
+    var pk1 : pk_t;
+    var sk0 : sk_t;
+    var sk1 : sk_t;
+    var b : bool;
+    var c0 : ctxt_t;
+    var c1 : ctxt_t;
+    var k0 : key_t option;
+    var k1 : key_t option;
+    var no_fail : bool;
+    
+    
+    if (is_pkbsc bc) 
+      (pk1, sk1) <- (pk0, sk0);
+    else {
+      if (is_pkbtc bc) 
+        (pk1, sk1) <- witness;
+      else {
+        b <- false ;
+        if (b) 
+          (pk1, sk1) <- witness;
+        else 
+          (pk1, sk1) <- (pk0, sk0);
+      }
+    } 
+  }
+}.

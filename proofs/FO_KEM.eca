@@ -34,6 +34,3 @@ clone import PublicKeyEncryptionROM as PKEROM with
   
   type in_t <- ptxt_t,
   type out_t <- rand_t.
-
-import PKE F_RO.
-import DeltaCorrectROM.

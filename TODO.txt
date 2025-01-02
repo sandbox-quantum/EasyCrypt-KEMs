@@ -1,0 +1,17 @@
+(Comments on) Changes to KeyEncapsulationMechanisms[ROM].eca:
+> For the oracle module types, stick with functor types for now.
+  Seems to be the most reasonable option with current features.
+  (Indeed, accepting the fact the user is required to always instantiate modules of the oracle type with a scheme, even if potentially unwanted.
+   However, since this often can be circumvented, e.g., by specifying a non-functor oracle local module in proofs, this seems to be least bad option.)
+  Potentially can provide a default "Null" scheme, i.e., a default dummy scheme that for which each procedure does nothing or only return witness.
+  Users can then use this to instantate oracles with when passing an actual scheme is not needed/wanted.
+> Keep the distribution mapping as a "model" for dependent types (e.g., for KEMs, modeling the fact that the shared key space can depend on the public key by sampling the keys from a distribution that depends on the value of the considered public key)
+> Remove the dependency on PROM, and simply define only the RO interface necessary for the files themselves.
+  This interface should still match the (relevant part of) the PROM interface for consistency.
+  E.g., for KEMs in the ROM, only consider input/output types, and init + get procedures for the interface.
+  Eventually, when integrating the theory, can have CI check an example that uses stuff from PROM for the RO stuff in the KEM properties.
+  This way, CI will still trigger in  case of arising inconsistencies between the KEM-ROM theory and PROM.
+> For now, keep the Relations theory in the library file.
+> Change format of module parameterizations to have EACH individual module parameter encapsulated (in parentheses).
+  So, remove any sequence of comma-separated module parameters within parentheses.
+> For now, leave derandomization modeling as is. Further discussion/evaluation required.
