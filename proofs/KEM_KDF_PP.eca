@@ -1,4 +1,4 @@
-require import AllCore Distr.
+require import AllCore Distr PROM.
 require KeyEncapsulationMechanismsROM.
 
 
@@ -26,6 +26,13 @@ type rand_t.
 **)
 theory PPKDFKCT.
 (* Clones and imports *)
+clone import FullRO as F_RO with
+  type in_t <- key_t * ctxt_t,
+  type out_t <- key_t
+  
+  proof *.
+
+  
 (* Definitions for KEMs in ROM *)
 clone import KeyEncapsulationMechanismsROM as KEMsROM with
   type pk_t <- pk_t,
@@ -42,7 +49,7 @@ clone import KeyEncapsulationMechanismsROM as KEMsROM with
 clone import MALBINDROM with
   type rand_t <- rand_t.
 
-import MALBIND KEMs F_RO.
+import MALBIND KEMs.
 
 
 (* Properties (other) *)
@@ -242,6 +249,12 @@ end PPKDFKCT.
 **)
 theory PPKDFKPK.
 (* Clones and imports *)
+clone import FullRO as F_RO with
+  type in_t <- key_t * pk_t,
+  type out_t <- key_t
+  
+  proof *.
+  
 (* Definitions for KEMs in ROM *)
 clone import KeyEncapsulationMechanismsROM as KEMsROM with
   type pk_t <- pk_t,
@@ -258,7 +271,7 @@ clone import KeyEncapsulationMechanismsROM as KEMsROM with
 clone import MALBINDROM with
   type rand_t <- rand_t.
 
-import MALBIND KEMs F_RO.
+import MALBIND KEMs.
 
 
 (* Properties (other) *)
@@ -459,6 +472,12 @@ end PPKDFKPK.
 **)
 theory PPKDFKCTPK.
 (* Clones and imports *)
+clone import FullRO as F_RO with
+  type in_t <- key_t * ctxt_t * pk_t,
+  type out_t <- key_t
+  
+  proof *.
+  
 (* Definitions for KEMs in ROM *)
 clone import KeyEncapsulationMechanismsROM as KEMsROM with
   type pk_t <- pk_t,
