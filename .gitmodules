@@ -1,0 +1,3 @@
+[submodule "formosa-mlkem"]
+	path = formosa-mlkem
+	url = https://github.com/formosa-crypto/formosa-mlkem
