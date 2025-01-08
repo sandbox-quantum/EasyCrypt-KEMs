@@ -41,13 +41,11 @@ clone import PublicKeyEncryptionROM as PKEROM with
   type ctxt_t <- ctxt_t,
   
   type in_t <- ptxt_t,
-  type out_t <- rand_t,
+  type out_t <- rand_t
 
-    op F_RO.dout <- drandm
-    
   proof *.  
   
-import PKE F_RO.
+import PKE.
 import DeltaCorrectROM DeltaCorrect.
 
 (*
