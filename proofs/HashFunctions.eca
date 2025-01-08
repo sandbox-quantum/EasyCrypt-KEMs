@@ -1,0 +1,23 @@
+require import AllCore.
+
+type in_t.
+
+type out_t.
+
+op f : in_t -> out_t.
+
+
+module type Adv_CR = {
+  proc find() : in_t * in_t
+}.
+
+module CR (A : Adv_CR) = {
+  proc main() : bool = {
+    var x, x' : in_t;
+    
+    (x, x') <@ A.find();
+
+    return x' <> x /\ f x' = f x;
+  }
+}.
+

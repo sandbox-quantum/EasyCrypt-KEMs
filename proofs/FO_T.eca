@@ -1,0 +1,158 @@
+require import AllCore.
+require PublicKeyEncryptionROM.
+
+
+(* Types *)
+(** Public keys (asymmetric) **)
+type pk_t.
+
+(** Secret keys (asymmetric) **)
+type sk_t.
+
+(** Plaintexts **)
+type ptxt_t.
+
+(** Ciphertexts/Encapsulations **)
+type ctxt_t.
+
+(** Randomness **)
+type rand_t.
+
+
+(* Operators *)
+(** Extracts public key from secret key **)
+op sk2pk : sk_t -> pk_t.
+
+(** Captures (semantics of) "de-randomized" encryption algorithm of considered PKE scheme **)
+op enc : pk_t -> ptxt_t -> rand_t -> ctxt_t.
+
+
+(* Distributions *)
+(** Distribution (mapping, based on plaintext) over randomness to be used by random oracle **)
+op drandm : ptxt_t -> rand_t distr. 
+
+
+(* Clones and imports *)
+(** Import basic PKE and KEM definitions **)
+clone import PublicKeyEncryptionROM as PKEROM with
+  type pk_t <- pk_t,
+  type sk_t <- sk_t,
+  type ptxt_t <- ptxt_t,
+  type ctxt_t <- ctxt_t,
+  
+  type in_t <- ptxt_t,
+  type out_t <- rand_t
+
+  proof *.  
+  
+import PKE.
+import DeltaCorrectROM DeltaCorrect.
+
+(*
+module type SchemeDerand = { 
+  include Scheme [-enc]
+  proc enc(pk : pk_t, p : ptxt_t, r : rand_t) : ctxt_t
+}.
+
+
+module S (SD : SchemeDerand) : Scheme = {
+   proc keygen = SD.keygen
+  
+  proc enc(pk : pk_t, p : ptxt_t) : ctxt_t = {
+    var r : rand_t;
+    var c : ctxt_t;
+    
+    r <$ drandm p;
+    
+    c <@ SD.enc(pk, p, r);
+  
+    return c;
+  }
+  
+  proc dec = SD.dec 
+}.
+*)
+
+(** (Modular FO) T transform **)
+module (T (S : Scheme) : Scheme_ROM) (G : RandomOracle) = {
+  proc keygen = S.keygen
+
+  proc enc(pk : pk_t, p : ptxt_t) : ctxt_t = {
+    var r : rand_t;
+    var c : ctxt_t;
+    
+    r <@ G.get(p);
+    
+    c <- enc pk p r;
+    
+    return c;
+  }
+  
+  proc dec(sk : sk_t, c : ctxt_t) : ptxt_t option = {
+    var po, ret : ptxt_t option;
+    var r : rand_t;
+    var c' : ctxt_t;
+    
+    po <@ S.dec(sk, c);
+    
+    if (po = None) {
+      ret <- None;
+    } else {
+      r <@ G.get(oget po); 
+      c' <- enc (sk2pk sk) (oget po) r;
+      ret <- if c' <> c then None else po;
+    }  
+      
+    return ret;
+  }
+}.
+
+(*
+module R_Cor_CorROM (RO : RandomOraclei) (A : Adv_Cor_ROM) : Adv_Cor  = {
+  proc find(pk : pk_t, sk : sk_t) : ptxt_t = {
+    var p : ptxt_t; 
+    
+    RO.init();
+    
+    p <@ A(RO).find(pk, sk);
+    
+    return p; 
+  }
+}.  
+*)
+
+section Correctness.
+(*
+declare module S <: SchemeDerand{-RO}.
+
+declare module A <: Adv_Cor_ROM{-RO, -SD}.
+
+lemma test &m :
+  Pr[Correctness_Delta_ROM(RO, T(SD), A).main() @ &m : res] 
+  <=   
+  Pr[Correctness_Delta(S(SD), R_Cor_CorROM(RO, A)).main() @ &m : res]. 
+proof.
+byequiv=> //.
+proc.
+inline{1} 2; inline{2} 2.
+inline RO.init.
+swap{1} 2 -1; seq 1 1 : (={glob SD, glob A, pk, sk}); 1: by call(: true). 
+wp; sp.
+inline{1} 3; inline{1} 2.
+(* case ! p \in RO.m  ==> *)
+sim : (={p, p'}).
+sim.
+admit. 
+qed.  
+
+declare op encsem : pk_t -> ptxt_t -> rand_t -> ctxt_t.  
+
+declare axiom S_enc_encsem (pk' : pk_t) (p' : ptxt_t) (r' : rand_t) :
+  hoare[S.enc : arg = (pk', p', r') ==> res = encsem pk' p' r'].
+*)
+
+
+
+
+
+end section Correctness.

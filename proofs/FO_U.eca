@@ -1,0 +1,1790 @@
+require import AllCore Distr.
+require HashFunctions PublicKeyEncryption KeyEncapsulationMechanisms.
+
+
+
+(* Types *)
+(** Public keys (asymmetric) **)
+type pk_t.
+
+(** Secret keys (asymmetric) **)
+type sk_t.
+(** Plaintexts **)
+type ptxt_t.
+
+(** Ciphertexts/Encapsulations **)
+type ctxt_t.
+
+(** (Shared) Symmetric keys **)
+type key_t. 
+
+(* Distributions *)
+op dptxtm : pk_t -> ptxt_t distr.
+
+(* Instantiate and import definitions for PKE schemes (shared by all variants) *)   
+clone import PublicKeyEncryption as PKE with
+  type pk_t <- pk_t,
+  type sk_t <- sk_t,
+  type ptxt_t <- ptxt_t,
+  type ctxt_t <- ctxt_t
+  
+  proof *. 
+
+  
+(** FO U tranform that hashes both message and ciphertext. **)
+abstract theory Umc.
+(* Operators *)
+(** Hash function to compute shared keys **)
+op h : ptxt_t * ctxt_t -> key_t.
+
+(* Instantiate and import definitions for hash functions *)
+clone import HashFunctions as H with
+  type in_t <- ptxt_t * ctxt_t,
+  type out_t <- key_t,
+  
+  op f <- h
+  
+  proof *.
+  
+ 
+(** Explicit rejection variant of the FO U tranform that hashes both message and ciphertext **)
+theory Explicit.
+(* Instantiate and import definitions for KEMs *)
+clone import KeyEncapsulationMechanisms as KEM with
+  type pk_t <- pk_t,
+  type sk_t <- sk_t,
+  type key_t <- key_t,
+  type ctxt_t <- ctxt_t
+  
+  proof *.
+
+  
+(** Transformation U, hashing both message and ciphertext, with explicit rejection **)
+module Umc_Explicit (S : PKE.Scheme) : KEM.Scheme = {
+  proc keygen = S.keygen
+  
+  proc encaps(pk : pk_t) : key_t * ctxt_t = {
+    var p : ptxt_t;
+    var c : ctxt_t;
+    var k : key_t;
+    
+    p <$ dptxtm pk;
+    
+    c <@ S.enc(pk, p);
+    
+    k <- h (p, c);
+    
+    return (k, c);
+  }
+  
+  proc decaps(sk : sk_t, c : ctxt_t) : key_t option = { 
+    var po : ptxt_t option;
+    var k : key_t;
+    var ko : key_t option;
+    
+    po <@ S.dec(sk, c);
+    
+    ko <- if po = None then None else Some (h ((oget po), c)); 
+    
+    return ko; 
+  }  
+}.
+
+
+(*
+Properties:
+> X-BIND-K-CT break gives CR break: 
+  Different ct, which is input to h, but equal k, which is output of h.
+  else, c are equal, and since k are non-None (and PK are different), c breaks SROB-CCA.
+> HON-BIND-K-PK break gives SCFR-CCA or CR break: 
+  Equal non-None k means p are non-None and equal outcome of hash, so p or c are different (input of hash), then CR break; else c and p are equal, and p are non-None, so SCFR-CCA.
+> LEAK-BIND-K-PK break gives SCFR-LEAK or CR break: 
+  Same as HON case.
+> HON-BIND-CT-K break gives SROB-CCA break:
+  If adversary chooses "equal key pair", then advantage equals 0, because decryption is deterministic
+  (so the dec calls give equal p and c are equal --> equal input to h --> equal k --> fail).
+  Else, adversary chooses "independently generated key pair", and c are equal and k are non-None,
+  we get break of SROB-CCA.
+> LEAK-BIND-CT-K break gives SROB-LEAK break:
+  Same as HON case.
+> HON-BIND-CT-PK break gives SROB-CCA break:
+  non-None k and equal c means decryption of c with both sk gives non-None p and --> SROB-CCA break.
+> LEAK-BIND-CT-PK break gives SROB-LEAK break:
+  Same as HON case.
+> HON-BIND-K,CT-PK break gives SCFR-CCA break or CR break:
+  Follows from HON-BIND-K-PK
+> LEAK-BIND-K,CT-PK break gives SCFR-LEAK break or CR break:
+  Same as HON case.
+> X-BIND-K,PK-CT break gives CR break:
+  Follows from X-BIND-K-CT break gives CR break. 
+*)
+
+(* X-BIND-K-CT break for Umc-Explicit gives CR break for h *)
+(** Reduction adversary reducing CR (for h) to LEAK-BIND-K-CT (for Umc-Explicit) **)
+module R_CR_LEAKBINDKCT (S : PKE.Scheme) (A : Adv_LEAKBIND) : Adv_CR = {
+  proc find() : (ptxt_t * ctxt_t) * (ptxt_t * ctxt_t)= {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var p0, p1 : ptxt_t option;
+    var b : bool;
+    var c0, c1 : ctxt_t;
+    
+    (pk0, sk0) <@ Umc_Explicit(S).keygen();
+    b <@ A.choose(K_Binds_CT);
+    if (b) { 
+      (pk1, sk1) <@ Umc_Explicit(S).keygen();
+    } else {
+      (pk1, sk1) <- (pk0, sk0);
+    }
+    
+    (c0, c1) <@ A.find(K_Binds_CT, pk0, sk0, pk1, sk1);
+    
+    p0 <@ S.dec(sk0, c0);
+    p1 <@ S.dec(sk1, c1);
+    
+    return ((oget p0, c0), (oget p1, c1));
+  }
+}.
+
+section CR_BINDKCT.
+
+declare module S <: PKE.Scheme.
+declare module A <: Adv_LEAKBIND{-S}.
+
+equiv Eqv_LEAKBINDKCT_CR :
+  LEAK_BIND(Umc_Explicit(S), A).main ~ CR(R_CR_LEAKBINDKCT(S, A)).main : 
+    ={glob S, glob A} /\ arg{1} = K_Binds_CT ==> res{1} => res{2}.
+proof.
+proc; inline{1} Umc_Explicit(S).decaps; inline{2} R_CR_LEAKBINDKCT(S, A).find. 
+seq 1 1 : (={glob A, glob S, pk0, sk0} /\ bc{1} = K_Binds_CT); 1: by call (: true).
+do 2! (rcondf{1} ^if; 1: auto).
+wp; call (: true); wp; call (: true); wp; call (: true).  
+seq 1 1 : (#pre /\ ={b}); 1: by call (: true).
+by if => //; 1: call (: true); wp; skip => /> /#.
+qed.
+
+(* Eqv_HONBIND_LEAKBIND, LEAK implies HON property as well ...
+declare module O0 <: Oracles_CCA1i{-S, -A}.
+declare module O1 <: Oracles_CCA1i{-S, -A, -O0}.
+*)
+
+end section CR_BINDKCT.
+
+
+(* LEAK-BIND-K-PK break for Umc-Explicit gives SCFR-LEAK break for S or CR break for h *)
+(** Reduction adversary reducing SCFR-LEAK (for S) to LEAK-BIND-K-PK (for Umc-Explicit) **)
+module R_SCFRLEAK_LEAKBINDKPK (A : Adv_LEAKBIND) : Adv_SCFRLEAK = {
+  proc find(pk0 : pk_t, sk0 : sk_t, pk1 : pk_t, sk1 : sk_t) : ctxt_t = {
+    var c0, c1 : ctxt_t;
+    
+    (c0, c1) <@ A.find(K_Binds_PK, pk0, sk0, pk1, sk1);
+    
+    return c0;
+  }
+}.
+
+(** Reduction adversary reducing CR (for h) to LEAK-BIND-K-PK (for Umc-Explicit) **)
+module R_CR_LEAKBINDKPK (S : PKE.Scheme) (A : Adv_LEAKBIND) : Adv_CR = {
+  proc find() : (ptxt_t * ctxt_t) * (ptxt_t * ctxt_t)= {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var p0, p1 : ptxt_t option;
+    var b : bool;
+    var c0, c1 : ctxt_t;
+    
+    (pk0, sk0) <@ Umc_Explicit(S).keygen();
+    (pk1, sk1) <@ Umc_Explicit(S).keygen();
+        
+    (c0, c1) <@ A.find(K_Binds_PK, pk0, sk0, pk1, sk1);
+    
+    p0 <@ S.dec(sk0, c0);
+    p1 <@ S.dec(sk1, c1);
+    
+    return ((oget p0, c0), (oget p1, c1));
+  }
+}.
+
+section CRSCFRLEAK_LEAKBINDKPK.
+
+declare module S <: PKE.Scheme.
+declare module A <: Adv_LEAKBIND{-S}.
+
+(* Lossless (i.e., termination) assumption on decryption of S *)
+declare axiom S_dec_ll : islossless S.dec.
+
+(* 
+  Auxiliary module semantically identical to LEAK_BIND, but stores 
+  plaintexts and ciphertexts as module variables (instead of local variables)
+*)
+local module LEAK_BIND_V = {
+  var c0, c1 : ctxt_t
+  var po0, po1 : ptxt_t option
+  
+  proc main(bc : bindconf) : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var b : bool;
+    var k0, k1 : key_t option;
+    var no_fail : bool;
+    
+    (pk0, sk0) <@ Umc_Explicit(S).keygen();
+    if (is_pkbsc bc) {
+      (pk1, sk1) <- (pk0, sk0);
+    } else {
+      if (is_pkbtc bc) { 
+        (pk1, sk1) <@ Umc_Explicit(S).keygen();
+      } else {
+        b <@ A.choose(bc);
+        if (b) {
+          (pk1, sk1) <@ Umc_Explicit(S).keygen();
+        } else { 
+          (pk1, sk1) <- (pk0, sk0);
+        }
+      }
+    }
+    
+    (c0, c1) <@ A.find(bc, pk0, sk0, pk1, sk1);
+    
+    po0 <@ S.dec(sk0, c0);
+    k0 <- if po0 = None then None else Some (h ((oget po0), c0)); 
+    po1 <@ S.dec(sk1, c1);
+    k1 <- if po1 = None then None else Some (h ((oget po1), c1)); 
+
+    no_fail <- k0 <> None /\ k1 <> None;
+    
+    return no_fail /\ is_bindbreak bc (oget k0) (oget k1) pk0 pk1 c0 c1;
+  }
+}.
+
+local lemma EqPr_LEAKBIND_V_UmcSA &m : 
+  Pr[LEAK_BIND(Umc_Explicit(S), A).main(K_Binds_PK) @ &m : res] 
+  = 
+  Pr[LEAK_BIND_V.main(K_Binds_PK) @ &m : res].
+proof. 
+byequiv => //.
+proc; inline{1} Umc_Explicit(S).decaps.
+by sim.
+qed.
+
+lemma Bnd_LEAKBINDKPK_SCFRLEAKCR &m : 
+  Pr[LEAK_BIND(Umc_Explicit(S), A).main(K_Binds_PK) @ &m : res]
+  <=
+  Pr[SCFR_LEAK(S, R_SCFRLEAK_LEAKBINDKPK(A)).main() @ &m : res]
+  +
+  Pr[CR(R_CR_LEAKBINDKPK(S, A)).main() @ &m : res].
+proof.
+rewrite EqPr_LEAKBIND_V_UmcSA Pr[mu_split (LEAK_BIND_V.c0 <> LEAK_BIND_V.c1 \/ LEAK_BIND_V.po0 <> LEAK_BIND_V.po1)].
+rewrite negb_or /= RField.addrC StdOrder.RealOrder.ler_add; last first.
++ byequiv => //.
+  proc; inline{1} Umc_Explicit(S).decaps; inline{2} R_CR_LEAKBINDKPK(S, A).find. 
+  seq 1 1 : (={glob A, glob S, pk0, sk0} /\ bc{1} = K_Binds_PK); 1: by call (: true).
+  rcondf{1} ^if; 1: by auto. 
+  rcondt{1} ^if; 1: by auto.
+  wp; call (: true); wp; call (: true); wp. 
+  by call (: true); call (: true); skip => /> /#.
+byequiv => //.
+proc; inline{1} Umc_Explicit(S).decaps; inline{2} R_SCFRLEAK_LEAKBINDKPK(A).find.
+seq 1 1 : (={glob A, glob S, pk0, sk0} /\ bc{1} = K_Binds_PK); 1: by call (: true).  
+rcondf{1} ^if; 1: by auto. 
+rcondt{1} ^if; 1: by auto.
+wp.
+seq 2 6 : (={glob S, sk0, sk1} /\ LEAK_BIND_V.c0{1} = c0{2} /\ LEAK_BIND_V.c1{1} = c1{2}). 
++ by call (: true); wp; call (: true).
+case (LEAK_BIND_V.c0{1} = LEAK_BIND_V.c1{1}); last first. 
++ conseq (: _ ==> true) => />. 
+  do 2! (call{1} S_dec_ll; call{2} S_dec_ll; wp).
+  by wp.
+conseq (: _ ==> LEAK_BIND_V.po0{1} = p0{2} /\ LEAK_BIND_V.po1{1} = p1{2}) => [/#|]. 
+by call (: true); wp; call (: true); wp.
+qed.
+
+(* 
+SROB implies SCFR, so bound with SROB follows immediately as a corollary.
+Perhaps add implication to basic relations in KEM library.
+*)
+end section CRSCFRLEAK_LEAKBINDKPK.
+
+
+(* 
+  LEAK-BIND-CT-K break gives SROB-LEAK break:
+  If adversary chooses "equal key pair", then advantage equals 0, because decryption is deterministic
+  (so the dec calls give equal p and c are equal --> equal input to h --> equal k --> fail).
+  Else, adversary chooses "independently generated key pair", and c are equal and k are non-None,
+  we get break of SROB-CCA.
+*)
+module R_SROBLEAK_LEAKBINDCTK (A : Adv_LEAKBIND) : Adv_SROBLEAK = {
+  proc find(pk0 : pk_t, sk0 : sk_t, pk1 : pk_t, sk1 : sk_t) : ctxt_t = {
+    var b : bool;
+    var c0, c1 : ctxt_t;
+    
+    b <@ A.choose(CT_Binds_K);
+    
+    (c0, c1) <@ A.find(CT_Binds_K, pk0, sk0, pk1, sk1);
+    
+    return c0;
+  }
+}. 
+
+
+section SROBLEAK_LEAKBINDCTK.
+
+declare module S <: PKE.Scheme.
+declare module A <: Adv_LEAKBIND{-S}.
+
+(* Lossless (i.e., termination) assumption on key generation and decryption of S *)
+declare axiom S_keygen_ll : islossless S.keygen.
+declare axiom S_dec_ll : islossless S.dec.
+
+(* Determinism (and statelessness) assumption on decryption of S *)
+declare op s_dec : sk_t -> ctxt_t -> ptxt_t option.
+declare axiom S_dec_detsl (sk : sk_t) (c : ctxt_t) : 
+  hoare[S.dec : arg = (sk, c) ==> res = s_dec sk c]. 
+
+(* Lossless (i.e., termination) assumption on finding of A *)    
+declare axiom A_find_ll : islossless A.find. 
+  
+  
+(* 
+  Auxiliary module semantically identical to LEAK_BIND, but stores 
+  adversary's choice as module variables (instead of local variables)
+*)
+local module LEAK_BIND_V = {
+  var b : bool
+  var c0, c1 : ctxt_t
+   
+  proc main(bc : bindconf) : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var k0, k1 : key_t option;
+    var no_fail : bool;
+    
+    (pk0, sk0) <@ Umc_Explicit(S).keygen();
+    if (is_pkbsc bc) {
+      (pk1, sk1) <- (pk0, sk0);
+    } else {
+      if (is_pkbtc bc) { 
+        (pk1, sk1) <@ Umc_Explicit(S).keygen();
+      } else {
+        b <@ A.choose(bc);
+        if (b) {
+          (pk1, sk1) <@ Umc_Explicit(S).keygen();
+        } else { 
+          (pk1, sk1) <- (pk0, sk0);
+        }
+      }
+    }
+    
+    (c0, c1) <@ A.find(bc, pk0, sk0, pk1, sk1);
+    
+    k0 <@ Umc_Explicit(S).decaps(sk0, c0);
+    k1 <@ Umc_Explicit(S).decaps(sk1, c1);
+    
+    no_fail <- k0 <> None /\ k1 <> None;
+    
+    return no_fail /\ is_bindbreak bc (oget k0) (oget k1) pk0 pk1 c0 c1;
+  }
+}.
+
+local lemma EqPr_LEAKBIND_V_UmcSA &m : 
+  Pr[LEAK_BIND(Umc_Explicit(S), A).main(CT_Binds_K) @ &m : res] 
+  = 
+  Pr[LEAK_BIND_V.main(CT_Binds_K) @ &m : res].
+proof. by byequiv => //; sim. qed.
+
+
+lemma Bnd_LEAKBINDCTK_SROBLEAK &m :
+  Pr[LEAK_BIND(Umc_Explicit(S), A).main(CT_Binds_K) @ &m : res] 
+  <= 
+  Pr[SROB_LEAK(S, R_SROBLEAK_LEAKBINDCTK(A)).main() @ &m : res].
+proof.
+rewrite EqPr_LEAKBIND_V_UmcSA Pr[mu_split LEAK_BIND_V.b]. 
+rewrite (: Pr[LEAK_BIND_V.main(CT_Binds_K) @ &m : res /\ !LEAK_BIND_V.b] = 0%r) 2:/=.
++ byphoare (: arg = CT_Binds_K ==> _) => //.
+  hoare; proc; inline Umc_Explicit(S).decaps.
+  do 2! (rcondf ^if; 1: by call(: true)).
+  seq 2 : #pre; 1: by (do 2! call(: true)).
+  case LEAK_BIND_V.b; 1: by conseq (: _ ==> true); 1: smt(). 
+  rcondf ^if; 1: by skip. 
+  seq 2 : (#pre /\ pk1 = pk0 /\ sk1 = sk0); 1: by call (: true); wp. 
+  exlim sk0, sk1, LEAK_BIND_V.c0, LEAK_BIND_V.c1 => skt0 skt1 ct0 ct1. 
+  wp; call (S_dec_detsl skt1 ct1); wp; call (S_dec_detsl skt0 ct0).
+  by wp; skip => /> /#. 
+byequiv => //.
+proc; inline{1} Umc_Explicit(S).decaps; inline{2} R_SROBLEAK_LEAKBINDCTK(A).find.
+seq 1 1 : (={glob A, glob S, pk0, sk0} /\ bc{1} = CT_Binds_K); 1: by call (: true).
+do 2! (rcondf{1} ^if; 1: auto).
+swap{2} 6 -5; seq 1 1 : (#pre /\ LEAK_BIND_V.b{1} = b{2}); 1: by call(: true).
+case (LEAK_BIND_V.b{1}); last first. 
++ conseq (: _ ==> true) => //.
+  rcondf{1} 1; 1: by auto. 
+  do 2! (wp; call{1} S_dec_ll; call{2} S_dec_ll). 
+  wp; call{1} A_find_ll; call{2} A_find_ll. 
+  by wp; call{2} S_keygen_ll; skip.
+rcondt{1} 1; 1: by auto.
++ seq 2 6 : (   #pre 
+             /\ ={pk1, sk1} 
+             /\ LEAK_BIND_V.c0{1} = c0{2}
+             /\ LEAK_BIND_V.c1{1} = c1{2}); 1: by call (: true); wp; call (: true).
+case (LEAK_BIND_V.c0{1} = LEAK_BIND_V.c1{1}); last first.
++ conseq (: _ ==> true) => [/>|]. 
+  do 2! (wp; call{1} S_dec_ll; call{2} S_dec_ll).
+  by wp. 
+do 2! (wp; call (: true)). 
+by wp; skip => /> /#.
+qed. 
+
+end section SROBLEAK_LEAKBINDCTK.
+
+
+(*
+  LEAK-BIND-CT-PK break gives SROB-LEAK break:
+  non-None k and equal c means decryption of c with both sk 
+  gives non-None p and --> SROB-LEAK break.
+*)
+module R_SROBLEAK_LEAKBINDCTPK (A : Adv_LEAKBIND) : Adv_SROBLEAK = {
+  proc find(pk0 : pk_t, sk0 : sk_t, pk1 : pk_t, sk1 : sk_t) : ctxt_t = {
+    var c0, c1 : ctxt_t;
+    
+    (c0, c1) <@ A.find(CT_Binds_PK, pk0, sk0, pk1, sk1);
+    
+    return c0;
+  }
+}.   
+
+section SROBLEAK_LEAKBINDCTPK.
+
+declare module S <: PKE.Scheme.
+declare module A <: Adv_LEAKBIND{-S}.
+
+(* Lossless (i.e., termination) assumption on decryption of S *)
+declare axiom S_dec_ll : islossless S.dec.
+
+
+(* 
+  Auxiliary module semantically identical to LEAK_BIND, but stores 
+  adversary's choice as module variables (instead of local variables)
+*)
+local module LEAK_BIND_V = {
+  var c0, c1 : ctxt_t
+   
+  proc main(bc : bindconf) : bool = {
+    var b : bool;
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var k0, k1 : key_t option;
+    var no_fail : bool;
+    
+    (pk0, sk0) <@ Umc_Explicit(S).keygen();
+    if (is_pkbsc bc) {
+      (pk1, sk1) <- (pk0, sk0);
+    } else {
+      if (is_pkbtc bc) { 
+        (pk1, sk1) <@ Umc_Explicit(S).keygen();
+      } else {
+        b <@ A.choose(bc);
+        if (b) {
+          (pk1, sk1) <@ Umc_Explicit(S).keygen();
+        } else { 
+          (pk1, sk1) <- (pk0, sk0);
+        }
+      }
+    }
+    
+    (c0, c1) <@ A.find(bc, pk0, sk0, pk1, sk1);
+    
+    k0 <@ Umc_Explicit(S).decaps(sk0, c0);
+    k1 <@ Umc_Explicit(S).decaps(sk1, c1);
+    
+    no_fail <- k0 <> None /\ k1 <> None;
+    
+    return no_fail /\ is_bindbreak bc (oget k0) (oget k1) pk0 pk1 c0 c1;
+  }
+}.
+
+
+local equiv Eqv_LEAKBIND_V_UmcSA : 
+  LEAK_BIND(Umc_Explicit(S), A).main ~ LEAK_BIND_V.main : ={glob S, glob A, arg} ==> ={res}.
+proof. by sim. qed.
+
+equiv Eqv_LEAKBINDCTPK_SROBLEAK : 
+  LEAK_BIND(Umc_Explicit(S), A).main ~ SROB_LEAK(S, R_SROBLEAK_LEAKBINDCTPK(A)).main :
+    ={glob S, glob A} /\ arg{1} = CT_Binds_PK ==> res{1} => res{2}. 
+proof.
+transitivity LEAK_BIND_V.main (={glob S, glob A, arg} ==> ={res}) 
+                              (={glob S, glob A} /\ arg{1} = CT_Binds_PK ==> res{1} => res{2}) => [/# | // | |].
++ by apply Eqv_LEAKBIND_V_UmcSA.
+proc; inline{1} Umc_Explicit(S).decaps; inline{2} R_SROBLEAK_LEAKBINDCTPK(A).find.
+seq 1 1 : (={glob A, glob S, pk0, sk0} /\ bc{1} = CT_Binds_PK); 1: by call (: true).
+rcondf{1} ^if; 1: auto.
+rcondt{1} ^if; 1: auto.
++ seq 2 6 : (   #pre 
+             /\ ={pk1, sk1} 
+             /\ LEAK_BIND_V.c0{1} = c0{2}
+             /\ LEAK_BIND_V.c1{1} = c1{2}); 1: by call (: true); wp; call (: true).
+case (LEAK_BIND_V.c0{1} = LEAK_BIND_V.c1{1}); last first.
++ conseq (: _ ==> true) => [/>|]. 
+  do 2! (wp; call{1} S_dec_ll; call{2} S_dec_ll).
+  by wp. 
+do 2! (wp; call (: true)). 
+by wp; skip => /> /#.
+qed.
+
+end section SROBLEAK_LEAKBINDCTPK.
+
+
+end Explicit.
+
+
+(** Implicit rejection variant of the FO U tranform that hashes both message and ciphertext **)
+theory Implicit.
+(* Instantiate and import definitions for KEMs *)
+clone import KeyEncapsulationMechanisms as KEM with
+  type pk_t <- pk_t,
+  type sk_t <- sk_t * ptxt_t,
+  type key_t <- key_t,
+  type ctxt_t <- ctxt_t
+  
+  proof *.
+
+(* Scheme/transform *)
+(** Transformation U, hashing both message and ciphertext, with implicit rejection **)
+module Umc_Implicit (S : PKE.Scheme) : KEM.Scheme = {
+  proc keygen() : pk_t * (sk_t * ptxt_t) = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var s : ptxt_t;
+    
+    (pk, sk) <@ S.keygen();
+    
+    s <$ dptxtm pk;
+    
+    return (pk, (sk, s));
+  }
+  
+  proc encaps(pk : pk_t) : key_t * ctxt_t = {
+    var p : ptxt_t;
+    var c : ctxt_t;
+    var k : key_t;
+    
+    p <$ dptxtm pk;
+    
+    c <@ S.enc(pk, p);
+    
+    k <- h (p, c);
+    
+    return (k, c);
+  }
+  
+  proc decaps(sks : sk_t * ptxt_t, c : ctxt_t) : key_t option = { 
+    var sk : sk_t;
+    var s : ptxt_t;
+    var po : ptxt_t option;
+    var k : key_t;
+    var ko : key_t option;
+    
+    (sk, s) <- sks;
+    
+    po <@ S.dec(sk, c);
+    
+    ko <- if po = None then Some (h (s, c)) else Some (h ((oget po), c)); 
+    
+    return ko; 
+  }  
+}.
+  
+(*
+Properties:
+> X-BIND-K-CT break gives CR break: 
+  Different ct, which is input to h, but equal k, which is output of h.
+> HON-BIND-K-PK break gives SROB-CCA or CR break (unless equal s or s equals po): 
+  Equal k means equal outcome of hash, so if c are different (input of hash), then CR break. 
+  Else (c are equal), if po0 or po1 is none, then CR break unless equal s or s equal to po.
+  Else (c are equal and po are non-None), SROB-CCA break. 
+> HON-BIND-K-PK break gives SCFR-CCA or CR break (unless equal s or s equals po): 
+  Same as SROB-CCA case, but split "po are non-None" further into "equal po" and "unequal po";
+  in the former SCFR-CCA break, in the latter CR break.  
+> HON-BIND-K,CT-PK break gives SCFR-CCA break or CR break:
+  Follows from HON-BIND-K-PK.
+> X-BIND-K,PK-CT break gives CR break:
+  Follows from X-BIND-K-CT break gives CR break. 
+*)
+
+
+(* X-BIND-K-CT break for Umc-Implicit gives CR break for h *)
+(** Reduction adversary reducing CR (for h) to LEAK-BIND-K-CT (for Umc-Implicit) **)
+module R_CR_LEAKBINDKCT (S : PKE.Scheme) (A : Adv_LEAKBIND) : Adv_CR = {
+  proc find() : (ptxt_t * ctxt_t) * (ptxt_t * ctxt_t)= {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t * ptxt_t;
+    var p0, p1 : ptxt_t option;
+    var b : bool;
+    var c0, c1 : ctxt_t;
+    
+    (pk0, sk0) <@ Umc_Implicit(S).keygen();
+    b <@ A.choose(K_Binds_CT);
+    if (b) { 
+      (pk1, sk1) <@ Umc_Implicit(S).keygen();
+    } else {
+      (pk1, sk1) <- (pk0, sk0);
+    }
+    
+    (c0, c1) <@ A.find(K_Binds_CT, pk0, sk0, pk1, sk1);
+    
+    p0 <@ S.dec(sk0.`1, c0);
+    p1 <@ S.dec(sk1.`1, c1);
+    
+    return ((if p0 = None then sk0.`2 else oget p0, c0), (if p1 = None then sk1.`2 else oget p1, c1));
+  }
+}.
+
+section CR_BINDKCT.
+
+declare module S <: PKE.Scheme.
+declare module A <: Adv_LEAKBIND{-S}.
+
+equiv Eqv_LEAKBINDKCT_CR :
+  LEAK_BIND(Umc_Implicit(S), A).main ~ CR(R_CR_LEAKBINDKCT(S, A)).main : 
+    ={glob S, glob A} /\ arg{1} = K_Binds_CT ==> res{1} => res{2}.
+proof.
+proc; inline{1} Umc_Implicit(S).decaps; inline{2} R_CR_LEAKBINDKCT(S, A).find. 
+seq 1 1 : (={glob A, glob S, pk0, sk0} /\ bc{1} = K_Binds_CT); 1: by call (: ={glob S}); 1: sim. 
+do 2! (rcondf{1} ^if; 1: auto).
+wp; call (: true); wp; call (: true); wp; call (: true).  
+seq 1 1 : (#pre /\ ={b}); 1: by call (: true).
+by if => //; [call (: ={glob S}); 1: sim | ]; wp; skip => /> /#.
+qed.
+
+
+(* Eqv_HONBIND_LEAKBIND, LEAK implies HON property as well ...
+declare module O0 <: Oracles_CCA1i{-S, -A}.
+declare module O1 <: Oracles_CCA1i{-S, -A, -O0}.
+*)
+end section CR_BINDKCT.
+
+
+(* 
+  Doesn't work...: Adversary can return c0 = c1 = enc(pk0, s1). Decryption with sk0 gives s1, while 
+  decryption with sk1 can fail (and, generically, there is no PKE property to reduce from
+  that says "it is hard to find a ciphertext that validly decrypts under one secret key and fails
+  under the other"; in fact, this being easy is closely related to robustness).
+  Then, k0 = h(s1, c0) because valid decryption, k1 = h(s1, c1) because invalid decryption, and 
+  c0 = c1, so no collision
+  
+  HON-BIND should work though, I think
+(* LEAK-BIND-K-PK break for Umc-Implicit gives SCFR-LEAK break for S or CR break for h *)
+(** Reduction adversary reducing SCFR-LEAK (for S) to LEAK-BIND-K-PK (for Umc-Implicit) **)
+module R_SCFRLEAK_LEAKBINDKPK (A : Adv_LEAKBIND) : Adv_SCFRLEAK = {
+  proc find(pk0 : pk_t, sk0 : sk_t, pk1 : pk_t, sk1 : sk_t) : ctxt_t = {
+    var s0, s1 : ptxt_t;
+    var c0, c1 : ctxt_t;
+    
+    s0 <$ dptxtm pk0;
+    s1 <$ dptxtm pk1;
+    
+    (c0, c1) <@ A.find(K_Binds_PK, pk0, (sk0, s0), pk1, (sk1, s1));
+    
+    return c0;
+  }
+}.
+
+(** Reduction adversary reducing CR (for h) to LEAK-BIND-K-PK (for Umc-Implicit) **)
+module R_CR_LEAKBINDKPK (S : PKE.Scheme) (A : Adv_LEAKBIND) : Adv_CR = {
+  proc find() : (ptxt_t * ctxt_t) * (ptxt_t * ctxt_t) = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var s0, s1 : ptxt_t;
+    var p0, p1 : ptxt_t option;
+    var b : bool;
+    var c0, c1 : ctxt_t;
+    var x0, x1 : ptxt_t * ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    s0 <$ dptxtm pk0;
+    
+    (pk1, sk1) <@ S.keygen();
+    s1 <$ dptxtm pk1;
+       
+    (c0, c1) <@ A.find(K_Binds_PK, pk0, (sk0, s0), pk1, (sk1, s1));
+    
+    p0 <@ S.dec(sk0, c0);
+    p1 <@ S.dec(sk1, c1);
+    
+    return (((if p0 = None then s0 else oget p0), c0), ((if p1 = None then s1 else oget p1), c1));
+  }
+}.
+
+section CRSCFRLEAK_LEAKBINDKPK.
+
+declare module S <: PKE.Scheme.
+declare module A <: Adv_LEAKBIND{-S}.
+
+(* Lossless (i.e., termination) assumption on decryption of S *)
+declare axiom S_dec_ll : islossless S.dec.
+
+(* 
+  Upperbound on probability of sampling a certain secret value (added to the PKE secret key 
+  during key generation of implicitly generating FO variant)
+  Concrete instantiation could be something along the lines of: 
+  `flub (fun (pk : pk_t) => p_max (dptxtm pk))`
+*)
+declare op pmax_pk : { real | forall (pk : pk_t) (s : ptxt_t), mu1 (dptxtm pk) s <= pmax_pk } as pmaxpkP.
+
+
+
+(* 
+  Auxiliary module semantically identical to LEAK_BIND, but stores 
+  plaintexts and ciphertexts as module variables (instead of local variables)
+*)
+local module LEAK_BIND_V = {
+  var s0, s1 : ptxt_t 
+  var c0, c1 : ctxt_t
+  var po0, po1 : ptxt_t option
+  
+  proc main(bc : bindconf) : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var b : bool;
+    var k0, k1 : key_t option;
+    var no_fail : bool;
+    
+    (pk0, sk0) <@ S.keygen();
+    s0 <$ dptxtm pk0;
+    if (is_pkbsc bc) {
+      (pk1, sk1) <- (pk0, sk0);
+    } else {
+      if (is_pkbtc bc) { 
+        (pk1, sk1) <@ S.keygen();
+        s1 <$ dptxtm pk1;
+      } else {
+        b <@ A.choose(bc);
+        if (b) {
+          (pk1, sk1) <@ S.keygen();
+          s1 <$ dptxtm pk1;  
+        } else { 
+          (pk1, sk1) <- (pk0, sk0);
+        }
+      }
+    }
+    
+    (c0, c1) <@ A.find(bc, pk0, (sk0, s0), pk1, (sk1, s1));
+    
+    po0 <@ S.dec(sk0, c0);
+    k0 <- if po0 = None then Some (h (s0, c0)) else Some (h (oget po0, c0)); 
+    po1 <@ S.dec(sk1, c1);
+    k1 <- if po1 = None then Some (h (s1, c1)) else Some (h (oget po1, c1)); 
+        
+    no_fail <- k0 <> None /\ k1 <> None;
+    
+    return no_fail /\ is_bindbreak bc (oget k0) (oget k1) pk0 pk1 c0 c1;
+  }
+}.
+
+local lemma EqPr_LEAKBIND_V_UmcSA &m : 
+  Pr[LEAK_BIND(Umc_Implicit(S), A).main(K_Binds_PK) @ &m : res] 
+  = 
+  Pr[LEAK_BIND_V.main(K_Binds_PK) @ &m : res].
+proof. 
+byequiv => //.
+proc; inline{1} Umc_Implicit(S).decaps.
+admit.
+qed.
+
+lemma Bnd_LEAKBINDKPK_SCFRLEAKCR &m : 
+  Pr[LEAK_BIND(Umc_Implicit(S), A).main(K_Binds_PK) @ &m : res]
+  <=
+  Pr[SCFR_LEAK(S, R_SCFRLEAK_LEAKBINDKPK(A)).main() @ &m : res]
+  +
+  Pr[CR(R_CR_LEAKBINDKPK(S, A)).main() @ &m : res]
+  + 
+  3%r * pmax_pk.
+proof.
+rewrite EqPr_LEAKBIND_V_UmcSA -RField.addrA. 
+rewrite Pr[mu_split (LEAK_BIND_V.c0 = LEAK_BIND_V.c1 /\ LEAK_BIND_V.po0 = LEAK_BIND_V.po1 /\ LEAK_BIND_V.po0 <> None)].
+rewrite StdOrder.RealOrder.ler_add.
++ byequiv => //.
+  proc; inline{1} Umc_Implicit(S).decaps; inline{2} R_SCFRLEAK_LEAKBINDKPK(A).find.
+  swap{2} 7 -3; swap{2} [3..4] -1.
+  swap{2} 8 -1; swap{2} [6..7] -1.
+  seq 2 3 : (   ={glob A, glob S, pk0, sk0}
+              /\ LEAK_BIND_V.s0{1} = s0{2}
+              /\ pk0{2} = pk00{2}  
+              /\ bc{1} = K_Binds_PK). 
+  + by wp; rnd; wp; call (: true); skip. 
+  rcondf{1} ^if; 1: by auto. 
+  rcondt{1} ^if; 1: by auto.
+  seq 3 6 : (#pre /\ (sk1, LEAK_BIND_V.s1){1} = (sk1, s1){2} /\ LEAK_BIND_V.c0{1} = c0{2} /\ LEAK_BIND_V.c1{1} = c1{2}).
+  + call (: true); wp. 
+    by wp; rnd; wp; call (: true).
+  wp.
+  case (LEAK_BIND_V.c0{1} = LEAK_BIND_V.c1{1}); last first. 
+  + conseq (: _ ==> true) => />. 
+    by do 2! (call{1} S_dec_ll; call{2} S_dec_ll; wp).
+  conseq (: _ ==> LEAK_BIND_V.po0{1} = p0{2} /\ LEAK_BIND_V.po1{1} = p1{2}) => [/#|]. 
+  by call (: true); wp; call (: true); wp.
+rewrite 2!negb_and Pr[mu_split (LEAK_BIND_V.s0 <> LEAK_BIND_V.s1 /\ LEAK_BIND_V.s0 <> (oget LEAK_BIND_V.po1) /\ (oget LEAK_BIND_V.po0) <> LEAK_BIND_V.s1)].
+rewrite StdOrder.RealOrder.ler_add.
++ byequiv => //.
+  proc; inline{2} R_CR_LEAKBINDKPK(S, A).find.
+  swap{1} 6 1; wp.
+  conseq (: _ 
+            ==> 
+               ={pk0, sk0, pk1, sk1} 
+            /\ LEAK_BIND_V.c0{1} = c0{2}
+            /\ LEAK_BIND_V.c1{1} = c1{2}
+            /\ LEAK_BIND_V.po0{1} = p0{2}
+            /\ LEAK_BIND_V.po1{1} = p1{2}
+            /\ LEAK_BIND_V.s0{1} = s0{2}
+            /\ LEAK_BIND_V.s1{1} = s1{2}); 1: smt().
+  seq 2 2 : (   ={glob A, glob S, pk0, sk0} 
+             /\ LEAK_BIND_V.s0{1} = s0{2}
+             /\ bc{1} = K_Binds_PK); 1: by rnd; call(: true). 
+  rcondf{1} 1; 1: by auto.
+  rcondt{1} 1; 1: by auto.             
+  by do 3! call (: true); rnd; call (: true); skip.
+rewrite (StdOrder.RealOrder.ler_trans (Pr[LEAK_BIND_V.main(K_Binds_PK) @ &m : LEAK_BIND_V.s0 = LEAK_BIND_V.s1 \/ LEAK_BIND_V.s0 = oget LEAK_BIND_V.po1 \/ oget LEAK_BIND_V.po0 = LEAK_BIND_V.s1])).
++ rewrite Pr[mu_sub] 1:/# 1://. 
+rewrite Pr[mu_or] Pr[mu_or].
+rewrite (StdOrder.RealOrder.ler_trans (Pr[LEAK_BIND_V.main(K_Binds_PK) @ &m : LEAK_BIND_V.s0 = LEAK_BIND_V.s1] 
+                                       + Pr[LEAK_BIND_V.main(K_Binds_PK) @ &m : LEAK_BIND_V.s0 = oget LEAK_BIND_V.po1] 
+                                       + Pr[LEAK_BIND_V.main(K_Binds_PK) @ &m : oget LEAK_BIND_V.po0 = LEAK_BIND_V.s1])); 1: smt(ge0_mu).
+
+
+qed.
+
+end section CRSCFRLEAK_LEAKBINDKPK.
+*)
+
+
+
+
+end Implicit.
+
+
+end Umc.
+
+
+(** FO U tranform, hashing only the message **)  
+theory Um.
+(** Explicit rejection variant of the FO U tranform that hashes only the message **)
+abstract theory Explicit.
+(* Operators *)
+(** Hash function to compute shared keys **)
+op h : ptxt_t -> key_t.
+
+(* Instantiate and import definitions for hash functions *)
+clone import HashFunctions as H with
+  type in_t <- ptxt_t,
+  type out_t <- key_t,
+  
+  op f <- h
+  
+  proof *.
+  
+(* Instantiate and import definitions for KEMs *)
+clone import KeyEncapsulationMechanisms as KEM with
+  type pk_t <- pk_t,
+  type sk_t <- sk_t,
+  type key_t <- key_t,
+  type ctxt_t <- ctxt_t
+  
+  proof *.
+
+  
+(** Transformation U, hashing both message and ciphertext, with explicit rejection **)
+module Um_Explicit (S : PKE.Scheme) : KEM.Scheme = {
+  proc keygen = S.keygen
+  
+  proc encaps(pk : pk_t) : key_t * ctxt_t = {
+    var p : ptxt_t;
+    var c : ctxt_t;
+    var k : key_t;
+    
+    p <$ dptxtm pk;
+    
+    c <@ S.enc(pk, p);
+    
+    k <- h p;
+    
+    return (k, c);
+  }
+  
+  proc decaps(sk : sk_t, c : ctxt_t) : key_t option = { 
+    var po : ptxt_t option;
+    var k : key_t;
+    var ko : key_t option;
+    
+    po <@ S.dec(sk, c);
+    
+    ko <- if po = None then None else Some (h (oget po)); 
+    
+    return ko; 
+  }  
+}.
+
+
+(*
+Properties:
+> X-BIND-K-CT --> ?
+> HON-BIND-K-PK --> ?
+> LEAK-BIND-K-PK --> ?
+> HON-BIND-CT-K break gives SROB-CCA break:
+  If adversary chooses "equal key pair", then advantage equals 0, because decryption is deterministic
+  (so the dec calls give equal p and c are equal --> equal input to h --> equal k --> fail).
+  Else, adversary chooses "independently generated key pair", and c are equal and k are non-None,
+  we get break of SROB-CCA.
+> LEAK-BIND-CT-K break gives SROB-LEAK break:
+  Same as HON case.
+> HON-BIND-CT-PK break gives SROB-CCA break:
+  non-None k and equal c means decryption of c with both sk gives non-None p --> SROB-CCA break.
+> LEAK-BIND-CT-PK break gives SROB-LEAK break:
+  Same as HON case.
+> HON-BIND-K,CT-PK break gives SCFR-CCA break or CR break:
+  Equal non-None k and equal c means decryption of c with both sk gives non-None p and 
+  and hashing these p gives equal k. So, if these p are unequal --> collision;
+  if these p are equal --> SCFR-CCA break.
+> LEAK-BIND-K,CT-PK break gives SCFR-LEAK break or CR break:
+  Same as HON case.
+> X-BIND-K,PK-CT --> ? (Combined with FO_T this works)
+*)
+
+(* 
+  LEAK-BIND-CT-K break gives SROB-LEAK break:
+  If adversary chooses "equal key pair", then advantage equals 0, because decryption is deterministic
+  (so the dec calls give equal p and c are equal --> equal input to h --> equal k --> fail).
+  Else, adversary chooses "independently generated key pair", and c are equal and k are non-None,
+  we get break of SROB-LEAK.
+*)
+module R_SROBLEAK_LEAKBINDCTK (A : Adv_LEAKBIND) : Adv_SROBLEAK = {
+  proc find(pk0 : pk_t, sk0 : sk_t, pk1 : pk_t, sk1 : sk_t) : ctxt_t = {
+    var b : bool;
+    var c0, c1 : ctxt_t;
+    
+    b <@ A.choose(CT_Binds_K);
+    
+    (c0, c1) <@ A.find(CT_Binds_K, pk0, sk0, pk1, sk1);
+    
+    return c0;
+  }
+}.
+
+
+section SROBLEAK_LEAKBINDCTK.
+
+declare module S <: PKE.Scheme.
+declare module A <: Adv_LEAKBIND{-S}.
+
+(* Lossless (i.e., termination) assumption on key generation and decryption of S *)
+declare axiom S_keygen_ll : islossless S.keygen.
+declare axiom S_dec_ll : islossless S.dec.
+
+(* Determinism (and statelessness) assumption on decryption of S *)
+declare op s_dec : sk_t -> ctxt_t -> ptxt_t option.
+declare axiom S_dec_detsl (sk : sk_t) (c : ctxt_t) : 
+  hoare[S.dec : arg = (sk, c) ==> res = s_dec sk c]. 
+
+(* Lossless (i.e., termination) assumption on finding of A *)    
+declare axiom A_find_ll : islossless A.find. 
+  
+  
+(* 
+  Auxiliary module semantically identical to LEAK_BIND, but stores 
+  adversary's choice as module variables (instead of local variables)
+*)
+local module LEAK_BIND_V = {
+  var b : bool
+  var c0, c1 : ctxt_t
+   
+  proc main(bc : bindconf) : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var k0, k1 : key_t option;
+    var no_fail : bool;
+    
+    (pk0, sk0) <@ Um_Explicit(S).keygen();
+    if (is_pkbsc bc) {
+      (pk1, sk1) <- (pk0, sk0);
+    } else {
+      if (is_pkbtc bc) { 
+        (pk1, sk1) <@ Um_Explicit(S).keygen();
+      } else {
+        b <@ A.choose(bc);
+        if (b) {
+          (pk1, sk1) <@ Um_Explicit(S).keygen();
+        } else { 
+          (pk1, sk1) <- (pk0, sk0);
+        }
+      }
+    }
+    
+    (c0, c1) <@ A.find(bc, pk0, sk0, pk1, sk1);
+    
+    k0 <@ Um_Explicit(S).decaps(sk0, c0);
+    k1 <@ Um_Explicit(S).decaps(sk1, c1);
+    
+    no_fail <- k0 <> None /\ k1 <> None;
+    
+    return no_fail /\ is_bindbreak bc (oget k0) (oget k1) pk0 pk1 c0 c1;
+  }
+}.
+
+local lemma EqPr_LEAKBIND_V_UmSA &m : 
+  Pr[LEAK_BIND(Um_Explicit(S), A).main(CT_Binds_K) @ &m : res] 
+  = 
+  Pr[LEAK_BIND_V.main(CT_Binds_K) @ &m : res].
+proof. by byequiv => //; sim. qed.
+
+
+lemma Bnd_LEAKBINDCTK_SROBLEAK &m :
+  Pr[LEAK_BIND(Um_Explicit(S), A).main(CT_Binds_K) @ &m : res] 
+  <= 
+  Pr[SROB_LEAK(S, R_SROBLEAK_LEAKBINDCTK(A)).main() @ &m : res].
+proof.
+rewrite EqPr_LEAKBIND_V_UmSA Pr[mu_split LEAK_BIND_V.b]. 
+rewrite (: Pr[LEAK_BIND_V.main(CT_Binds_K) @ &m : res /\ !LEAK_BIND_V.b] = 0%r) 2:/=.
++ byphoare (: arg = CT_Binds_K ==> _) => //.
+  hoare; proc; inline Um_Explicit(S).decaps.
+  do 2! (rcondf ^if; 1: by call(: true)).
+  seq 2 : #pre; 1: by (do 2! call(: true)).
+  case LEAK_BIND_V.b; 1: by conseq (: _ ==> true); 1: smt(). 
+  rcondf ^if; 1: by skip. 
+  seq 2 : (#pre /\ pk1 = pk0 /\ sk1 = sk0); 1: by call (: true); wp. 
+  exlim sk0, sk1, LEAK_BIND_V.c0, LEAK_BIND_V.c1 => skt0 skt1 ct0 ct1. 
+  wp; call (S_dec_detsl skt1 ct1); wp; call (S_dec_detsl skt0 ct0).
+  by wp; skip => /> /#. 
+byequiv => //.
+proc; inline{1} Um_Explicit(S).decaps; inline{2} R_SROBLEAK_LEAKBINDCTK(A).find.
+seq 1 1 : (={glob A, glob S, pk0, sk0} /\ bc{1} = CT_Binds_K); 1: by call (: true).
+do 2! (rcondf{1} ^if; 1: auto).
+swap{2} 6 -5; seq 1 1 : (#pre /\ LEAK_BIND_V.b{1} = b{2}); 1: by call(: true).
+case (LEAK_BIND_V.b{1}); last first. 
++ conseq (: _ ==> true) => //.
+  rcondf{1} 1; 1: by auto. 
+  do 2! (wp; call{1} S_dec_ll; call{2} S_dec_ll). 
+  wp; call{1} A_find_ll; call{2} A_find_ll. 
+  by wp; call{2} S_keygen_ll; skip.
+rcondt{1} 1; 1: by auto.
++ seq 2 6 : (   #pre 
+             /\ ={pk1, sk1} 
+             /\ LEAK_BIND_V.c0{1} = c0{2}
+             /\ LEAK_BIND_V.c1{1} = c1{2}); 1: by call (: true); wp; call (: true).
+case (LEAK_BIND_V.c0{1} = LEAK_BIND_V.c1{1}); last first.
++ conseq (: _ ==> true) => [/>|]. 
+  do 2! (wp; call{1} S_dec_ll; call{2} S_dec_ll).
+  by wp. 
+do 2! (wp; call (: true)). 
+by wp; skip => /> /#.
+qed. 
+
+end section SROBLEAK_LEAKBINDCTK.
+
+
+(*
+  LEAK-BIND-CT-PK break gives SROB-LEAK break:
+  non-None k and equal c means decryption of c with both sk 
+  gives non-None p and --> SROB-LEAK break.
+*)
+module R_SROBLEAK_LEAKBINDCTPK (A : Adv_LEAKBIND) : Adv_SROBLEAK = {
+  proc find(pk0 : pk_t, sk0 : sk_t, pk1 : pk_t, sk1 : sk_t) : ctxt_t = {
+    var c0, c1 : ctxt_t;
+    
+    (c0, c1) <@ A.find(CT_Binds_PK, pk0, sk0, pk1, sk1);
+    
+    return c0;
+  }
+}.   
+
+section SROBLEAK_LEAKBINDCTPK.
+
+declare module S <: PKE.Scheme.
+declare module A <: Adv_LEAKBIND{-S}.
+
+(* Lossless (i.e., termination) assumption on decryption of S *)
+declare axiom S_dec_ll : islossless S.dec.
+
+
+(* 
+  Auxiliary module semantically identical to LEAK_BIND, but stores 
+  adversary's choice as module variables (instead of local variables)
+*)
+local module LEAK_BIND_V = {
+  var c0, c1 : ctxt_t
+   
+  proc main(bc : bindconf) : bool = {
+    var b : bool;
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var k0, k1 : key_t option;
+    var no_fail : bool;
+    
+    (pk0, sk0) <@ Um_Explicit(S).keygen();
+    if (is_pkbsc bc) {
+      (pk1, sk1) <- (pk0, sk0);
+    } else {
+      if (is_pkbtc bc) { 
+        (pk1, sk1) <@ Um_Explicit(S).keygen();
+      } else {
+        b <@ A.choose(bc);
+        if (b) {
+          (pk1, sk1) <@ Um_Explicit(S).keygen();
+        } else { 
+          (pk1, sk1) <- (pk0, sk0);
+        }
+      }
+    }
+    
+    (c0, c1) <@ A.find(bc, pk0, sk0, pk1, sk1);
+    
+    k0 <@ Um_Explicit(S).decaps(sk0, c0);
+    k1 <@ Um_Explicit(S).decaps(sk1, c1);
+    
+    no_fail <- k0 <> None /\ k1 <> None;
+    
+    return no_fail /\ is_bindbreak bc (oget k0) (oget k1) pk0 pk1 c0 c1;
+  }
+}.
+
+local equiv Eqv_LEAKBIND_V_UmcSA : 
+  LEAK_BIND(Um_Explicit(S), A).main ~ LEAK_BIND_V.main : ={glob S, glob A, arg} ==> ={res}.
+proof. by sim. qed.
+
+equiv Eqv_LEAKBINDCTPK_SROBLEAK : 
+  LEAK_BIND(Um_Explicit(S), A).main ~ SROB_LEAK(S, R_SROBLEAK_LEAKBINDCTPK(A)).main :
+    ={glob S, glob A} /\ arg{1} = CT_Binds_PK ==> res{1} => res{2}. 
+proof.
+transitivity LEAK_BIND_V.main (={glob S, glob A, arg} ==> ={res}) 
+                              (={glob S, glob A} /\ arg{1} = CT_Binds_PK ==> res{1} => res{2}) => [/# | // | |].
++ by apply Eqv_LEAKBIND_V_UmcSA.
+proc; inline{1} Um_Explicit(S).decaps; inline{2} R_SROBLEAK_LEAKBINDCTPK(A).find.
+seq 1 1 : (={glob A, glob S, pk0, sk0} /\ bc{1} = CT_Binds_PK); 1: by call (: true).
+rcondf{1} ^if; 1: auto.
+rcondt{1} ^if; 1: auto.
++ seq 2 6 : (   #pre 
+             /\ ={pk1, sk1} 
+             /\ LEAK_BIND_V.c0{1} = c0{2}
+             /\ LEAK_BIND_V.c1{1} = c1{2}); 1: by call (: true); wp; call (: true).
+case (LEAK_BIND_V.c0{1} = LEAK_BIND_V.c1{1}); last first.
++ conseq (: _ ==> true) => [/>|]. 
+  do 2! (wp; call{1} S_dec_ll; call{2} S_dec_ll).
+  by wp. 
+do 2! (wp; call (: true)). 
+by wp; skip => /> /#.
+qed.
+
+end section SROBLEAK_LEAKBINDCTPK.
+
+
+(* LEAK-BIND-K,CT-PK break for Um-Explicit gives SCFR-LEAK break for S or CR break for h *)
+(** Reduction adversary reducing SCFR-LEAK (for S) to LEAK-BIND-K-PK (for Umc-Explicit) **)
+module R_SCFRLEAK_LEAKBINDKCTPK (A : Adv_LEAKBIND) : Adv_SCFRLEAK = {
+  proc find(pk0 : pk_t, sk0 : sk_t, pk1 : pk_t, sk1 : sk_t) : ctxt_t = {
+    var c0, c1 : ctxt_t;
+    
+    (c0, c1) <@ A.find(KCT_Binds_PK, pk0, sk0, pk1, sk1);
+    
+    return c0;
+  }
+}.
+
+(** Reduction adversary reducing CR (for h) to LEAK-BIND-K-PK (for Umc-Explicit) **)
+module R_CR_LEAKBINDKCTPK (S : PKE.Scheme) (A : Adv_LEAKBIND) : Adv_CR = {
+  proc find() : ptxt_t * ptxt_t  = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var p0, p1 : ptxt_t option;
+    var b : bool;
+    var c0, c1 : ctxt_t;
+    
+    (pk0, sk0) <@ Um_Explicit(S).keygen();
+    (pk1, sk1) <@ Um_Explicit(S).keygen();
+        
+    (c0, c1) <@ A.find(KCT_Binds_PK, pk0, sk0, pk1, sk1);
+    
+    p0 <@ S.dec(sk0, c0);
+    p1 <@ S.dec(sk1, c1);
+    
+    return (oget p0, oget p1);
+  }
+}.
+
+section CRSCFRLEAK_LEAKBINDKCTPK.
+
+declare module S <: PKE.Scheme.
+declare module A <: Adv_LEAKBIND{-S}.
+
+(* Lossless (i.e., termination) assumption on decryption of S *)
+declare axiom S_dec_ll : islossless S.dec.
+
+(* 
+  Auxiliary module semantically identical to LEAK_BIND, but stores 
+  plaintexts and ciphertexts as module variables (instead of local variables)
+*)
+local module LEAK_BIND_V = {
+  var c0, c1 : ctxt_t
+  var po0, po1 : ptxt_t option
+  
+  proc main(bc : bindconf) : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var b : bool;
+    var k0, k1 : key_t option;
+    var no_fail : bool;
+    
+    (pk0, sk0) <@ Um_Explicit(S).keygen();
+    if (is_pkbsc bc) {
+      (pk1, sk1) <- (pk0, sk0);
+    } else {
+      if (is_pkbtc bc) { 
+        (pk1, sk1) <@ Um_Explicit(S).keygen();
+      } else {
+        b <@ A.choose(bc);
+        if (b) {
+          (pk1, sk1) <@ Um_Explicit(S).keygen();
+        } else { 
+          (pk1, sk1) <- (pk0, sk0);
+        }
+      }
+    }
+    
+    (c0, c1) <@ A.find(bc, pk0, sk0, pk1, sk1);
+    
+    po0 <@ S.dec(sk0, c0);
+    k0 <- if po0 = None then None else Some (h (oget po0)); 
+    po1 <@ S.dec(sk1, c1);
+    k1 <- if po1 = None then None else Some (h (oget po1)); 
+
+    no_fail <- k0 <> None /\ k1 <> None;
+    
+    return no_fail /\ is_bindbreak bc (oget k0) (oget k1) pk0 pk1 c0 c1;
+  }
+}.
+
+local lemma EqPr_LEAKBIND_V_UmSA &m : 
+  Pr[LEAK_BIND(Um_Explicit(S), A).main(KCT_Binds_PK) @ &m : res] 
+  = 
+  Pr[LEAK_BIND_V.main(KCT_Binds_PK) @ &m : res].
+proof. 
+byequiv => //.
+proc; inline{1} Um_Explicit(S).decaps.
+by sim.
+qed.
+
+lemma Bnd_LEAKBINDKCTPK_SCFRLEAKCR &m : 
+  Pr[LEAK_BIND(Um_Explicit(S), A).main(KCT_Binds_PK) @ &m : res]
+  <=
+  Pr[SCFR_LEAK(S, R_SCFRLEAK_LEAKBINDKCTPK(A)).main() @ &m : res]
+  +
+  Pr[CR(R_CR_LEAKBINDKCTPK(S, A)).main() @ &m : res].
+proof.
+rewrite EqPr_LEAKBIND_V_UmSA Pr[mu_split (LEAK_BIND_V.c0 <> LEAK_BIND_V.c1 \/ LEAK_BIND_V.po0 <> LEAK_BIND_V.po1)].
+rewrite negb_or /= RField.addrC StdOrder.RealOrder.ler_add; last first.
++ byequiv => //.
+  proc; inline{1} Um_Explicit(S).decaps; inline{2} R_CR_LEAKBINDKCTPK(S, A).find. 
+  seq 1 1 : (={glob A, glob S, pk0, sk0} /\ bc{1} = KCT_Binds_PK); 1: by call (: true).
+  rcondf{1} ^if; 1: by auto. 
+  rcondt{1} ^if; 1: by auto.
+  wp; call (: true); wp; call (: true); wp. 
+  by call (: true); call (: true); skip => /> /#.
+byequiv => //.
+proc; inline{1} Um_Explicit(S).decaps; inline{2} R_SCFRLEAK_LEAKBINDKCTPK(A).find.
+seq 1 1 : (={glob A, glob S, pk0, sk0} /\ bc{1} = KCT_Binds_PK); 1: by call (: true).  
+rcondf{1} ^if; 1: by auto. 
+rcondt{1} ^if; 1: by auto.
+wp.
+seq 2 6 : (={glob S, sk0, sk1} /\ LEAK_BIND_V.c0{1} = c0{2} /\ LEAK_BIND_V.c1{1} = c1{2}). 
++ by call (: true); wp; call (: true).
+case (LEAK_BIND_V.c0{1} = LEAK_BIND_V.c1{1}); last first. 
++ conseq (: _ ==> true) => />. 
+  do 2! (call{1} S_dec_ll; call{2} S_dec_ll; wp).
+  by wp.
+conseq (: _ ==> LEAK_BIND_V.po0{1} = p0{2} /\ LEAK_BIND_V.po1{1} = p1{2}) => [/#|]. 
+by call (: true); wp; call (: true); wp.
+qed.
+
+end section CRSCFRLEAK_LEAKBINDKCTPK.
+
+end Explicit.
+
+
+(** Implicit rejection variant of the FO U tranform that hashes only the message **)
+abstract theory Implicit.
+(* Types *)
+(** Inputs (to hash function) **)
+(** 
+  In this case, the (same) hash function may be given inputs of different types
+  (specifically: only a message in case of acceptance, a message and a ciphertext in case of rejection), 
+  meaning we need a way to combine both input.
+  Here, we achieve this by means of a separate input type and operators mapping the different types
+  that are actually used as input to this type.  
+**)
+type in_t.
+
+(* Operators *)
+(** Hash function to compute shared keys **)
+op h : in_t -> key_t.
+
+(** Operator mapping plaintexts to the input type of the hash function **)
+(** 
+  Concretely, this will most likely be instantiated with simple lifings/casts 
+  (e.g., from fixed-length bitstrings to arbitrary-length bitstrings) 
+**)
+op p2in : ptxt_t -> in_t.
+
+(** Operator mapping (pairs of) plaintexts and ciphertexts to the input type of the hash function **)
+(** 
+  Concretely, this will most likely be instantiated with simple lifings/casts 
+  (e.g., from pairs of fixed-length bitstrings to arbitrary-length bitstrings) 
+**)
+op pc2in : ptxt_t * ctxt_t -> in_t.
+
+
+(* Instantiate and import definitions for hash functions *)
+clone import HashFunctions as H with
+  type in_t <- in_t,
+  type out_t <- key_t,
+  
+  op f <- h
+  
+  proof *.
+  
+(* Instantiate and import definitions for KEMs *)
+clone import KeyEncapsulationMechanisms as KEM with
+  type pk_t <- pk_t,
+  type sk_t <- sk_t * ptxt_t,
+  type key_t <- key_t,
+  type ctxt_t <- ctxt_t
+  
+  proof *.
+
+(* Scheme/transform *)
+(** Transformation U, hashing only the message, with implicit rejection **)
+module Um_Implicit (S : PKE.Scheme) : KEM.Scheme = {
+  proc keygen() : pk_t * (sk_t * ptxt_t) = {
+    var pk : pk_t;
+    var sk : sk_t;
+    var s : ptxt_t;
+    
+    (pk, sk) <@ S.keygen();
+    
+    s <$ dptxtm pk;
+    
+    return (pk, (sk, s));
+  }
+  
+  proc encaps(pk : pk_t) : key_t * ctxt_t = {
+    var p : ptxt_t;
+    var c : ctxt_t;
+    var k : key_t;
+    
+    p <$ dptxtm pk;
+    
+    c <@ S.enc(pk, p);
+    
+    k <- h (p2in p);
+    
+    return (k, c);
+  }
+  
+  proc decaps(sks : sk_t * ptxt_t, c : ctxt_t) : key_t option = { 
+    var sk : sk_t;
+    var s : ptxt_t;
+    var po : ptxt_t option;
+    var k : key_t;
+    var ko : key_t option;
+    
+    (sk, s) <- sks;
+    
+    po <@ S.dec(sk, c);
+    
+    ko <- if po = None then Some (h (pc2in (s, c))) else Some (h (p2in (oget po))); 
+    
+    return ko; 
+  }  
+}.
+
+(*
+Properties:
+> X-BIND-K-CT --> ?
+> HON-BIND-K-PK --> ?
+> LEAK-BIND-K-PK --> ?
+> HON-BIND-K,CT-PK break gives SCFR-CCA break or CR break:
+  Equal non-None k and equal c, decrypting to p. If p are both None --> collision 
+  (except if s in secret keys match, low prob bad event); else, if one p is None and 
+  other non-None --> collision (as long as pc2in (s, c) and p2in p are unequal);
+  else, if both p are non-None and p are equal --> SCFR-CCA break; else, 
+  (both p are non-None and p are unequal) --> collision.
+> LEAK-BIND-K,CT-PK break gives SCFR-LEAK break or CR break:
+  Same as HON case.
+> X-BIND-K,PK-CT --> ? (Combined with FO_T this works)
+*)
+
+(* LEAK-BIND-K,CT-PK break for Um-Implicit gives SCFR-LEAK break for S or CR break for h *)
+(** 
+  Auxiliary game capturing probability of getting the same secret 
+  plaintext values (i.e., the values added to the PKE secret key 
+  during key generation) when independently generating key pairs
+  with an implicitly rejecting FO-U transform. 
+**)
+(** 
+  Used to express bad event.
+  (Alternatively, could use things like modeling "performing key generation" 
+  as "sampling from distribution" or bound the bad event by maximum probability
+  of sampling a certain secret plaintext value over all public keys. In any
+  case, instantiations will often have a key-generation and/or 
+  plaintext distribution that makes expressing the following 
+  as a concrete probability quite easy)
+**)
+module Keygen_Equal_Secret (S : PKE.Scheme) = {
+  proc main() : bool = { 
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var s0, s1 : ptxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    s0 <$ dptxtm pk0;
+    
+    (pk1, sk1) <@ S.keygen();
+    s1 <$ dptxtm pk1;
+    
+    return s0 = s1;
+  }
+}.
+
+(** Reduction adversary reducing SCFR-LEAK (for S) to LEAK-BIND-K,CT-PK (for Um-Implicit) **)
+module R_SCFRLEAK_LEAKBINDKCTPK (A : Adv_LEAKBIND) : Adv_SCFRLEAK = {
+  proc find(pk0 : pk_t, sk0 : sk_t, pk1 : pk_t, sk1 : sk_t) : ctxt_t = {
+    var s0, s1 : ptxt_t;
+    var c0, c1 : ctxt_t;
+    
+    s0 <$ dptxtm pk0;
+    s1 <$ dptxtm pk1;
+    
+    (c0, c1) <@ A.find(KCT_Binds_PK, pk0, (sk0, s0), pk1, (sk1, s1));
+    
+    return c0;
+  }
+}.
+
+(** Reduction adversary reducing CR (for h) to LEAK-BIND-K-PK (for Um-Implicit) **)
+module R_CR_LEAKBINDKCTPK (S : PKE.Scheme) (A : Adv_LEAKBIND) : Adv_CR = {
+  proc find() : in_t * in_t = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var s0, s1 : ptxt_t;
+    var p0, p1 : ptxt_t option;
+    var b : bool;
+    var c0, c1 : ctxt_t;
+    var x0, x1 : ptxt_t * ctxt_t;
+    
+    (pk0, sk0) <@ S.keygen();
+    s0 <$ dptxtm pk0;
+    
+    (pk1, sk1) <@ S.keygen();
+    s1 <$ dptxtm pk1;
+       
+    (c0, c1) <@ A.find(KCT_Binds_PK, pk0, (sk0, s0), pk1, (sk1, s1));
+    
+    p0 <@ S.dec(sk0, c0);
+    p1 <@ S.dec(sk1, c1);
+    
+    return (if p0 = None then pc2in (s0, c0) else p2in (oget p0),
+            if p1 = None then pc2in (s1, c1) else p2in (oget p1));
+  }
+}.
+
+section CRSCFRLEAK_LEAKBINDKCTPK.
+
+declare module S <: PKE.Scheme.
+declare module A <: Adv_LEAKBIND{-S}.
+
+(* Lossless (i.e., termination) assumption on decryption of S and finding of A *)
+declare axiom S_dec_ll : islossless S.dec.
+declare axiom A_find_ll : islossless A.find.
+
+(* 
+  Injectivity asssumptions on mappings from plaintexts 
+  (and ciphertexts) to inputs of hash function.
+  Intuitively, states that every plaintext (resp. plaintext/ciphertext pair)
+  is a different hash function input.
+*)
+declare axiom p2in_inj : injective p2in.
+declare axiom pc2in_inj : injective pc2in.
+
+(* 
+  "Disjointness" assumption on images of mappings to hash function inputs.
+  Intuitively, states that a plaintext forms a different hash function input 
+  than a plaintext/ciphertext pair (which is probably stronger than
+  strictly necessary, but seems reasonable and sufficient)
+*)
+declare axiom disj_ppc2in (p : ptxt_t) (pc : ptxt_t * ctxt_t) : p2in p <> pc2in pc. 
+
+
+(* 
+  Auxiliary module semantically identical to LEAK_BIND, but stores 
+  plaintexts and ciphertexts as module variables (instead of local variables)
+*)
+local module LEAK_BIND_V = {
+  var s0, s1 : ptxt_t 
+  var c0, c1 : ctxt_t
+  var po0, po1 : ptxt_t option
+  
+  proc main(bc : bindconf) : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var b : bool;
+    var k0, k1 : key_t option;
+    var no_fail : bool;
+    
+    (pk0, sk0) <@ S.keygen();
+    s0 <$ dptxtm pk0;
+    if (is_pkbsc bc) {
+      (pk1, sk1) <- (pk0, sk0);
+    } else {
+      if (is_pkbtc bc) { 
+        (pk1, sk1) <@ S.keygen();
+        s1 <$ dptxtm pk1;
+      } else {
+        b <@ A.choose(bc);
+        if (b) {
+          (pk1, sk1) <@ S.keygen();
+          s1 <$ dptxtm pk1;  
+        } else { 
+          (pk1, sk1) <- (pk0, sk0);
+        }
+      }
+    }
+    
+    (c0, c1) <@ A.find(bc, pk0, (sk0, s0), pk1, (sk1, s1));
+    
+    po0 <@ S.dec(sk0, c0);
+    k0 <- if po0 = None then Some (h (pc2in (s0, c0))) else Some (h (p2in (oget po0))); 
+    po1 <@ S.dec(sk1, c1);
+    k1 <- if po1 = None then Some (h (pc2in (s1, c1))) else Some (h (p2in (oget po1))); 
+            
+    no_fail <- k0 <> None /\ k1 <> None;
+    
+    return no_fail /\ is_bindbreak bc (oget k0) (oget k1) pk0 pk1 c0 c1;
+  }
+}.
+
+
+local lemma EqPr_LEAKBIND_V_UmSA &m : 
+  Pr[LEAK_BIND(Um_Implicit(S), A).main(KCT_Binds_PK) @ &m : res] 
+  = 
+  Pr[LEAK_BIND_V.main(KCT_Binds_PK) @ &m : res].
+proof. 
+byequiv => //.
+proc; inline{1} Um_Implicit(S).keygen Um_Implicit(S).decaps.
+seq 2 2 : (   ={glob S, glob A, bc} 
+           /\ pk{1} = pk0{2}
+           /\ sk{1} = sk0{2}
+           /\ s{1} = LEAK_BIND_V.s0{2}
+           /\ bc{1} = KCT_Binds_PK).
++ by rnd; call (: true).
+sp.
+rcondf{1} ^if; 1: by auto.
+rcondt{1} ^if; 1: by auto.
+rcondf{2} ^if; 1: by auto.
+rcondt{2} ^if; 1: by auto.
+do 3! (wp; call (: true)). 
+by wp; rnd; call (: true). 
+qed.
+
+lemma Bnd_LEAKBINDKCTPK_SCFRLEAKCR &m : 
+  Pr[LEAK_BIND(Um_Implicit(S), A).main(KCT_Binds_PK) @ &m : res]
+  <=
+  Pr[SCFR_LEAK(S, R_SCFRLEAK_LEAKBINDKCTPK(A)).main() @ &m : res]
+  +
+  Pr[CR(R_CR_LEAKBINDKCTPK(S, A)).main() @ &m : res]
+  +
+  Pr[Keygen_Equal_Secret(S).main() @ &m : res].
+proof.
+rewrite EqPr_LEAKBIND_V_UmSA Pr[mu_split (LEAK_BIND_V.po0 = LEAK_BIND_V.po1 /\ LEAK_BIND_V.po0 <> None)].
+rewrite -RField.addrA StdOrder.RealOrder.ler_add; last first. 
++ rewrite Pr[mu_split (LEAK_BIND_V.s0 <> LEAK_BIND_V.s1)] StdOrder.RealOrder.ler_add. 
+  + byequiv => //.
+    proc; inline{2} R_CR_LEAKBINDKCTPK(S, A).find.
+    seq 2 2 : (={glob S, glob A, pk0, sk0} /\ LEAK_BIND_V.s0{1} = s0{2} /\ bc{1} = KCT_Binds_PK).
+    + by rnd; call (: true).
+    rcondf{1} ^if; 1: by auto. 
+    rcondt{1} ^if; 1: by auto.
+    swap{1} 5 1; wp => /=.
+    conseq (: _ 
+              ==> 
+                 ={pk0, pk1}
+              /\ LEAK_BIND_V.s0{1} = s0{2}
+              /\ LEAK_BIND_V.s1{1} = s1{2}
+              /\ LEAK_BIND_V.c0{1} = c0{2}
+              /\ LEAK_BIND_V.c1{1} = c1{2}
+              /\ LEAK_BIND_V.po0{1} = p0{2}
+              /\ LEAK_BIND_V.po1{1} = p1{2}); 1: smt(pc2in_inj p2in_inj disj_ppc2in).
+    by do 3! call (: true); rnd; call (: true).
+  byequiv => //.
+  proc; conseq (: _ ==> LEAK_BIND_V.s0{1} = s0{2} /\ LEAK_BIND_V.s1{1} = s1{2}) => //.
+  do 2! (wp; call{1} S_dec_ll); call{1} A_find_ll.
+  seq 2 2 : (={glob S, pk0, sk0} /\ LEAK_BIND_V.s0{1} = s0{2} /\ bc{1} = KCT_Binds_PK).
+  + by rnd; call (: true).
+  rcondf{1} ^if; 1: by auto. 
+  rcondt{1} ^if; 1: by auto.
+  by rnd; call (: true).
+byequiv => //.
+proc; inline{1} Um_Implicit(S).decaps; inline{2} R_SCFRLEAK_LEAKBINDKCTPK(A).find.
+seq 1 1 : (={glob A, glob S, pk0, sk0} /\ bc{1} = KCT_Binds_PK); 1: by call (: true).  
+rcondf{1} ^if; 1: by auto. 
+rcondt{1} ^if; 1: by auto.
+wp.
+seq 4 8 : (   ={glob S, sk0, sk1} 
+           /\ LEAK_BIND_V.s0{1} = s0{2}
+           /\ LEAK_BIND_V.s1{1} = s1{2}
+           /\ LEAK_BIND_V.c0{1} = c0{2}
+           /\ LEAK_BIND_V.c1{1} = c1{2}
+           /\ bc{1} = KCT_Binds_PK). 
++ swap{1} 1 1. 
+  call (: true); rnd; rnd. 
+  by wp; call (: true). 
+case (LEAK_BIND_V.c0{1} = LEAK_BIND_V.c1{1}); last first. 
++ conseq (: _ ==> true) => />. 
+  do 2! (call{1} S_dec_ll; call{2} S_dec_ll; wp).
+  by wp.
+conseq (: _ ==> LEAK_BIND_V.po0{1} = p0{2} /\ LEAK_BIND_V.po1{1} = p1{2}) => [/#|]. 
+by call (: true); wp; call (: true); wp.
+qed.
+
+end section CRSCFRLEAK_LEAKBINDKCTPK.
+
+end Implicit.
+
+end Um.
+
+
+
+
+(*
+module R_CR_HONBINDKCT (S : PKE.Scheme) (O0 : Oracles_CCA1i, O1 : Oracles_CCA1i) (A : Adv_HONBIND) : Adv_CR = {
+  proc find() = {
+    var pk0 : pk_t;
+    var pk1 : pk_t;
+    var sk0 : sk_t;
+    var sk1 : sk_t;
+    var p0, p1 : ptxt_t option;
+    var b : bool;
+    var c0 : ctxt_t;
+    var c1 : ctxt_t;
+    var k0 : key_t option;
+    var k1 : key_t option;
+    var no_fail : bool;
+    
+    (pk0, sk0) <@ FO_Umc_Explicit(S).keygen();
+    b <@ A(O0(FO_Umc_Explicit(S)), O1(FO_Umc_Explicit(S))).choose(K_Binds_CT);
+    if (b) { 
+      (pk1, sk1) <@ S.keygen();
+    } else {
+      (pk1, sk1) <- (pk0, sk0);
+    }
+         
+    O0( FO_Umc_Explicit(S)).init(sk0);
+    O1( FO_Umc_Explicit(S)).init(sk1);
+    
+    (c0, c1) <@ A(O0(FO_Umc_Explicit(S)), O1(FO_Umc_Explicit(S))).find(K_Binds_CT, pk0, pk1);
+    
+    p0 <@ S.dec(sk0, c0);
+    p1 <@ S.dec(sk1, c1);
+    
+    return ((oget p0, c0), (oget p1, c1));
+  }
+}.
+
+
+
+section.
+
+declare module S <: PKE.Scheme{-O_CCA1_Default, -O_CCA1_DDefault}.
+
+declare module A <: Adv_HONBIND{-S, -O_CCA1_Default, -O_CCA1_DDefault}. 
+
+lemma test &m :
+  Pr[HON_BIND(FO_Umc_Explicit(S), KEM.O_CCA1_Default, KEM.O_CCA1_DDefault, A).main(K_Binds_CT) @ &m : res]
+  <=
+  Pr[CR(R_CR_HONBINDKCT(S, KEM.O_CCA1_Default, KEM.O_CCA1_DDefault, A)).main() @ &m : res].
+proof.
+byequiv => //.
+proc.
+inline{2} 1.
+seq 1 1 : (={glob A, glob S, pk0, sk0} /\ bc{1} = K_Binds_CT); 1: by call (: true).
+do 2! (rcondf{1} ^if; 1: auto).
+inline{1} FO_Umc_Explicit(S).decaps. 
+wp; call (: true); wp; call (: true); wp. 
+conseq (: _ ==> ={c0, c1, glob S, sk1}); 1: smt().
+call (: ={glob O_CCA1_Default, glob O_CCA1_DDefault, glob S}); 1..2: by sim.  
+conseq />.
+seq 1 1 : (#pre /\ ={b}); 1: by call (: true).
+by sim.
+qed.
+
+end section.
+
+
+print PKE.SROB_CCA.
+
+module (R_SROBCCA_HONBINDCTPK (S : PKE.Scheme) (A : Adv_HONBIND) : Adv_SROBCCA) (O0 : Oracles_CCA, O1 : Oracles_CCA) = {
+  proc find(pk0 : pk_t, pk1 : pk_t) = {
+    var pk0 : pk_t;
+    var pk1 : pk_t;
+    var sk0 : sk_t;
+    var sk1 : sk_t;
+    var p0, p1 : ptxt_t option;
+    var b : bool;
+    var c0 : ctxt_t;
+    var c1 : ctxt_t;
+    var k0 : key_t option;
+    var k1 : key_t option;
+    var no_fail : bool;
+    
+    (pk0, sk0) <@ FO_Umc_Explicit(S).keygen();
+    b <@ A(O0(FO_Umc_Explicit(S)), O1(FO_Umc_Explicit(S))).choose(K_Binds_CT);
+    if (b) { 
+      (pk1, sk1) <@ S.keygen();
+    } else {
+      (pk1, sk1) <- (pk0, sk0);
+    }
+         
+    O0( FO_Umc_Explicit(S)).init(sk0);
+    O1( FO_Umc_Explicit(S)).init(sk1);
+    
+    (c0, c1) <@ A(O0(FO_Umc_Explicit(S)), O1(FO_Umc_Explicit(S))).find(K_Binds_CT, pk0, pk1);
+    
+    p0 <@ S.dec(sk0, c0);
+    p1 <@ S.dec(sk1, c1);
+    
+    return ((oget p0, c0), (oget p1, c1));
+  }
+}.
+
+
+
+section.
+
+declare module S <: PKE.Scheme{-O_CCA1_Default, -O_CCA1_DDefault}.
+
+declare module A <: Adv_HONBIND{-S, -O_CCA1_Default, -O_CCA1_DDefault}. 
+
+lemma test &m :
+  Pr[HON_BIND(FO_Umc_Explicit(S), KEM.O_CCA1_Default, KEM.O_CCA1_DDefault, A).main(K_Binds_CT) @ &m : res]
+  <=
+  Pr[CR(R_CR_HONBINDKCT(S, KEM.O_CCA1_Default, KEM.O_CCA1_DDefault, A)).main() @ &m : res].
+proof.
+byequiv => //.
+proc.
+inline{2} 1.
+seq 1 1 : (={glob A, glob S, pk0, sk0} /\ bc{1} = K_Binds_CT); 1: by call (: true).
+do 2! (rcondf{1} ^if; 1: auto).
+inline{1} FO_Umc_Explicit(S).decaps. 
+wp; call (: true); wp; call (: true); wp. 
+conseq (: _ ==> ={c0, c1, glob S, sk1}); 1: smt().
+call (: ={glob O_CCA1_Default, glob O_CCA1_DDefault, glob S}); 1..2: by sim.  
+conseq />.
+seq 1 1 : (#pre /\ ={b}); 1: by call (: true).
+by sim.
+qed.
+
+end section.
+*)
