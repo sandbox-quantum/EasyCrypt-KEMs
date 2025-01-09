@@ -1,3 +1,14 @@
+ML-KEM Binding propertiers to prove:
+- BIND-K-X are big ones
+- BIND-K,PK-CT?
+- BIND-K,CT-PK?
+
+
+RSA-KEM/'RSASVE' used in protocol vulnerable to binding-related attack (https://csrc.nist.gov/pubs/sp/800/227/ipd), show lack of binding properties?
+- See also: https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-56Br2.pdf
+
+
+
 (Comments on) Changes to KeyEncapsulationMechanisms[ROM].eca:
 > For the oracle module types, stick with functor types for now.
   Seems to be the most reasonable option with current features.
