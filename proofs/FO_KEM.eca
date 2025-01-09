@@ -3,7 +3,6 @@ require KeyEncapsulationMechanisms PublicKeyEncryption.
 require PublicKeyEncryptionROM.
 
 
-
 (* Types *)
 (** Public keys (asymmetric) **)
 type pk_t.
