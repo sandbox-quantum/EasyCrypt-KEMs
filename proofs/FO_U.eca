@@ -9,6 +9,7 @@ type pk_t.
 
 (** Secret keys (asymmetric) **)
 type sk_t.
+
 (** Plaintexts **)
 type ptxt_t.
 
