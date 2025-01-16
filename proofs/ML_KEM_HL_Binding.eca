@@ -7,8 +7,9 @@
   and, in turn, implementation.
 ^*)
 (* Require/Import *)
-require import AllCore Distr.
-require (*--*) KeyedHashFunctions PublicKeyEncryption KeyEncapsulationMechanismsROM.
+require import AllCore Distr PROM.
+require (*--*) DMap.
+require (*--*) HashFunctions KeyedHashFunctions KeyEncapsulationMechanismsROM.
 
 
 (* Types *)
@@ -45,40 +46,73 @@ type key_t = rand_t.
 type ctxt_t = ctxt_t_pke.
 
 
-
-
-
-
-
-
 (* Operators *)
-(** Note: perhaps add   **)
-
 (** Hash function H, used to hash public keys **)
 op H : pk_t -> rand_t.
 
 (** Hash function J ("keyed"), used to compute implicit rejection key **)
 op J : rand_t -> ctxt_t -> key_t.
 
-(** Operator capturing encryption function of underlying PKE scheme **)
-op enc : rand_t -> pk_t -> ptxt_t -> ctxt_t.
+(** Operator capturing "derandomized" key generation of underlying PKE scheme **)
+op kg : rand_t -> pk_t_pke * sk_t_pke.
+
+(** Operator capturing "derandomized" encryption function of underlying PKE scheme **)
+op enc : rand_t -> pk_t_pke -> ptxt_t -> ctxt_t_pke.
 
 (** Operator capturing decryption function of underlying PKE scheme **)
-op dec : sk_t -> ctxt_t -> ptxt_t option.
+(**
+  By design, the underlying PKE scheme never returns a failure, 
+  so we refrain from using option monad as output.
+**)
+op dec : sk_t_pke -> ctxt_t_pke -> ptxt_t.
 
 
 (* Distributions *)
-(* Proper distribution representing key generation of underlying PKE scheme *)
-op [lossless] dkg : (pk_t * sk_t) distr.
-
 (** Proper, full, and uniform distribution over randomness **)
 op [lossless full uniform] drand : rand_t distr.
 
-(** Distribution over (shared) keys (output of J)  **)
-op [lossless] dkey : key_t distr.
+(** Proper, full, and uniform distribution over (shared) keys **)
+op [lossless full uniform] dkey : key_t distr.
+
+(** Proper, full, and uniform distribution over pairs of (shared) keys and randomness **) 
+op [lossless full uniform] dkeyrand : (key_t * rand_t) distr.
+
+(** `dkeyrand` is equal to the product distribution of dkey and drand **)
+lemma dkeyrand_dprod : dkeyrand = dkey `*` drand.
+proof. 
+rewrite &(eq_funi_ll) ?is_full_funiform ?(dkeyrand_ll, dkeyrand_fu, dkeyrand_uni).
++ by rewrite dprod_fu_auto ?(dkey_fu, drand_fu) /=. 
++ by rewrite dprod_uni 1,2:(dkey_uni, drand_uni). 
+by rewrite dprod_ll_auto 1,2:(dkey_ll, drand_ll). 
+qed.
+
+(** Distribution representing key generation of underlying PKE scheme **)
+op dkg : (pk_t_pke * sk_t_pke) distr = dmap drand kg.
+
+(** `dkg` is a proper distribution **)
+lemma dkg_ll : is_lossless dkg.
+proof. by rewrite dmap_ll drand_ll. qed.
 
 
 (* Clones/Imports *)
+(* Definitions and properties for H as a (non-keyed) hash function *)
+clone import HashFunctions as H_HF with
+  type in_t <- pk_t,
+  type out_t <- rand_t,
+  
+  op f <- H
+  
+  proof *.
+  
+(* Definitions and properties for G as a random oracle *)
+clone import FullRO as G_RO with
+  type in_t <- ptxt_t * rand_t,
+  type out_t <- key_t * rand_t,
+ 
+  op dout <- fun _ => dkeyrand
+  
+  proof *.
+
 (* Definitions and properties for J as a keyed hash function *)
 clone import KeyedHashFunctions as J_KHF with 
   type key_t <- rand_t,
@@ -153,20 +187,211 @@ clone import KeyEncapsulationMechanismsROM as KEMsROM with
   for ML-KEM-Op (which in turn gives the whole chain down to implementation,
   if code still works)
 *)
-(** **)
+
+
+(* Schemes *)
+(** K-PKE, PKE scheme underlying ML-KEM **)
+(** 
+  As per FIPS 203, we specify the PKE in a derandomized manner.
+  That is, any procedure using randomness (i.e., key generation and encryption)
+  takes it as input rather than sampling it itself. This also means
+  it does not adhere to the regular syntax of a PKE scheme. 
+**)  
+(**
+  Further, this is a (very) high-level specification, essentially abstracting
+  away all algebraic structure and modeling the procedures as simple operators 
+  (which is possible because all randomness is taken as input)
+**)
+module K_PKE_HL = {
+  proc keygen(d : rand_t) : pk_t_pke * sk_t_pke = {
+    return kg d;
+  }
+  
+  proc enc(pk : pk_t_pke, m : ptxt_t, r : rand_t) : ctxt_t_pke = {
+    return enc r pk m;
+  }
+  
+  proc dec(sk : sk_t_pke, c : ctxt_t_pke) : ptxt_t = {
+    return dec sk c;
+  } 
+}.
+
+
+(**
+  ML-KEM, where the key/randomness function is modeled as RO.
+  Closely follows FIPS 203 (without accounting for sampling failures, so 
+  the "internal" ML-KEM procedures are most relevant). 
+**)
 module (ML_KEM_HL_ROM : Scheme_ROM) (G : RandomOracle) = { 
   proc keygen() : pk_t * sk_t = {
+    var pk_pke : pk_t_pke;
+    var sk_pke : sk_t_pke;
+    var d, z : rand_t;
     var pk : pk_t;
     var sk : sk_t;
     
-    return witness;
+    d <$ drand;
+    z <$ drand;
+    
+    (pk_pke, sk_pke) <@ K_PKE_HL.keygen(d);
+    
+    pk <- pk_pke;
+    sk <- (sk_pke, pk, H pk, z);
+    
+    return (pk, sk);
   }
   
   proc encaps(pk : pk_t) : key_t * ctxt_t = {
-    return witness;
+    var m, r : rand_t; 
+    var k : key_t;
+    var c : ctxt_t_pke;
+    
+    m <$ drand;
+    (k, r) <@ G.get((m, H pk));
+    
+    c <@ K_PKE_HL.enc(pk, m, r);
+        
+    return (k, c);
   }
   
   proc decaps(sk : sk_t, c : ctxt_t) : key_t option = {
-    return witness;
+    var pk_pke : pk_t_pke;
+    var sk_pke : sk_t_pke;
+    var h, z, r' : rand_t;
+    var m' : ptxt_t;
+    var k', k_ : key_t;
+    var c' : ctxt_t;
+    
+    (sk_pke, pk_pke, h, z) <- sk;
+    
+    m' <@ K_PKE_HL.dec(sk_pke, c);
+    
+    (k', r') <@ G.get((m', h));
+    k_ <- J z c;
+    
+    c' <@ K_PKE_HL.enc(pk_pke, m', r');
+    
+    if (c <> c') {
+      k' <- k_;
+    }
+    
+    return Some k';
   }
 }.
+
+(** 
+  Trimmed version of ML_KEM_HL_ROM (e.g., inlined procedures, less variables).
+  Equivalent to the standard version above (as shown in the corresponding lemmas).
+**)
+(**
+  Besides inlining and removing variables, the sampling of randomness into "derandomized" 
+  key generation is replaced by directly sampling from the appropriate distribution (dkg). 
+**)
+module (ML_KEM_HL_ROM_Trim : Scheme_ROM) (G : RandomOracle) = { 
+  proc keygen() : pk_t * sk_t = {
+    var z : rand_t;
+    var sk_pke : sk_t_pke;
+    var pk : pk_t;
+        
+    z <$ drand;
+    (pk, sk_pke) <$ dkg;
+    
+    return (pk, (sk_pke, pk, H pk, z));
+  }
+  
+  proc encaps(pk : pk_t) : key_t * ctxt_t = {
+    var m, r : rand_t; 
+    var k : key_t;
+    
+    m <$ drand;
+    (k, r) <@ G.get((m, H pk));
+     
+    return (k, enc r pk m);
+  }
+  
+  proc decaps(sk : sk_t, c : ctxt_t) : key_t option = {
+    var pk_pke : pk_t_pke;
+    var sk_pke : sk_t_pke;
+    var h, z, r' : rand_t;
+    var m' : ptxt_t;
+    var k' : key_t;
+    
+    (sk_pke, pk_pke, h, z) <- sk;
+    
+    m' <- dec sk_pke c;
+    
+    (k', r') <@ G.get((m', h));
+    
+    return Some (if c <> enc r' pk_pke m' then J z c else k');
+  }
+}.
+
+
+(* Section for proving equivalence of key generation procedures, hiding auxiliary artifacts *)
+section.
+(* Auxiliary clone for proving sampling equivalence *)
+local clone DMap.DMapSampling as DMS with
+  type t1 <- rand_t,
+  type t2 <- pk_t_pke * sk_t_pke
+  
+  proof *.
+
+(** 
+  Equivalence between key generation procedures of ML_KEM_HL_ROM 
+  and ML_KEM_HL_ROM_Trim, for any instantiation of the oracle
+**)    
+equiv Eqv_ML_KEM_HL_ROM_Trim_Keygen (G <: RandomOracle) :
+  ML_KEM_HL_ROM(G).keygen ~ ML_KEM_HL_ROM_Trim(G).keygen : true ==> ={res}.
+proof. 
+proc.
+inline K_PKE_HL.keygen; swap{1} 1 1. print DMS.
+wp.
+transitivity{2} { z <$ drand; (pk, sk_pke) <@ DMS.S.sample(drand, kg); } 
+                (true 
+                 ==> 
+                 let tpl = kg d{1} in 
+                   (tpl.`1, (tpl.`2, tpl.`1, H tpl.`1, z{1})) 
+                   = 
+                   (pk{2}, (sk_pke{2}, pk{2}, H pk{2}, z{2}))) 
+                (true ==> ={z, pk, sk_pke}) => //.
++ rewrite equiv[{2} 2 DMS.sample].
+  inline{2} DMS.S.map.
+  by wp; rnd; wp; rnd; skip.
+inline{1} DMS.S.sample.
+by wp; rnd; wp; rnd. 
+qed.
+
+end section.
+
+(** 
+  Equivalence between encapsulation procedures of ML_KEM_HL_ROM 
+  and ML_KEM_HL_ROM_Trim, for any instantiation of the oracle
+**) 
+equiv Eqv_ML_KEM_HL_ROM_Trim_Encaps (G <: RandomOracle) :
+  ML_KEM_HL_ROM(G).encaps ~ ML_KEM_HL_ROM_Trim(G).encaps : ={glob G, arg} ==> ={res}.
+proof.
+proc.
+inline K_PKE_HL.enc.
+by wp; sim.
+qed.
+
+(** 
+  Equivalence between decapsulations procedures of ML_KEM_HL_ROM 
+  and ML_KEM_HL_ROM_Trim, for any instantiation of the oracle
+**) 
+equiv Eqv_ML_KEM_HL_ROM_Trim_Decaps (G <: RandomOracle) :
+  ML_KEM_HL_ROM(G).decaps ~ ML_KEM_HL_ROM_Trim(G).decaps : ={glob G, arg} ==> ={res}.
+proof.
+proc.
+inline K_PKE_HL.enc K_PKE_HL.dec.
+by wp; call (: true); wp.
+qed.
+
+
+
+section ML_KEM_HL_ROM_LEAKBINDKPK.
+
+declare module A <: Adv_LEAKBIND_ROM.
+
+
+end section ML_KEM_HL_ROM_LEAKBINDKPK.
