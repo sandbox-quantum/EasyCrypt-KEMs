@@ -146,7 +146,9 @@ clone import KeyEncapsulationMechanismsROM as KEMsROM with
   
   proof *.
 
-  
+(* Non-ROM KEM definitions consistent with above instantiation *) 
+import KEMs.
+
 
 (*
   Note:
@@ -344,7 +346,7 @@ equiv Eqv_ML_KEM_HL_ROM_Trim_Keygen (G <: RandomOracle) :
   ML_KEM_HL_ROM(G).keygen ~ ML_KEM_HL_ROM_Trim(G).keygen : true ==> ={res}.
 proof. 
 proc.
-inline K_PKE_HL.keygen; swap{1} 1 1. print DMS.
+inline K_PKE_HL.keygen; swap{1} 1 1.
 wp.
 transitivity{2} { z <$ drand; (pk, sk_pke) <@ DMS.S.sample(drand, kg); } 
                 (true 
@@ -389,9 +391,178 @@ qed.
 
 
 
-section ML_KEM_HL_ROM_LEAKBINDKPK.
 
-declare module A <: Adv_LEAKBIND_ROM.
+(* Proofs *)
+(** Counting wrapper around (regular) random oracles, used for query counting **)
+module Counting_RO (RO : RandomOraclei) : RandomOraclei = {
+  var q : int
+  
+  proc init() : unit = {
+    RO.init();
+    q <- 0;
+  }
+  
+  proc get(pr : ptxt_t * rand_t) : key_t * rand_t = {
+    var kr : key_t * rand_t;
+    
+    kr <@ RO.get(pr);
+    
+    q <- q + 1;
+    
+    return kr;
+  }
+}.
+
+(* 
+  Proof sketch for LEAK-BIND-K,CT-PK in ROM (G modeled as ROM).
+  Assume adversary that breaks LEAK-BIND-K,CT-PK for ML-KEM.
+  That means that we are dealing with two independently generated key pairs (pk0, sk0) and (pk1, sk1)
+  (due to pk being binding target), both of which are passed to the adversary, 
+  upon which it returns a single ciphertext c (actually, it returns two ciphertexts c0 = c1
+  by assumption of adversary succeeding; we regard these as a single ciphertext c)
+  This ciphertext c is then decapsulated under sk0 and sk1.
+  Basic argument:
+  - Only looking at the final return values of both decapsulations, the following
+    is the case if the adversary succeeds (See ML_KEM_HL_ROM.decaps):
+    Some (if c <> enc r0' pk_pke0 m0' then J z0 c else k0')
+    =
+    Some (if c <> enc r1' pk_pke1 m1' then J z1 c else k1')
+    Notice that, because z0 and z1 are independently sampled (due to public key being a binding target),
+    J z0 and J z1 can each be replaced by (independent) random functions due to J's PRF property.
+    Doing this globally (i.e., before the following case analysis) gives us two PRF terms in the
+    bound and lets us reason as follows.
+    Case analysis:
+    1. c <> enc r0' pk_pke0 m0' /\ c <> enc r1' pk_pke1 m1'
+       In this case, adversary succeeds iff J z0 c = J z1 c. 
+       Replacing J z0 and J z1 by indpendent random functions (as explained above) means that 
+       the probability of this equality holding is bounded by 1 / |seed_t|.
+    2. c <> enc r0' pk_pke0 m0' /\ c = enc r1' pk_pke1 m1' 
+       In this case, adversary succeeds iff J z0 c = k1'
+       Replacing J z0 by a random function (as explained above) means that 
+       the probability of this equality holding is bounded by 1 / |seed_t|.
+    3. c = enc r0' pk_pke0 m0' /\ c <> enc r1' pk_pke1 m1'
+       This case is symmetrical to case 2.
+    4. c = enc r0' pk_pke0 m0' /\ c = enc r1' pk_pke1 m1'
+       In this case, adversary succeeds iff k0' = k1'
+       Alternatively stated, this means the first part of G(m0, h0) equals
+       that of G(m1, h1). Here, we want to show that the inputs are not equal so we
+       can relate this case to the collision resistance of the random oracle. That is,
+       if the input would be equal, the output would also be trivially equal (so in particular also 
+       k0' and k1') and the adversary could win. (Note: in case the encryption 
+       operator is injective w.r.t. public key, then m0' = m1' and r0' = r1' means that 
+       enc r0' pk_pke0 m0' and enc r1' pk_pke1 m1' cannot be equal when pk_pke0 <> pk_pke1.
+       Particularly, this means that these encryptions cannot both be equal to (the same) c and,
+       hence, messages and randomness cannot be the same for this case to even occur.
+       Not sure if this injectivity is a property of the PKE underlying ML-KEM though.)
+       Now, since the ciphertexts are equal and the key pairs are independently generated,
+       we can do two things to get to the fact that the inputs to G are different:
+       m0' <> m1' because otherwise we get a SCFR-LEAK break for the underlying PKE 
+       (independently generated key pairs and single ciphertext decrypt to the same plaintext)
+       OR h0' <> h1' because (excluding the case that the public keys are equal by a purely
+       statistical argument stating that generating the same public keys is not likely) otherwise
+       we have a collision for H (different public keys, same output; here, we can exclude the case 
+       that the public keys are equal by a purely statistical argument stating that 
+       generating the same public keys is not likely). With the different inputs established, 
+       a collision for (the first argument of) G can happen in four more ways:
+       4.1. The advesary didn't query (m0', h0') and/or didn't query (m1', h1') in its execution,
+            but they still collided (in the first part of the output) during decapsulation by the game.
+            These are the first three cases, each of which can be bounded by 1 / |key_t|.
+       4.2. The adversary queried both (m0', h0') and (m1', h1') in its execution, and they collided
+            in the first part of the output. This is a birthday bound.
+
+This feels very crude and suboptimal...
+*)
+section ML_KEM_HL_LEAKBINDKCTPK_ROM.
+
+declare module A <: Adv_LEAKBIND_ROM {-RO}.
+
+lemma MLKEMHL_LEAKBINDKCTPK_ROM &m : 
+  Pr[LEAK_BIND_ROM(RO, ML_KEM_HL_ROM, A).main(KCT_Binds_PK) @ &m : res] <= witness.
+proof. admit. qed.
+
+end section ML_KEM_HL_LEAKBINDKCTPK_ROM.
 
 
-end section ML_KEM_HL_ROM_LEAKBINDKPK.
+(* 
+  Proof sketch for LEAK-BIND-PK,K-CT in ROM (G modeled as ROM).
+  Setup and first three cases very similar to LEAK-BIND-K,CT-PK proof, except
+  that J only needs to be replaced once since the keys are equal (so in particular the
+  seed used to index J is equal). First case still workds because now the ciphertexts are
+  different.
+  For the fourth (and final case), note that since the considered public keys are equal,
+  the hash given to G as a second input are equal. Hence, if the messages obtained from
+  decryption would be equal, then *both* k0' = k1' and r0' = r1'. However, then 
+  enc r0' pk_pke0 m0' = enc r1' pk_pke1 m1' (because arguments are all the same) and at least
+  one of them cannot equal the respective ciphertext (since c0' <> c1' by assumption that the
+  adversary wins). Hence, if this case is ever to go through, we have m0' <> m1' and we can
+  argue as before about collisions in the random oracle.
+*)
+section ML_KEM_HL_LEAKBINDPKKCT_ROM.
+
+declare module A <: Adv_LEAKBIND_ROM {-RO}.
+
+lemma MLKEMHL_LEAKBINDKPKCT_ROM &m : 
+  Pr[LEAK_BIND_ROM(RO, ML_KEM_HL_ROM, A).main(PKK_Binds_CT) @ &m : res] <= witness.
+proof. admit. qed.
+
+end section ML_KEM_HL_LEAKBINDPKKCT_ROM.
+
+
+(*
+  Proof sketch for LEAK-BIND-K-PK in ROM (G modeled as ROM). 
+  Same as LEAK-BIND-K,CT-PK, except that we cannot reduce from SCFR-LEAK (on its own at least)
+  to "exclude" the case that the plaintext resulting from decryption are equal. This because 
+  the ciphertexts might be different (and SCFR requires a single ciphertext). So, here,
+  we must resort to CR of H to argue inputs to G are different.
+*)
+section ML_KEM_HL_LEAKBINDKPK_ROM.
+
+declare module A <: Adv_LEAKBIND_ROM {-RO}.
+
+lemma MLKEMHL_LEAKBINDKPK_ROM &m : 
+  Pr[LEAK_BIND_ROM(RO, ML_KEM_HL_ROM, A).main(K_Binds_PK) @ &m : res] <= witness.
+proof. admit. qed.
+
+end section ML_KEM_HL_LEAKBINDKPK_ROM.
+
+
+(* 
+  Proof sketch for LEAK-BIND-K-CT in ROM (G modeled as ROM). 
+  Combine proof for LEAK-BIND-K,PK-CT and LEAK-BIND-K-PK
+  (If adversary chooses equal PK, then LEAK-BIND-K,PK-CT proof, else
+   LEAK-BIND-K-PK. Perhaps by reduction even?)
+*)
+section ML_KEM_HL_LEAKBINDKCT_ROM.
+
+declare module A <: Adv_LEAKBIND_ROM {-RO}.
+
+lemma MLKEMHL_LEAKBINDKCT_ROM &m : 
+  Pr[LEAK_BIND_ROM(RO, ML_KEM_HL_ROM, A).main(K_Binds_CT) @ &m : res] <= witness.
+proof. admit. qed.
+
+end section ML_KEM_HL_LEAKBINDKCT_ROM.
+
+
+
+
+
+(* CR of H implies LEAK-BIND-K-PK in the ROM (with G modeled as ROM)
+(** Reduction adversary reducing CR of H to LEAK-BIND-K-PK of ML_KEM_HL_ROM **)
+print RO. print LEAK_BIND_ROM. print KEMs.LEAK_BIND.
+module R_CR_LEAKBINDKPK (A : Adv_LEAKBIND_ROM) : Adv_CR = {
+  proc find() : pk_t * pk_t = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var pk0', pk1' : pk_t_pke;
+    
+    RO.init();
+    
+    (pk0, sk0) <@ ML_KEM_HL_ROM(RO).keygen();
+    (pk1, sk1) <@ ML_KEM_HL_ROM(RO).keygen();
+    
+    
+    
+    return witness;  
+  }  
+}.
+*)
