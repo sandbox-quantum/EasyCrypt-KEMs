@@ -414,8 +414,8 @@ module Counting_RO (RO : RandomOraclei) : RandomOraclei = {
 }.
 
 (* 
-  Proof sketch for LEAK-BIND-K,CT-PK in ROM (G modeled as ROM).
-  Assume adversary that breaks LEAK-BIND-K,CT-PK for ML-KEM.
+  Proof sketch for HON-BIND-K,CT-PK in ROM (G modeled as ROM).
+  Assume adversary that breaks HON-BIND-K,CT-PK for ML-KEM.
   That means that we are dealing with two independently generated key pairs (pk0, sk0) and (pk1, sk1)
   (due to pk being binding target), both of which are passed to the adversary, 
   upon which it returns a single ciphertext c (actually, it returns two ciphertexts c0 = c1
@@ -435,11 +435,11 @@ module Counting_RO (RO : RandomOraclei) : RandomOraclei = {
     1. c <> enc r0' pk_pke0 m0' /\ c <> enc r1' pk_pke1 m1'
        In this case, adversary succeeds iff J z0 c = J z1 c. 
        Replacing J z0 and J z1 by indpendent random functions (as explained above) means that 
-       the probability of this equality holding is bounded by 1 / |seed_t|.
+       the probability of this equality holding is bounded by 1 / |key_t|.
     2. c <> enc r0' pk_pke0 m0' /\ c = enc r1' pk_pke1 m1' 
        In this case, adversary succeeds iff J z0 c = k1'
        Replacing J z0 by a random function (as explained above) means that 
-       the probability of this equality holding is bounded by 1 / |seed_t|.
+       the probability of this equality holding is bounded by 1 / |key_t|.
     3. c = enc r0' pk_pke0 m0' /\ c <> enc r1' pk_pke1 m1'
        This case is symmetrical to case 2.
     4. c = enc r0' pk_pke0 m0' /\ c = enc r1' pk_pke1 m1'
@@ -456,7 +456,7 @@ module Counting_RO (RO : RandomOraclei) : RandomOraclei = {
        Not sure if this injectivity is a property of the PKE underlying ML-KEM though.)
        Now, since the ciphertexts are equal and the key pairs are independently generated,
        we can do two things to get to the fact that the inputs to G are different:
-       m0' <> m1' because otherwise we get a SCFR-LEAK break for the underlying PKE 
+       m0' <> m1' because otherwise we get a SCFR-CCA break for the underlying PKE 
        (independently generated key pairs and single ciphertext decrypt to the same plaintext)
        OR h0' <> h1' because (excluding the case that the public keys are equal by a purely
        statistical argument stating that generating the same public keys is not likely) otherwise
@@ -470,15 +470,35 @@ module Counting_RO (RO : RandomOraclei) : RandomOraclei = {
        4.2. The adversary queried both (m0', h0') and (m1', h1') in its execution, and they collided
             in the first part of the output. This is a birthday bound.
 
-This feels very crude and suboptimal...
+  For LEAK-BIND-K,CT-PK, we actually need to model J as a random oracle as well.
+  This because we leak the secret keys, and hence the seeds used to index J (i.e., z0 and z1).
+  As a reduction playing in the PRF game for J, we do not actually have access to these seeds 
+  (relevant to our game instance). Consequently, we cannot actually simulate the
+  LEAK-BIND-K,CT-PK game for the given adversary in a way that allows us to use the values
+  produced by this adversary to our advantage in our own (PRF) game. So, have to 
+  model J as a random oracle here as well. Then, to prove the LEAK-BIND version, 
+  we can adapt the above HON-BIND proof by essentially removing the PRF terms and 
+  letting all statistical terms concerning J be dependent on the number of random oracle
+  queries (e.g., 1 / |key_t| becomes something like q_J / |key_t|). None of these replacements
+  induce a collision (birthday) bound. Particularly, assuming z0 <> z1 
+  (which is bounded by 1 / |seed_t|), we have that J z0 c0 is independent from J z1 c1, 
+  for all c0 and c1 (even if c0 = c1).
+  
+
+All of this feels a bit crude and suboptimal. Are there any cases we can exclude (without actually
+requiring a reduction or causing an additional term in the bound)?
 *)
+
 section ML_KEM_HL_LEAKBINDKCTPK_ROM.
 
 declare module A <: Adv_LEAKBIND_ROM {-RO}.
 
 lemma MLKEMHL_LEAKBINDKCTPK_ROM &m : 
   Pr[LEAK_BIND_ROM(RO, ML_KEM_HL_ROM, A).main(KCT_Binds_PK) @ &m : res] <= witness.
-proof. admit. qed.
+proof.
+admit. 
+qed.
+
 
 end section ML_KEM_HL_LEAKBINDKCTPK_ROM.
 
@@ -564,5 +584,25 @@ module R_CR_LEAKBINDKPK (A : Adv_LEAKBIND_ROM) : Adv_CR = {
     
     return witness;  
   }  
+}.
+*)
+
+(* Reduction adversary reducing PRF for J to LEAK-BIND-K,CT-PK 
+module (R_PRF_LEAKBIND (G : RandomOraclei) (A : Adv_LEAKBIND_ROM) : Adv_PRF) (O : Oracle_PRF) = {
+  proc distinguish() : bool = { 
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    var c0, c1 : ctxt_t;
+    
+    (* Simulate LEAK-BIND-K,CT-PK game in ROM *)
+    G.init();
+    
+    (pk0, sk0) <@ ML_KEM_HL_ROM(G).keygen();
+    (pk1, sk1) <@ ML_KEM_HL_ROM(G).keygen();
+    
+    (c0, c1) <@ A(G).find(KCT_Binds_PK, pk0, sk0, pk1, sk1);
+    
+    return witness;
+  }
 }.
 *)
