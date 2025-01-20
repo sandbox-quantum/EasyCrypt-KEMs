@@ -315,16 +315,16 @@ module (ML_KEM_HL_ROM_Trim : Scheme_ROM) (G : RandomOracle) = {
     var pk_pke : pk_t_pke;
     var sk_pke : sk_t_pke;
     var h, z, r' : rand_t;
-    var m' : ptxt_t;
+    var p' : ptxt_t;
     var k' : key_t;
     
     (sk_pke, pk_pke, h, z) <- sk;
     
-    m' <- dec sk_pke c;
+    p' <- dec sk_pke c;
     
-    (k', r') <@ G.get((m', h));
+    (k', r') <@ G.get((p', h));
     
-    return Some (if c <> enc r' pk_pke m' then J z c else k');
+    return Some (if c <> enc r' pk_pke p' then J z c else k');
   }
 }.
 
@@ -370,7 +370,7 @@ end section.
   and ML_KEM_HL_ROM_Trim, for any instantiation of the oracle
 **) 
 equiv Eqv_ML_KEM_HL_ROM_Trim_Encaps (G <: RandomOracle) :
-  ML_KEM_HL_ROM(G).encaps ~ ML_KEM_HL_ROM_Trim(G).encaps : ={glob G, arg} ==> ={res}.
+  ML_KEM_HL_ROM(G).encaps ~ ML_KEM_HL_ROM_Trim(G).encaps : ={glob G, arg} ==> ={glob G, res}.
 proof.
 proc.
 inline K_PKE_HL.enc.
@@ -382,7 +382,7 @@ qed.
   and ML_KEM_HL_ROM_Trim, for any instantiation of the oracle
 **) 
 equiv Eqv_ML_KEM_HL_ROM_Trim_Decaps (G <: RandomOracle) :
-  ML_KEM_HL_ROM(G).decaps ~ ML_KEM_HL_ROM_Trim(G).decaps : ={glob G, arg} ==> ={res}.
+  ML_KEM_HL_ROM(G).decaps ~ ML_KEM_HL_ROM_Trim(G).decaps : ={glob G, arg} ==> ={glob G, res}.
 proof.
 proc.
 inline K_PKE_HL.enc K_PKE_HL.dec.
@@ -498,7 +498,7 @@ module (O_CCA1_Default_ROM : Oracles_CCA1i_ROM) (RO : RandomOracle) (S : Scheme)
 
 (** Duplicate of default CCA1 oracle in the ROM **)
 module (O_CCA1_DDefault_ROM : Oracles_CCA1i_ROM) (RO : RandomOracle) (S : Scheme) = { 
-  include var O_CCA1_Default(S)
+  include var O_CCA1_DDefault(S)
 }.
 
 
@@ -509,8 +509,8 @@ module (O_CCA1_DDefault_ROM : Oracles_CCA1i_ROM) (RO : RandomOracle) (S : Scheme
 **)
 module (R_PRF0_HONBINDKCTPK (G : RandomOraclei) (A : Adv_HONBIND_ROM) : Adv_PRF) (O : Oracle_PRF) = { 
   module O_CCA1_0_R = {
-    include O_CCA1_Default_ROM(G, ML_KEM_HL_ROM(G)) [-decaps]
-    import var O_CCA1_Default(ML_KEM_HL_ROM(G))
+    include O_CCA1_Default_ROM(G, ML_KEM_HL_ROM_Trim(G)) [-decaps]
+    import var O_CCA1_Default(ML_KEM_HL_ROM_Trim(G))
     
     proc decaps(c : ctxt_t) : key_t option = {
       var sk_pke : sk_t_pke;
@@ -545,15 +545,15 @@ module (R_PRF0_HONBINDKCTPK (G : RandomOraclei) (A : Adv_HONBIND_ROM) : Adv_PRF)
     pk0 <- pk_pke;
     sk0 <- (sk_pke, pk0, H pk0, witness);
     
-    (pk1, sk1) <@ ML_KEM_HL_ROM(G).keygen();
+    (pk1, sk1) <@ ML_KEM_HL_ROM_Trim(G).keygen();
     
     O_CCA1_0_R.init(sk0);
-    O_CCA1_DDefault(ML_KEM_HL_ROM(G)).init(sk1);
+    O_CCA1_DDefault(ML_KEM_HL_ROM_Trim(G)).init(sk1);
     
-    (c0, c1) <@ A(G, O_CCA1_0_R, O_CCA1_DDefault(ML_KEM_HL_ROM(G))).find(KCT_Binds_PK, pk0, pk1);
+    (c0, c1) <@ A(G, O_CCA1_0_R, O_CCA1_DDefault(ML_KEM_HL_ROM_Trim(G))).find(KCT_Binds_PK, pk0, pk1);
       
     k0 <@ O_CCA1_0_R.decaps(c0);
-    k1 <@ O_CCA1_DDefault(ML_KEM_HL_ROM(G)).decaps(c1);
+    k1 <@ O_CCA1_DDefault(ML_KEM_HL_ROM_Trim(G)).decaps(c1);
     
     no_fail <- k0 <> None /\ k1 <> None;
     
@@ -568,12 +568,12 @@ module (R_PRF0_HONBINDKCTPK (G : RandomOraclei) (A : Adv_HONBIND_ROM) : Adv_PRF)
 **)
 module (R_PRF1_HONBINDKCTPK (G : RandomOraclei) (A : Adv_HONBIND_ROM) : Adv_PRF) (O : Oracle_PRF) = { 
   module O_CCA1_0_R = {
-    import var O_CCA1_Default(ML_KEM_HL_ROM(G))
+    import var O_CCA1_Default(ML_KEM_HL_ROM_Trim(G))
     
     var m : (ctxt_t, key_t) fmap
     
     proc init(sk_init : sk_t) = {
-      O_CCA1_Default(ML_KEM_HL_ROM(G)).init(sk);
+      O_CCA1_Default(ML_KEM_HL_ROM_Trim(G)).init(sk);
       m <- empty;
     }
     
@@ -589,7 +589,7 @@ module (R_PRF1_HONBINDKCTPK (G : RandomOraclei) (A : Adv_HONBIND_ROM) : Adv_PRF)
       p' <- dec sk_pke c;
 
       (k', r') <@ G.get((p', h));
-      if (c \notin O_PRF_Default.m) {
+      if (c \notin m) {
         k_ <$ dkey;
         m.[c] <- k_;
       }
@@ -600,8 +600,8 @@ module (R_PRF1_HONBINDKCTPK (G : RandomOraclei) (A : Adv_HONBIND_ROM) : Adv_PRF)
   }
   
   module O_CCA1_1_R = {
-    include O_CCA1_DDefault_ROM(G, ML_KEM_HL_ROM(G)) [-decaps]
-    import var O_CCA1_DDefault(ML_KEM_HL_ROM(G))
+    include O_CCA1_DDefault_ROM(G, ML_KEM_HL_ROM_Trim(G)) [-decaps]
+    import var O_CCA1_DDefault(ML_KEM_HL_ROM_Trim(G))
     
     proc decaps(c : ctxt_t) : key_t option = {
       var sk_pke : sk_t_pke;
@@ -657,20 +657,189 @@ module (R_PRF1_HONBINDKCTPK (G : RandomOraclei) (A : Adv_HONBIND_ROM) : Adv_PRF)
 
 section ML_KEM_HL_HONBINDKCTPK_ROM.
 
-declare module A <: Adv_HONBIND_ROM {-RO}.
+declare module A <: Adv_HONBIND_ROM {-RO, -O_CCA1_Default, -O_CCA1_DDefault, -R_PRF1_HONBINDKCTPK}.
+
+
+(* *)
+local module HON_BINDKCTPK_ROM_MLKEM_V = {
+  var pk_pke0, pk_pke1 : pk_t_pke
+  var sk_pke0, sk_pke1 : sk_t_pke
+  var c0, c1 : ctxt_t
+  var h0, h1, z0, z1, r0', r1' : rand_t
+  var p0', p1' : ptxt_t 
+  var k0', k1' : key_t
+  var k0, k1 : key_t option
+  
+  proc main(bc : bindconf) : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    
+    RO.init();
+    
+    z0 <$ drand;
+    (pk_pke0, sk_pke0) <$ dkg;
+    pk0 <- pk_pke0;
+    sk0 <- (sk_pke0, pk0, H pk0, z0);
+    
+    z1 <$ drand;
+    (pk_pke1, sk_pke1) <$ dkg;
+    pk1 <- pk_pke1;
+    sk1 <- (sk_pke1, pk1, H pk1, z1);
+    
+    O_CCA1_Default(ML_KEM_HL_ROM_Trim(RO)).init(sk0);
+    O_CCA1_DDefault(ML_KEM_HL_ROM_Trim(RO)).init(sk1);
+    
+    (c0, c1) <@ A(RO, O_CCA1_Default(ML_KEM_HL_ROM_Trim(RO)), O_CCA1_DDefault(ML_KEM_HL_ROM_Trim(RO))).find(KCT_Binds_PK, pk0, pk1);
+    
+    p0' <- dec sk_pke0 c0;
+    (k0', r0') <@ RO.get((p0', H pk0));
+    k0 <- Some (if c0 <> enc r0' pk_pke0 p0' then J z0 c0 else k0');
+    
+    p1' <- dec sk_pke1 c1;
+    (k1', r1') <@ RO.get((p1', H pk1));
+    k1 <- Some (if c1 <> enc r1' pk_pke1 p1' then J z1 c1 else k1');
+          
+    return is_bindbreak KCT_Binds_PK (oget k0) (oget k1) pk0 pk1 c0 c1;
+  }
+}.
+
+local lemma EqPr_HONBINDROM_V_KCTPK &m :
+  Pr[HON_BIND_ROM(RO, ML_KEM_HL_ROM, O_CCA1_Default_ROM, O_CCA1_DDefault_ROM, A).main(KCT_Binds_PK) @ &m : res]
+  =
+  Pr[HON_BINDKCTPK_ROM_MLKEM_V.main(KCT_Binds_PK) @ &m : res].
+proof.
+have ->:
+  Pr[HON_BIND_ROM(RO, ML_KEM_HL_ROM, O_CCA1_Default_ROM, O_CCA1_DDefault_ROM, A).main(KCT_Binds_PK) @ &m : res]
+  =
+  Pr[HON_BIND_ROM(RO, ML_KEM_HL_ROM_Trim, O_CCA1_Default_ROM, O_CCA1_DDefault_ROM, A).main(KCT_Binds_PK) @ &m : res].
++ byequiv => //.
+  proc.
+  inline{1} 2; inline{2} 2.
+  rewrite equiv[{1} 3 (Eqv_ML_KEM_HL_ROM_Trim_Keygen RO)].
+  seq 3 3 : (#pre /\ ={RO.m, pk0, sk0, bc0} /\ bc0{1} = bc{1}).
+  + by inline *; auto.
+  rcondf{1} ^if; 1: by auto. 
+  rcondt{1} ^if; 1: by auto.
+  rcondf{2} ^if; 1: by auto. 
+  rcondt{2} ^if; 1: by auto. 
+  rewrite equiv[{1} 1 (Eqv_ML_KEM_HL_ROM_Trim_Keygen RO)].
+  wp; call (: ={RO.m}); 1: by inline *; auto.
+  call (: ={RO.m}); 1: by inline *; auto.
+  call (: ={RO.m, glob O_CCA1_Default, glob O_CCA1_DDefault}). 
+  + proc.
+    rewrite equiv[{1} 1 (Eqv_ML_KEM_HL_ROM_Trim_Decaps RO)].
+    by sim.
+  + proc.
+    rewrite equiv[{1} 1 (Eqv_ML_KEM_HL_ROM_Trim_Decaps RO)].
+    by sim.
+  + by sim. 
+  inline{1} 3; inline{1} 2; inline{2} 3; inline{2} 2. 
+  by wp; call (: true); 1: auto. 
+byequiv => //.
+proc.
+seq 1 1 : (#pre /\ ={RO.m}); 1: by inline *; wp.
+inline{1} 1; inline{1} 2.
+rcondf{1} ^if; 1: by auto. 
+rcondt{1} ^if; 1: by auto.
+inline{1} ML_KEM_HL_ROM_Trim(RO).decaps.
+wp; call (: ={RO.m}); 1: by auto. 
+wp; call (: ={RO.m}); 1: by auto. 
+wp; call (: ={RO.m, glob O_CCA1_Default, glob O_CCA1_DDefault}); 1..3: by sim.
+by inline *; auto.
+qed.
+
+
+local module HON_BINDKCTPK_ROM_MLKEM_V_PRF0 = {
+  var pk_pke0, pk_pke1 : pk_t_pke
+  var sk_pke0, sk_pke1 : sk_t_pke
+  var c0, c1 : ctxt_t
+  var h0, h1, z0, z1, r0', r1' : rand_t
+  var p0', p1' : ptxt_t 
+  var k0', k1' : key_t
+  var k0, k1 : key_t option
+  var m0 : (ctxt_t, key_t) fmap
+    
+  module O_CCA1_0 = {
+    proc decaps(c : ctxt_t) : key_t option = {
+      var r' : rand_t;
+      var p' : ptxt_t;
+      var k', k_ : key_t;
+    
+      p' <- dec sk_pke0 c0;
+
+      (k', r') <@ RO.get((p', H pk_pke0));
+      if (c0 \notin m0) {
+        k_ <$ dkey;
+        m0.[c] <- k_;
+      }
+      k_ <- oget m0.[c];
+      
+      return Some (if c0 <> enc r' pk_pke0 p' then k_ else k');
+    }
+  }
+  
+  proc main(bc : bindconf) : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    
+    RO.init();
+    
+    z0 <$ drand;
+    (pk_pke0, sk_pke0) <$ dkg;
+    pk0 <- pk_pke0;
+    sk0 <- (sk_pke0, pk0, H pk0, z0);
+    
+    z1 <$ drand;
+    (pk_pke1, sk_pke1) <$ dkg;
+    pk1 <- pk_pke1;
+    sk1 <- (sk_pke1, pk1, H pk1, z1);
+    
+    m0 <- empty;
+    O_CCA1_DDefault(ML_KEM_HL_ROM_Trim(RO)).init(sk1);
+    
+    (c0, c1) <@ A(RO, O_CCA1_0, O_CCA1_DDefault(ML_KEM_HL_ROM_Trim(RO))).find(KCT_Binds_PK, pk0, pk1);
+    
+    O_CCA1_0.decaps(c0);
+    
+    p1' <- dec sk_pke1 c1;
+    (k1', r1') <@ RO.get((p1', H pk1));
+    k1 <- Some (if c1 <> enc r1' pk_pke1 p1' then J z1 c1 else k1');
+          
+    return is_bindbreak KCT_Binds_PK (oget k0) (oget k1) pk0 pk1 c0 c1;
+  }
+}.
 
 lemma MLKEMHL_HONBINDKCTPK_ROM &m : 
   Pr[HON_BIND_ROM(RO, ML_KEM_HL_ROM, O_CCA1_Default_ROM, O_CCA1_DDefault_ROM, A).main(KCT_Binds_PK) @ &m : res] 
   <=
-  `| Pr[PRF(R_PRF0_HONBINDKCTPK(RO, A), O_PRF_Default).main(false) @ &m : res] - Pr[PRF(R_PRF0_HONBINDKCTPK(RO, A), O_PRF_Default).main(true) @ &m : res] |
+  `| Pr[PRF(R_PRF0_HONBINDKCTPK(RO, A), O_PRF_Default).main(false) @ &m : res] 
+     - Pr[PRF(R_PRF0_HONBINDKCTPK(RO, A), O_PRF_Default).main(true) @ &m : res] |
   +
-    `| Pr[PRF(R_PRF1_HONBINDKCTPK(RO, A), O_PRF_Default).main(false) @ &m : res] - Pr[PRF(R_PRF1_HONBINDKCTPK(RO, A), O_PRF_Default).main(true) @ &m : res] |
+  `| Pr[PRF(R_PRF1_HONBINDKCTPK(RO, A), O_PRF_Default).main(false) @ &m : res] 
+     - Pr[PRF(R_PRF1_HONBINDKCTPK(RO, A), O_PRF_Default).main(true) @ &m : res] |
   +
   mu1 witness drand
   +
   witness.
 proof.
-admit. 
+rewrite EqPr_HONBINDROM_V_KCTPK.
+have ->:
+  Pr[HON_BINDKCTPK_ROM_MLKEM_V.main(KCT_Binds_PK) @ &m : res]
+  =
+  `| Pr[HON_BINDKCTPK_ROM_MLKEM_V.main(KCT_Binds_PK) @ &m : res]
+     -
+     Pr[HON_BINDKCTPK_ROM_MLKEM_V_PRF0.main(KCT_Binds_PK) @ &m : res] 
+     + 
+     Pr[HON_BINDKCTPK_ROM_MLKEM_V_PRF0.main(KCT_Binds_PK) @ &m : res] |.
++ by smt(StdOrder.RealOrder.ger0_norm ge0_mu). print StdOrder.RealOrder.ler_norm_add.
+rewrite (StdOrder.RealOrder.ler_trans _ _ _ 
+            (StdOrder.RealOrder.ler_norm_add _ Pr[HON_BINDKCTPK_ROM_MLKEM_V_PRF0.main(KCT_Binds_PK) @ &m : res])).
+rewrite -2!RField.addrA StdOrder.RealOrder.ler_add.
++ rewrite StdOrder.RealOrder.ler_eqVlt; left. 
+  do 2! congr; 2: congr.
+  + by admit. 
+  by admit.
+by admit.
 qed.
 
 
