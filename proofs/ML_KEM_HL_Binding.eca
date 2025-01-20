@@ -7,7 +7,7 @@
   and, in turn, implementation.
 ^*)
 (* Require/Import *)
-require import AllCore Distr PROM.
+require import AllCore Distr PROM FMap.
 require (*--*) DMap.
 require (*--*) HashFunctions KeyedHashFunctions KeyEncapsulationMechanismsROM.
 
@@ -209,8 +209,8 @@ module K_PKE_HL = {
     return kg d;
   }
   
-  proc enc(pk : pk_t_pke, m : ptxt_t, r : rand_t) : ctxt_t_pke = {
-    return enc r pk m;
+  proc enc(pk : pk_t_pke, p : ptxt_t, r : rand_t) : ctxt_t_pke = {
+    return enc r pk p;
   }
   
   proc dec(sk : sk_t_pke, c : ctxt_t_pke) : ptxt_t = {
@@ -244,14 +244,14 @@ module (ML_KEM_HL_ROM : Scheme_ROM) (G : RandomOracle) = {
   }
   
   proc encaps(pk : pk_t) : key_t * ctxt_t = {
-    var m, r : rand_t; 
+    var p, r : rand_t; 
     var k : key_t;
     var c : ctxt_t_pke;
     
-    m <$ drand;
-    (k, r) <@ G.get((m, H pk));
+    p <$ drand;
+    (k, r) <@ G.get((p, H pk));
     
-    c <@ K_PKE_HL.enc(pk, m, r);
+    c <@ K_PKE_HL.enc(pk, p, r);
         
     return (k, c);
   }
@@ -260,18 +260,18 @@ module (ML_KEM_HL_ROM : Scheme_ROM) (G : RandomOracle) = {
     var pk_pke : pk_t_pke;
     var sk_pke : sk_t_pke;
     var h, z, r' : rand_t;
-    var m' : ptxt_t;
+    var p' : ptxt_t;
     var k', k_ : key_t;
     var c' : ctxt_t;
     
     (sk_pke, pk_pke, h, z) <- sk;
     
-    m' <@ K_PKE_HL.dec(sk_pke, c);
+    p' <@ K_PKE_HL.dec(sk_pke, c);
     
-    (k', r') <@ G.get((m', h));
+    (k', r') <@ G.get((p', h));
     k_ <- J z c;
     
-    c' <@ K_PKE_HL.enc(pk_pke, m', r');
+    c' <@ K_PKE_HL.enc(pk_pke, p', r');
     
     if (c <> c') {
       k' <- k_;
@@ -302,13 +302,13 @@ module (ML_KEM_HL_ROM_Trim : Scheme_ROM) (G : RandomOracle) = {
   }
   
   proc encaps(pk : pk_t) : key_t * ctxt_t = {
-    var m, r : rand_t; 
+    var p, r : rand_t; 
     var k : key_t;
     
-    m <$ drand;
-    (k, r) <@ G.get((m, H pk));
+    p <$ drand;
+    (k, r) <@ G.get((p, H pk));
      
-    return (k, enc r pk m);
+    return (k, enc r pk p);
   }
   
   proc decaps(sk : sk_t, c : ctxt_t) : key_t option = {
@@ -482,12 +482,200 @@ module Counting_RO (RO : RandomOraclei) : RandomOraclei = {
   queries (e.g., 1 / |key_t| becomes something like q_J / |key_t|). None of these replacements
   induce a collision (birthday) bound. Particularly, assuming z0 <> z1 
   (which is bounded by 1 / |seed_t|), we have that J z0 c0 is independent from J z1 c1, 
-  for all c0 and c1 (even if c0 = c1).
+  for all c0 and c1 (even if c0 = c1). Also, we would reduce from SCRF-LEAK instead of
+  SCFR-CCA when reasoning about
   
 
 All of this feels a bit crude and suboptimal. Are there any cases we can exclude (without actually
 requiring a reduction or causing an additional term in the bound)?
 *)
+
+(* Oracles *)
+(** Default CCA1 oracle in the ROM **)
+module (O_CCA1_Default_ROM : Oracles_CCA1i_ROM) (RO : RandomOracle) (S : Scheme) = { 
+  include var O_CCA1_Default(S)
+}.
+
+(** Duplicate of default CCA1 oracle in the ROM **)
+module (O_CCA1_DDefault_ROM : Oracles_CCA1i_ROM) (RO : RandomOracle) (S : Scheme) = { 
+  include var O_CCA1_Default(S)
+}.
+
+
+(* Reduction adversaries *)
+(** 
+  Reduction adversary reducing PRF (for J) to HON-BIND-K,CT-PK (for ML-KEM-HL-ROM):
+  Instance 0 (i.e., replacing J z0 with a random function, and leaving J z1 as is). 
+**)
+module (R_PRF0_HONBINDKCTPK (G : RandomOraclei) (A : Adv_HONBIND_ROM) : Adv_PRF) (O : Oracle_PRF) = { 
+  module O_CCA1_0_R = {
+    include O_CCA1_Default_ROM(G, ML_KEM_HL_ROM(G)) [-decaps]
+    import var O_CCA1_Default(ML_KEM_HL_ROM(G))
+    
+    proc decaps(c : ctxt_t) : key_t option = {
+      var sk_pke : sk_t_pke;
+      var pk_pke : pk_t_pke;
+      var h, w, r' : rand_t;
+      var p' : ptxt_t;
+      var k', k_ : key_t;
+      
+      (sk_pke, pk_pke, h, w) <- sk;
+    
+      p' <- dec sk_pke c;
+
+      (k', r') <@ G.get((p', h));
+      k_ <@ O.query(c);
+      
+      return Some (if c <> enc r' pk_pke p' then k_ else k');
+    }
+  }
+  
+  proc distinguish() : bool = { 
+    var pk_pke : pk_t_pke; 
+    var sk_pke : sk_t_pke;
+    var sk0, sk1 : sk_t;
+    var pk0, pk1 : pk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+    var no_fail : bool;
+    
+    G.init();
+    
+    (pk_pke, sk_pke) <$ dkg;
+    pk0 <- pk_pke;
+    sk0 <- (sk_pke, pk0, H pk0, witness);
+    
+    (pk1, sk1) <@ ML_KEM_HL_ROM(G).keygen();
+    
+    O_CCA1_0_R.init(sk0);
+    O_CCA1_DDefault(ML_KEM_HL_ROM(G)).init(sk1);
+    
+    (c0, c1) <@ A(G, O_CCA1_0_R, O_CCA1_DDefault(ML_KEM_HL_ROM(G))).find(KCT_Binds_PK, pk0, pk1);
+      
+    k0 <@ O_CCA1_0_R.decaps(c0);
+    k1 <@ O_CCA1_DDefault(ML_KEM_HL_ROM(G)).decaps(c1);
+    
+    no_fail <- k0 <> None /\ k1 <> None;
+    
+    return no_fail /\ is_bindbreak KCT_Binds_PK (oget k0) (oget k1) pk0 pk1 c0 c1;
+  }
+}.
+
+(** 
+  Reduction adversary reducing PRF (for J) to HON-BIND-K,CT-PK (for ML-KEM-HL-ROM):
+  Instance 1 (i.e., J z0 is already replaced by a random function, and replacing J z1 by
+  a random function now as well) 
+**)
+module (R_PRF1_HONBINDKCTPK (G : RandomOraclei) (A : Adv_HONBIND_ROM) : Adv_PRF) (O : Oracle_PRF) = { 
+  module O_CCA1_0_R = {
+    import var O_CCA1_Default(ML_KEM_HL_ROM(G))
+    
+    var m : (ctxt_t, key_t) fmap
+    
+    proc init(sk_init : sk_t) = {
+      O_CCA1_Default(ML_KEM_HL_ROM(G)).init(sk);
+      m <- empty;
+    }
+    
+    proc decaps(c : ctxt_t) : key_t option = {
+      var sk_pke : sk_t_pke;
+      var pk_pke : pk_t_pke;
+      var h, w, r' : rand_t;
+      var p' : ptxt_t;
+      var k', k_ : key_t;
+      
+      (sk_pke, pk_pke, h, w) <- sk;
+    
+      p' <- dec sk_pke c;
+
+      (k', r') <@ G.get((p', h));
+      if (c \notin O_PRF_Default.m) {
+        k_ <$ dkey;
+        m.[c] <- k_;
+      }
+      k_ <- oget m.[c];
+      
+      return Some (if c <> enc r' pk_pke p' then k_ else k');
+    }
+  }
+  
+  module O_CCA1_1_R = {
+    include O_CCA1_DDefault_ROM(G, ML_KEM_HL_ROM(G)) [-decaps]
+    import var O_CCA1_DDefault(ML_KEM_HL_ROM(G))
+    
+    proc decaps(c : ctxt_t) : key_t option = {
+      var sk_pke : sk_t_pke;
+      var pk_pke : pk_t_pke;
+      var h, w, r' : rand_t;
+      var p' : ptxt_t;
+      var k', k_ : key_t;
+      
+      (sk_pke, pk_pke, h, w) <- sk;
+    
+      p' <- dec sk_pke c;
+
+      (k', r') <@ G.get((p', h));
+      k_ <@ O.query(c);
+      
+      return Some (if c <> enc r' pk_pke p' then k_ else k');
+    }
+  }
+  
+  proc distinguish() : bool = { 
+    var pk_pke0, pk_pke1 : pk_t_pke; 
+    var sk_pke0, sk_pke1 : sk_t_pke;
+    var sk0, sk1 : sk_t;
+    var pk0, pk1 : pk_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t option;
+    var no_fail : bool;
+    
+    G.init();
+    
+    (pk_pke0, sk_pke0) <$ dkg;
+    pk0 <- pk_pke0;
+    sk0 <- (sk_pke0, pk0, H pk0, witness);
+    
+    (pk_pke1, sk_pke1) <$ dkg;
+    pk1 <- pk_pke1;
+    sk1 <- (sk_pke1, pk1, H pk1, witness);
+    
+    O_CCA1_0_R.init(sk0);
+    O_CCA1_1_R.init(sk1);
+    
+    (c0, c1) <@ A(G, O_CCA1_0_R, O_CCA1_1_R).find(KCT_Binds_PK, pk0, pk1);
+      
+    k0 <@ O_CCA1_0_R.decaps(c0);
+    k1 <@ O_CCA1_1_R.decaps(c1);
+    
+    no_fail <- k0 <> None /\ k1 <> None;
+    
+    return no_fail /\ is_bindbreak KCT_Binds_PK (oget k0) (oget k1) pk0 pk1 c0 c1;
+  }
+}.
+
+
+section ML_KEM_HL_HONBINDKCTPK_ROM.
+
+declare module A <: Adv_HONBIND_ROM {-RO}.
+
+lemma MLKEMHL_HONBINDKCTPK_ROM &m : 
+  Pr[HON_BIND_ROM(RO, ML_KEM_HL_ROM, O_CCA1_Default_ROM, O_CCA1_DDefault_ROM, A).main(KCT_Binds_PK) @ &m : res] 
+  <=
+  `| Pr[PRF(R_PRF0_HONBINDKCTPK(RO, A), O_PRF_Default).main(false) @ &m : res] - Pr[PRF(R_PRF0_HONBINDKCTPK(RO, A), O_PRF_Default).main(true) @ &m : res] |
+  +
+    `| Pr[PRF(R_PRF1_HONBINDKCTPK(RO, A), O_PRF_Default).main(false) @ &m : res] - Pr[PRF(R_PRF1_HONBINDKCTPK(RO, A), O_PRF_Default).main(true) @ &m : res] |
+  +
+  mu1 witness drand
+  +
+  witness.
+proof.
+admit. 
+qed.
+
+
+end section ML_KEM_HL_HONBINDKCTPK_ROM.
+
 
 section ML_KEM_HL_LEAKBINDKCTPK_ROM.
 
@@ -564,6 +752,8 @@ end section ML_KEM_HL_LEAKBINDKCT_ROM.
 
 
 
+
+(*--- DUMP ---*)
 
 
 (* CR of H implies LEAK-BIND-K-PK in the ROM (with G modeled as ROM)
