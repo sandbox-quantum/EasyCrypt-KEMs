@@ -435,11 +435,24 @@ module Counting_RO (RO : RandomOraclei) : RandomOraclei = {
     1. c <> enc r0' pk_pke0 m0' /\ c <> enc r1' pk_pke1 m1'
        In this case, adversary succeeds iff J z0 c = J z1 c. 
        Replacing J z0 and J z1 by indpendent random functions (as explained above) means that 
-       the probability of this equality holding is bounded by 1 / |key_t|.
+       the probability of this equality essentially boils down to either (1) the probability of 
+       the adversary having queried its decaps oracles on a ciphertext that happened to result
+       in J z0 c = J z1 c (this probability is bouded by 1 / |key_t|, because the c have are equal; otherwise
+       it would have been q_J / | key_t |), or (2) the proability of 
+       (at least) one of J z0 c and J z1 c not being defined (yet) when the game decapsulates, where the equality
+       holds with at most 1 / | key_t | (times 2, because this goes for J z0 c, J z1 c, or both
+       not being defined upon decapsulation).
     2. c <> enc r0' pk_pke0 m0' /\ c = enc r1' pk_pke1 m1' 
        In this case, adversary succeeds iff J z0 c = k1'
        Replacing J z0 by a random function (as explained above) means that 
-       the probability of this equality holding is bounded by 1 / |key_t|.
+       the probability of this equality holding boils down to either (1) the probability
+       of the adversary not having queried (at least) one of the decaps oracle and random
+       oracle such that J z0 c and k1' are sampled upon decapsulation by the game, where
+       the equality holds with at most 1 / |key_t|  (times 2), or (2) the probability of 
+       both J z0 c and the relevant random oracle input already being queried by the 
+       adversary and happen to both equal each other. Since the random oracle input upon 
+       decapsulation (to obtain k1') is deterministically derived from c, this probablility
+       is also at most 1 / | key_t |. 
     3. c = enc r0' pk_pke0 m0' /\ c <> enc r1' pk_pke1 m1'
        This case is symmetrical to case 2.
     4. c = enc r0' pk_pke0 m0' /\ c = enc r1' pk_pke1 m1'
@@ -476,15 +489,8 @@ module Counting_RO (RO : RandomOraclei) : RandomOraclei = {
   (relevant to our game instance). Consequently, we cannot actually simulate the
   LEAK-BIND-K,CT-PK game for the given adversary in a way that allows us to use the values
   produced by this adversary to our advantage in our own (PRF) game. So, have to 
-  model J as a random oracle here as well. Then, to prove the LEAK-BIND version, 
-  we can adapt the above HON-BIND proof by essentially removing the PRF terms and 
-  letting all statistical terms concerning J be dependent on the number of random oracle
-  queries (e.g., 1 / |key_t| becomes something like q_J / |key_t|). None of these replacements
-  induce a collision (birthday) bound. Particularly, assuming z0 <> z1 
-  (which is bounded by 1 / |seed_t|), we have that J z0 c0 is independent from J z1 c1, 
-  for all c0 and c1 (even if c0 = c1). Also, we would reduce from SCRF-LEAK instead of
-  SCFR-CCA when reasoning about
-  
+  model J as a random oracle here as well. Also, we would reduce from SCRF-LEAK instead of
+  SCFR-CCA when reasoning about.
 
 All of this feels a bit crude and suboptimal. Are there any cases we can exclude (without actually
 requiring a reduction or causing an additional term in the bound)?
@@ -803,6 +809,60 @@ local module HON_BINDKCTPK_ROM_MLKEM_V_PRF0 = {
   }
 }.
 
+local module HON_BINDKCTPK_ROM_MLKEM_V_PRF1 = {
+  import var HON_BINDKCTPK_ROM_MLKEM_V_PRF0
+  var m1 : (ctxt_t, key_t) fmap
+  
+  module O_CCA1_0 = HON_BINDKCTPK_ROM_MLKEM_V_PRF0.O_CCA1_0
+  
+  module O_CCA1_1 = {
+    proc decaps(c : ctxt_t) : key_t option = {
+      var r' : rand_t;
+      var p' : ptxt_t;
+      var k', k_ : key_t;
+    
+      p' <- dec sk_pke1 c;
+
+      (k', r') <@ RO.get((p', H pk_pke1));
+      if (c \notin m1) {
+        k_ <$ dkey;
+        m1.[c] <- k_;
+      }
+      k_ <- oget m1.[c];
+      
+      return Some (if c <> enc r' pk_pke1 p' then k_ else k');
+    }
+  }
+  
+  proc main(bc : bindconf) : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    
+    RO.init();
+    
+    z0 <$ drand;
+    (pk_pke0, sk_pke0) <$ dkg;
+    pk0 <- pk_pke0;
+    sk0 <- (sk_pke0, pk0, H pk0, z0);
+    
+    z1 <$ drand;
+    (pk_pke1, sk_pke1) <$ dkg;
+    pk1 <- pk_pke1;
+    sk1 <- (sk_pke1, pk1, H pk1, z1);
+    
+    m0 <- empty;
+    O_CCA1_DDefault(ML_KEM_HL_ROM_Trim(RO)).init(sk1);
+    
+    (c0, c1) <@ A(RO, O_CCA1_0, O_CCA1_DDefault(ML_KEM_HL_ROM_Trim(RO))).find(KCT_Binds_PK, pk0, pk1);
+    
+    k0 <@ O_CCA1_0.decaps(c0);
+    k1 <@ O_CCA1_1.decaps(c1);
+    
+    return is_bindbreak KCT_Binds_PK (oget k0) (oget k1) pk0 pk1 c0 c1;
+  }
+}.
+
+
 lemma MLKEMHL_HONBINDKCTPK_ROM &m : 
   Pr[HON_BIND_ROM(RO, ML_KEM_HL_ROM, O_CCA1_Default_ROM, O_CCA1_DDefault_ROM, A).main(KCT_Binds_PK) @ &m : res] 
   <=
@@ -823,7 +883,7 @@ have ->:
      Pr[HON_BINDKCTPK_ROM_MLKEM_V_PRF0.main(KCT_Binds_PK) @ &m : res] 
      + 
      Pr[HON_BINDKCTPK_ROM_MLKEM_V_PRF0.main(KCT_Binds_PK) @ &m : res] |.
-+ by smt(StdOrder.RealOrder.ger0_norm ge0_mu). print StdOrder.RealOrder.ler_norm_add.
++ by smt(StdOrder.RealOrder.ger0_norm ge0_mu).
 rewrite (StdOrder.RealOrder.ler_trans _ _ _ 
             (StdOrder.RealOrder.ler_norm_add _ Pr[HON_BINDKCTPK_ROM_MLKEM_V_PRF0.main(KCT_Binds_PK) @ &m : res])).
 rewrite -RField.addrA StdOrder.RealOrder.ler_add.
@@ -842,9 +902,8 @@ rewrite -RField.addrA StdOrder.RealOrder.ler_add.
               /\ HON_BINDKCTPK_ROM_MLKEM_V.c1{1} = c1{2}) => //.
     inline{2} 11; inline{2} 10.
     inline{2} 17; inline{2} 14.
-    rcondf{2} ^if; 1: move=> &mt. 
-    + inline *; wp; rnd; wp; call (: true) => //.
-      by auto.
+    inline{2} O_PRF_Default.init; rcondf{2} ^if.
+    + by move=> ?; sp; conseq (: _ ==> true). 
     do 2! (wp; call (: ={RO.m}); 1: by auto); wp. 
     call (:    ={RO.m, O_CCA1_DDefault.sk}
             /\ O_CCA1_Default.sk{1}.`1 = O_CCA1_Default.sk{2}.`1
@@ -875,11 +934,10 @@ rewrite -RField.addrA StdOrder.RealOrder.ler_add.
             /\ HON_BINDKCTPK_ROM_MLKEM_V_PRF0.c1{1} = c1{2}) => //.
   inline{2} 11; inline{2} 10.
   inline{2} 17; inline{2} 14.
-  inline{1} 13.
-  rcondt{2} ^if; 1: move=> &mt. 
-  + inline *; wp; rnd; wp; call (: true) => //.
-    by auto.
-  seq 15 14 : (   ={pk0, pk1, k', r', p', RO.m} 
+  inline{1} 13; inline{2} O_PRF_Default.init.
+  rcondt{2} ^if.
+  + by move=> ?; sp; conseq (: _ ==> true).
+  seq 15 17 : (   ={pk0, pk1, k', r', p', RO.m} 
                /\ HON_BINDKCTPK_ROM_MLKEM_V_PRF0.c0{1} = c0{2}
                /\ HON_BINDKCTPK_ROM_MLKEM_V_PRF0.c1{1} = c1{2}
                /\ HON_BINDKCTPK_ROM_MLKEM_V_PRF0.c0{1} = c{1}
@@ -908,12 +966,35 @@ rewrite -RField.addrA StdOrder.RealOrder.ler_add.
       by sp; if => //; auto => /> /#.
     + by proc; auto.
     inline O_CCA1_DDefault(ML_KEM_HL_ROM_Trim(RO)).init; wp.
-    inline{2} 7; inline{2} 6.
+    inline{2} 10; inline{2} 9.
     inline RO.init O_PRF_Default.init.
-    wp; rnd; rnd; wp; rnd; wp; rnd. auto => />. 
+    by auto.
   wp; call (: ={RO.m}); 1: by auto.
   by wp; if; auto.
-
+rewrite -(RField.subrK Pr[HON_BINDKCTPK_ROM_MLKEM_V_PRF0.main(KCT_Binds_PK) @ &m : res] 
+            Pr[HON_BINDKCTPK_ROM_MLKEM_V_PRF1.main(KCT_Binds_PK) @ &m : res]).
+rewrite (StdOrder.RealOrder.ler_trans _ _ _ 
+            (StdOrder.RealOrder.ler_norm_add _ Pr[HON_BINDKCTPK_ROM_MLKEM_V_PRF1.main(KCT_Binds_PK) @ &m : res])).
+rewrite StdOrder.RealOrder.ler_add.
++ rewrite StdOrder.RealOrder.ler_eqVlt; left. 
+  do 2! congr; 2: congr.
+  + byequiv => //.
+    proc.
+    inline{2} 2.
+    wp 18 -1.
+    conseq (: _ 
+              ==> 
+                 ={pk0, pk1} 
+              /\ HON_BINDKCTPK_ROM_MLKEM_V_PRF0.k0{1} = k0{2}
+              /\ HON_BINDKCTPK_ROM_MLKEM_V_PRF0.k1{1} = k1{2}
+              /\ HON_BINDKCTPK_ROM_MLKEM_V_PRF0.c0{1} = c0{2}
+              /\ HON_BINDKCTPK_ROM_MLKEM_V_PRF0.c1{1} = c1{2}) => //.
+    inline{2} 13; inline{2} 12.
+    inline{2} 23; inline{2} O_PRF_Default.
+    rcondf{2} 27.
+    + by move=> ?; sp; conseq (: _ ==> true) => //. 
+    by admit.
+  by admit.
 by admit.
 qed.
 
