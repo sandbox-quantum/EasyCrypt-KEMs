@@ -40,7 +40,6 @@ clone import KeyEncapsulationMechanisms as KEMs with
   type ctxt_t <- ctxt_t
   
   proof *.
-
   
 (* 
   (Random) Oracles.

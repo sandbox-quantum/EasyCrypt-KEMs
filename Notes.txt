@@ -1,3 +1,7 @@
+- Write-up:
+  > First, blog posts SandboxAQ, then eprint/submission (or also partly simultaneously with blog post).
+  > Might want to have more results and clean up previous parts for the submission.
+  
 ML-KEM Binding propertiers to prove:
 - BIND-K-X are big ones
 - BIND-K,PK-CT?

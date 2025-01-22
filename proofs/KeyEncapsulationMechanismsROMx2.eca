@@ -1,0 +1,78 @@
+(* Require/Import libraries *)
+require import AllCore List.
+require (*--*) KeyEncapsulationMechanismsROM.
+
+(* Types *)
+(** Public keys (asymmetric) **)
+type pk_t.
+
+(** Secret keys (asymmetric) **)
+type sk_t.
+
+(** Shared/session keys (symmetric) **)
+type key_t.
+
+(** Ciphertexts/Encapsulations **)
+type ctxt_t.
+
+(* Inputs to the "first" random oracle *)
+type in_t.
+
+(* Outputs of the "first" random oracle *)
+type out_t.
+
+(* Inputs to the "second" random oracle *)
+type in_t2.
+
+(* Outputs of the "second" random oracle *)
+type out_t2.
+
+
+(* Clones and imports *)
+(** Definitions and properties for KEMs (ROM, single RO) **)
+clone import KeyEncapsulationMechanismsROM as KEMsROM with
+  type pk_t <- pk_t,
+  type sk_t <- sk_t,
+  type key_t <- key_t,
+  type ctxt_t <- ctxt_t,
+  
+  type in_t <- in_t,
+  type out_t <- out_t
+  
+  proof *.
+
+import KEMs.
+
+(* Module types *)
+(** Interface for (additional) random oracles used in security games. **)
+module type RandomOraclei2 = {
+  proc init() : unit
+  proc get(x : in_t2) : out_t2
+}. 
+
+(** Interface for (additional) random oracles given to adversaries (and schemes) in security games. **)
+module type RandomOracle2 = {
+  include RandomOraclei2 [get]  
+}. 
+
+(** Interface for KEMs modeled w.r.t. two random oracles **)
+module type Scheme_ROM_x2 (RO2 : RandomOracle2) (RO1 : RandomOracle) = { 
+  include Scheme
+}.
+
+
+(* Security in ROM (with two random oracles) *)
+module type Adv_LEAKBIND_ROM_x2 (RO2 : RandomOracle2) (RO1 : RandomOracle) = {
+  include Adv_LEAKBIND
+}.
+
+module LEAK_BIND_ROMx2 (RO2 : RandomOraclei2) (RO1 : RandomOraclei) (S : Scheme_ROM_x2) (A : Adv_LEAKBIND_ROM_x2) = {
+  proc main(bc : bindconf) : bool = {
+    var b : bool;
+    
+    RO2.init();
+    b <@ LEAK_BIND_ROM(RO1, S(RO2), A(RO2)).main(bc);
+    
+    return b;
+  }
+}.
