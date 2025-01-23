@@ -56,17 +56,17 @@ module type RandomOracle2 = {
 }. 
 
 (** Interface for KEMs modeled w.r.t. two random oracles **)
-module type Scheme_ROM_x2 (RO2 : RandomOracle2) (RO1 : RandomOracle) = { 
+module type Scheme_ROMx2 (RO2 : RandomOracle2) (RO1 : RandomOracle) = { 
   include Scheme
 }.
 
 
 (* Security in ROM (with two random oracles) *)
-module type Adv_LEAKBIND_ROM_x2 (RO2 : RandomOracle2) (RO1 : RandomOracle) = {
+module type Adv_LEAKBIND_ROMx2 (RO2 : RandomOracle2) (RO1 : RandomOracle) = {
   include Adv_LEAKBIND
 }.
 
-module LEAK_BIND_ROMx2 (RO2 : RandomOraclei2) (RO1 : RandomOraclei) (S : Scheme_ROM_x2) (A : Adv_LEAKBIND_ROM_x2) = {
+module LEAK_BIND_ROMx2 (RO2 : RandomOraclei2) (RO1 : RandomOraclei) (S : Scheme_ROMx2) (A : Adv_LEAKBIND_ROMx2) = {
   proc main(bc : bindconf) : bool = {
     var b : bool;
     

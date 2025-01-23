@@ -8,7 +8,7 @@
 ^*)
 (* Require/Import *)
 require import AllCore Distr PROM FMap.
-require (*--*) DMap.
+require (*--*) DMap DProd.
 require (*--*) HashFunctions KeyedHashFunctions KeyEncapsulationMechanismsROMx2.
 
 
@@ -304,70 +304,6 @@ module (ML_KEM_HL_ROM_G : Scheme_ROM) (G : RandomOracle) = {
 }.
 
 
-(**
-  ML-KEM, where both the key/randomness function (G) and implicit rejection
-  function (J) are modeled as RO.
-  Closely follows FIPS 203 (without accounting for sampling failures, so 
-  the "internal" ML-KEM procedures are most relevant). 
-**)
-module (ML_KEM_HL_ROM_GJ : Scheme_ROM_x2) (J : RandomOracle2) (G : RandomOracle) = { 
-  proc keygen() : pk_t * sk_t = {
-    var pk_pke : pk_t_pke;
-    var sk_pke : sk_t_pke;
-    var d, z : rand_t;
-    var pk : pk_t;
-    var sk : sk_t;
-    
-    d <$ drand;
-    z <$ drand;
-    
-    (pk_pke, sk_pke) <@ K_PKE_HL.keygen(d);
-    
-    pk <- pk_pke;
-    sk <- (sk_pke, pk, H pk, z);
-    
-    return (pk, sk);
-  }
-  
-  proc encaps(pk : pk_t) : key_t * ctxt_t = {
-    var p, r : rand_t; 
-    var k : key_t;
-    var c : ctxt_t_pke;
-    
-    p <$ drand;
-    (k, r) <@ G.get((p, H pk));
-    
-    c <@ K_PKE_HL.enc(pk, p, r);
-        
-    return (k, c);
-  }
-  
-  proc decaps(sk : sk_t, c : ctxt_t) : key_t option = {
-    var pk_pke : pk_t_pke;
-    var sk_pke : sk_t_pke;
-    var h, z, r' : rand_t;
-    var p' : ptxt_t;
-    var k', k_ : key_t;
-    var c' : ctxt_t;
-    
-    (sk_pke, pk_pke, h, z) <- sk;
-    
-    p' <@ K_PKE_HL.dec(sk_pke, c);
-    
-    (k', r') <@ G.get((p', h));
-    k_ <@ J.get(z, c);
-    
-    c' <@ K_PKE_HL.enc(pk_pke, p', r');
-    
-    if (c <> c') {
-      k' <- k_;
-    }
-    
-    return Some k';
-  }
-}.
-
-
 (** 
   Trimmed version of ML_KEM_HL_ROM_G (e.g., inlined procedures, less variables).
   Equivalent to the standard version above (as shown in the corresponding lemmas).
@@ -457,7 +393,8 @@ end section.
   and ML_KEM_HL_ROM_G_Trim, for any instantiation of the oracle
 **) 
 equiv Eqv_ML_KEM_HL_ROM_G_Trim_Encaps (G <: RandomOracle) :
-  ML_KEM_HL_ROM_G(G).encaps ~ ML_KEM_HL_ROM_G_Trim(G).encaps : ={glob G, arg} ==> ={glob G, res}.
+  ML_KEM_HL_ROM_G(G).encaps ~ ML_KEM_HL_ROM_G_Trim(G).encaps : 
+    ={glob G, arg} ==> ={glob G, res}.
 proof.
 proc.
 inline K_PKE_HL.enc.
@@ -469,13 +406,112 @@ qed.
   and ML_KEM_HL_ROM_G_Trim, for any instantiation of the oracle
 **) 
 equiv Eqv_ML_KEM_HL_ROM_G_Trim_Decaps (G <: RandomOracle) :
-  ML_KEM_HL_ROM_G(G).decaps ~ ML_KEM_HL_ROM_G_Trim(G).decaps : ={glob G, arg} ==> ={glob G, res}.
+  ML_KEM_HL_ROM_G(G).decaps ~ ML_KEM_HL_ROM_G_Trim(G).decaps : 
+    ={glob G, arg} ==> ={glob G, res}.
 proof.
 proc.
 inline K_PKE_HL.enc K_PKE_HL.dec.
 by wp; call (: true); wp.
 qed.
 
+
+(**
+  ML-KEM, where both the key/randomness function (G) and implicit rejection
+  function (J) are modeled as RO.
+  Closely follows FIPS 203 (without accounting for sampling failures, so 
+  the "internal" ML-KEM procedures are most relevant). 
+**)
+module (ML_KEM_HL_ROM_JG : Scheme_ROMx2) (J : RandomOracle2) (G : RandomOracle) = { 
+  proc keygen = ML_KEM_HL_ROM_G(G).keygen
+  
+  proc encaps = ML_KEM_HL_ROM_G(G).encaps
+  
+  proc decaps(sk : sk_t, c : ctxt_t) : key_t option = {
+    var pk_pke : pk_t_pke;
+    var sk_pke : sk_t_pke;
+    var h, z, r' : rand_t;
+    var p' : ptxt_t;
+    var k', k_ : key_t;
+    var c' : ctxt_t;
+    
+    (sk_pke, pk_pke, h, z) <- sk;
+    
+    p' <@ K_PKE_HL.dec(sk_pke, c);
+    
+    (k', r') <@ G.get((p', h));
+    k_ <@ J.get(z, c);
+    
+    c' <@ K_PKE_HL.enc(pk_pke, p', r');
+    
+    if (c <> c') {
+      k' <- k_;
+    }
+    
+    return Some k';
+  }
+}.
+
+(** 
+  Trimmed version of ML_KEM_HL_ROM_JG (e.g., inlined procedures, less variables).
+  Equivalent to the standard version above (as shown in the corresponding lemmas).
+**)
+(**
+  Besides inlining and removing variables, the sampling of randomness followed by the "derandomized" 
+  key generation is replaced by directly sampling from the appropriate distribution (dkg). 
+**)
+module (ML_KEM_HL_ROM_JG_Trim : Scheme_ROMx2) (J : RandomOracle2) (G : RandomOracle)  = { 
+  proc keygen = ML_KEM_HL_ROM_G_Trim(G).keygen
+  
+  proc encaps = ML_KEM_HL_ROM_G_Trim(G).encaps
+  
+  proc decaps(sk : sk_t, c : ctxt_t) : key_t option = {
+    var pk_pke : pk_t_pke;
+    var sk_pke : sk_t_pke;
+    var h, z, r' : rand_t;
+    var p' : ptxt_t;
+    var k', k_ : key_t;
+    
+    (sk_pke, pk_pke, h, z) <- sk;
+    
+    p' <- dec sk_pke c;
+    
+    (k', r') <@ G.get((p', h));
+    k_ <@ J.get((z, c));
+    
+    return Some (if c <> enc r' pk_pke p' then k_ else k');
+  }
+}.
+
+(** 
+  Equivalence between key generation procedures of ML_KEM_HL_ROM_JG 
+  and ML_KEM_HL_ROM_JG_Trim, for any instantiation of the random oracles
+**)    
+equiv Eqv_ML_KEM_HL_ROM_JG_Trim_Keygen (J <: RandomOracle2) (G <: RandomOracle) :
+  ML_KEM_HL_ROM_JG(J, G).keygen ~ ML_KEM_HL_ROM_JG_Trim(J, G).keygen : 
+    true ==> ={res}.
+proof. exact (Eqv_ML_KEM_HL_ROM_G_Trim_Keygen G). qed.
+
+(** 
+  Equivalence between encapsulation procedures of ML_KEM_HL_ROM_JG 
+  and ML_KEM_HL_ROM_JG_Trim, for any instantiation of the random oracles
+**) 
+equiv Eqv_ML_KEM_HL_ROM_JG_Trim_Encaps (J <: RandomOracle2) (G <: RandomOracle) :
+  ML_KEM_HL_ROM_JG(J, G).encaps ~ ML_KEM_HL_ROM_JG_Trim(J, G).encaps : 
+    ={glob G, arg} ==> ={glob G, res}.
+proof. exact (Eqv_ML_KEM_HL_ROM_G_Trim_Encaps G). qed.
+
+(** 
+  Equivalence between decapsulations procedures of ML_KEM_HL_ROM_JG 
+  and ML_KEM_HL_ROM_JG_Trim, for any instantiation of the random oracles
+**) 
+equiv Eqv_ML_KEM_HL_ROM_JG_Trim_Decaps (J <: RandomOracle2) (G <: RandomOracle{-J}) :
+  ML_KEM_HL_ROM_JG(J, G).decaps ~ ML_KEM_HL_ROM_JG_Trim(J, G).decaps : 
+    ={glob J, glob G, arg} ==> ={glob J, glob G, res}.
+proof.
+proc.
+inline K_PKE_HL.enc K_PKE_HL.dec.
+by wp; call (: true); call (: true); wp.
+qed.
 
 
 
@@ -1090,18 +1126,180 @@ end section ML_KEM_HL_HONBINDKCTPK_ROM_G.
 *)
 
 
-section ML_KEM_HL_LEAKBINDKCTPK_ROM.
+section ML_KEM_HL_LEAKBINDKCTPK_ROMx2.
 
-declare module A <: Adv_LEAKBIND_ROM {-RO_G, -RO_J}.
+declare module A <: Adv_LEAKBIND_ROMx2 {-RO_G, -RO_J}.
 
-lemma MLKEMHL_LEAKBINDKCTPK_ROM &m : 
-  Pr[LEAK_BIND_ROM(RO_G, ML_KEM_HL_ROM_G, A).main(KCT_Binds_PK) @ &m : res] <= witness.
+local module RO_J_V = {
+  include var RO_J [-get]
+  
+  proc get(zc : rand_t * ctxt_t) : key_t = { 
+    return witness;
+  }
+}.
+
+
+local module RO_G_SSample = {
+  include var RO_G [-get]
+
+  proc get(ph : ptxt_t * rand_t) : key_t * rand_t = { 
+    var k : key_t;
+    var r : rand_t;
+    
+    k <$ dkey;
+    r <$ drand;
+    if (ph \notin m) {
+      m.[ph] <- (k, r); 
+    }
+    
+    return oget m.[ph];
+  }
+}.
+
+local clone DProd.ProdSampling as DKR with
+  type t1 <- key_t,
+  type t2 <- rand_t
+  
+  proof *.
+
+local equiv Eqv_ROG_ROGSS_Get :
+  RO_G.get ~ RO_G_SSample.get : ={glob RO_G, arg} ==> ={glob RO_G, res}.
 proof.
-admit. 
+proc. 
+wp; conseq (: _ ==> r{1} = (k, r){2}) => //.
+transitivity{1} { r <@ DKR.S.sample(dkey, drand); } 
+                (true ==> ={r})
+                (true ==> r{1} = (k, r){2}) => //.
++ inline{2} DKR.S.sample; auto => />. 
+  by rewrite dkeyrand_dprod.
+transitivity{1} { r <@ DKR.S.sample2(dkey, drand); } 
+                (true ==> ={r})
+                (true ==> r{1} = (k, r){2}) => //.
++ by call (DKR.sample_sample2).
+by inline{1} DKR.S.sample2; auto.
+qed.  
+ 
+
+(* *)
+local module LEAK_BINDKCTPK_ROMx2_MLKEM_V = {
+  var pk_pke0, pk_pke1 : pk_t_pke
+  var sk_pke0, sk_pke1 : sk_t_pke
+  var c0, c1 : ctxt_t
+  var h0, h1, z0, z1, r0', r1' : rand_t
+  var p0', p1' : ptxt_t 
+  var k0', k0_, k1', k1_ : key_t
+  var k0, k1 : key_t option
+  
+  proc main(bc : bindconf) : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    
+    RO_J.init();
+    RO_G_SSample.init();
+    
+    z0 <$ drand;
+    (pk_pke0, sk_pke0) <$ dkg;
+    pk0 <- pk_pke0;
+    sk0 <- (sk_pke0, pk0, H pk0, z0);
+    
+    z1 <$ drand;
+    (pk_pke1, sk_pke1) <$ dkg;
+    pk1 <- pk_pke1;
+    sk1 <- (sk_pke1, pk1, H pk1, z1);
+    
+    (c0, c1) <@ A(RO_J, RO_G_SSample).find(KCT_Binds_PK, pk0, sk0, pk1, sk1);
+    
+    p0' <- dec sk_pke0 c0;
+    (k0', r0') <@ RO_G.get((p0', H pk0));
+    k0_ <@ RO_J.get(z0, c0);
+    k0 <- Some (if c0 <> enc r0' pk_pke0 p0' then k0_ else k0');
+    
+    p1' <- dec sk_pke1 c1;
+    (k1', r1') <@ RO_G.get((p1', H pk1));
+    k1_ <@ RO_J.get(z1, c1);
+    k1 <- Some (if c1 <> enc r1' pk_pke1 p1' then k1_ else k1');
+          
+    return is_bindbreak KCT_Binds_PK (oget k0) (oget k1) pk0 pk1 c0 c1;
+  }
+}.
+
+local lemma EqPr_LEAKBINDROMx2_V_KCTPK &m :
+  Pr[LEAK_BIND_ROMx2(RO_J, RO_G, ML_KEM_HL_ROM_JG, A).main(KCT_Binds_PK) @ &m : res]
+  =
+  Pr[LEAK_BINDKCTPK_ROMx2_MLKEM_V.main(KCT_Binds_PK) @ &m : res].
+proof.
+have ->:
+  Pr[LEAK_BIND_ROMx2(RO_J, RO_G, ML_KEM_HL_ROM_JG, A).main(KCT_Binds_PK) @ &m : res]
+  =
+  Pr[LEAK_BIND_ROMx2(RO_J, RO_G, ML_KEM_HL_ROM_JG_Trim, A).main(KCT_Binds_PK) @ &m : res].
++ byequiv => //.
+  proc.
+  inline{1} 2; inline{2} 2.
+  inline RO_J.init RO_G.init.
+  inline{1} 4; inline{2} 4; wp. 
+  seq 5 5 : (#pre /\ ={glob RO_J, glob RO_G, pk0, sk0, bc1} /\ bc1{1} = bc{1}).
+  + sp; rewrite equiv[{1} 1 (Eqv_ML_KEM_HL_ROM_JG_Trim_Keygen RO_J RO_G)]. 
+    by call (: true); 1: auto.
+  rcondf{1} ^if; 2: rcondt{1} ^if; 1,2: by auto. 
+  rcondf{2} ^if; 2: rcondt{2} ^if; 1,2: by auto. 
+  do 2! call (Eqv_ML_KEM_HL_ROM_JG_Trim_Decaps RO_J RO_G).
+  call (: ={glob RO_J, glob RO_G}); 1,2: by sim.
+  by call (Eqv_ML_KEM_HL_ROM_JG_Trim_Keygen RO_J RO_G).
+byequiv => //.
+proc; inline{1} 2; inline{1} 4.
+seq 5 6 : (   #pre /\ ={glob RO_J, glob RO_G, sk0, pk0}
+           /\ pk0{1} = LEAK_BINDKCTPK_ROMx2_MLKEM_V.pk_pke0{2}
+           /\ sk0{1}.`1 = LEAK_BINDKCTPK_ROMx2_MLKEM_V.sk_pke0{2}
+           /\ sk0{1}.`2 = LEAK_BINDKCTPK_ROMx2_MLKEM_V.pk_pke0{2}
+           /\ sk0{1}.`3 = H LEAK_BINDKCTPK_ROMx2_MLKEM_V.pk_pke0{2}
+           /\ sk0{1}.`4 = LEAK_BINDKCTPK_ROMx2_MLKEM_V.z0{2}
+           /\ bc1{1} = bc{2}).
++ by inline *; auto. 
+rcondf{1} ^if; 2: rcondt{1} ^if; 1,2: by auto. 
+inline{1} ML_KEM_HL_ROM_JG_Trim(J_RO.RO, G_RO.RO).decaps ML_KEM_HL_ROM_JG_Trim(J_RO.RO, G_RO.RO).keygen.
+wp; call (: ={glob RO_J}); 1: by auto.
+call (: ={glob RO_G}); 1: by auto.
+wp; call (: ={glob RO_J}); 1: by auto.
+call (: ={glob RO_G}); 1: by auto.
+wp; call (: ={glob RO_J, glob RO_G}); 2: by sim.
++ conseq (: ={glob RO_G, arg} ==> ={glob RO_G, res}) => //.
+  by apply Eqv_ROG_ROGSS_Get. 
+by auto.
+qed.
+
+lemma MLKEMHL_LEAKBINDKCTPK_ROMx2 &m : 
+  Pr[LEAK_BIND_ROMx2(RO_J, RO_G, ML_KEM_HL_ROM_JG, A).main(KCT_Binds_PK) @ &m : res] 
+  <=
+  mu1 drand witness
+  +
+  16%r * mu1 dkey witness.
+proof.
+rewrite (: 16%r = 4%r + 4%r + 4%r + 4%r) 1:// 3!RField.mulrDl EqPr_LEAKBINDROMx2_V_KCTPK.
+rewrite -?RField.addrA RField.addrA.
+rewrite Pr[mu_split (LEAK_BINDKCTPK_ROMx2_MLKEM_V.c0 <> enc LEAK_BINDKCTPK_ROMx2_MLKEM_V.r0' LEAK_BINDKCTPK_ROMx2_MLKEM_V.pk_pke0 LEAK_BINDKCTPK_ROMx2_MLKEM_V.p0')]. 
+rewrite Pr[mu_split (LEAK_BINDKCTPK_ROMx2_MLKEM_V.c1 <> enc LEAK_BINDKCTPK_ROMx2_MLKEM_V.r1' LEAK_BINDKCTPK_ROMx2_MLKEM_V.pk_pke1 LEAK_BINDKCTPK_ROMx2_MLKEM_V.p1')] /=.
+rewrite -RField.addrA 2?StdOrder.RealOrder.ler_add.
++ rewrite Pr[mu_split (LEAK_BINDKCTPK_ROMx2_MLKEM_V.z0 = LEAK_BINDKCTPK_ROMx2_MLKEM_V.z1)].
+  rewrite StdOrder.RealOrder.ler_add.
+  + byphoare => //.
+    proc.
+    seq 7 : (LEAK_BINDKCTPK_ROMx2_MLKEM_V.z0 = LEAK_BINDKCTPK_ROMx2_MLKEM_V.z1)
+            (mu1 drand witness)
+            1%r
+            _
+            0%r => //. 
+    + inline *; rnd; wp; rnd; rnd; wp; skip => /> z0 z0in.
+      rewrite -(drand_uni _ _ z0in (drand_fu witness)) => _ _. 
+      rewrite StdOrder.RealOrder.ler_eqVlt; left => @/pred1. 
+      by congr; rewrite fun_ext => ?; rewrite (eq_sym z0).
+    by hoare; conseq (: _ ==> true) => // />.
+  by admit.  
++ by admit.  
+by admit.
 qed.
 
 
-end section ML_KEM_HL_LEAKBINDKCTPK_ROM.
+end section ML_KEM_HL_LEAKBINDKCTPK_ROMx2.
 
 
 (* 
