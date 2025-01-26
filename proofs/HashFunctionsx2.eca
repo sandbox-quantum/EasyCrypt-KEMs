@@ -1,0 +1,31 @@
+require import AllCore.
+require HashFunctions.
+
+
+type in_t.
+type out_t.
+op f : in_t -> out_t.
+
+clone import HashFunctions as F with
+  type in_t <- in_t,
+  type out_t <- out_t,
+  
+  op f <- f
+  
+  proof *.
+  
+
+type in_t2.
+type out_t2.
+op g : in_t2 -> out_t2.
+
+clone import HashFunctions as G with
+  type in_t <- in_t2,
+  type out_t <- out_t2,
+  
+  op f <- g
+  
+  proof *.
+
+
+  

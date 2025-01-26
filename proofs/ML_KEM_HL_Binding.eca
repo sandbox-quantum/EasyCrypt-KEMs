@@ -560,11 +560,12 @@ module Counting_RO (RO : RandomOraclei) : RandomOraclei = {
        Replacing J z0 and J z1 by indpendent random functions (as explained above) means that 
        the probability of this equality essentially boils down to either (1) the probability of 
        the adversary having queried its decaps oracles on a ciphertext that happened to result
-       in J z0 c = J z1 c (this probability is bouded by 1 / |key_t|, because the c have are equal; otherwise
-       it would have been q_J / | key_t |), or (2) the proability of 
-       (at least) one of J z0 c and J z1 c not being defined (yet) when the game decapsulates, where the equality
-       holds with at most 1 / | key_t | (times 2, because this goes for J z0 c, J z1 c, or both
-       not being defined upon decapsulation).
+       in J z0 c = J z1 c (this probability is bouded by q / |key_t|, because the c are equal 
+       but the adversary has q_J tries; if the c were allowed to be different, it would have been 
+       a regular collision bound), or (2) the proability of 
+       (at least) one of J z0 c and J z1 c not being defined (yet) when the game decapsulates, 
+       where the equality holds with at most 1 / | key_t | (times 2, because this goes 
+       for J z0 c, J z1 c, or both not being defined upon decapsulation).
     2. c <> enc r0' pk_pke0 m0' /\ c = enc r1' pk_pke1 m1' 
        In this case, adversary succeeds iff J z0 c = k1'
        Replacing J z0 by a random function (as explained above) means that 
@@ -575,7 +576,7 @@ module Counting_RO (RO : RandomOraclei) : RandomOraclei = {
        both J z0 c and the relevant random oracle input already being queried by the 
        adversary and happen to both equal each other. Since the random oracle input upon 
        decapsulation (to obtain k1') is deterministically derived from c, this probablility
-       is also at most 1 / | key_t |. 
+       is at most q / | key_t |. 
     3. c = enc r0' pk_pke0 m0' /\ c <> enc r1' pk_pke1 m1'
        This case is symmetrical to case 2.
     4. c = enc r0' pk_pke0 m0' /\ c = enc r1' pk_pke1 m1'
@@ -1126,9 +1127,209 @@ end section ML_KEM_HL_HONBINDKCTPK_ROM_G.
 *)
 
 
+section ML_KEM_HL_LEAKBINDKCTPK_ROM.
+
+declare module A <: Adv_LEAKBIND_ROM {-RO_G}.
+
+declare op q_G : { int | 0 <= q_G } as ge0_qG.
+
+
+(*
+  Split sampling (of pairs) in RO G
+  two independent samplings of each element
+*)
+local module RO_G_SSample = {
+  include var RO_G [-get]
+
+  proc get(ph : ptxt_t * rand_t) : key_t * rand_t = { 
+    var k : key_t;
+    var r : rand_t;
+    
+    k <$ dkey;
+    r <$ drand;
+    if (ph \notin m) {
+      m.[ph] <- (k, r); 
+    }
+    
+    return oget m.[ph];
+  }
+}.
+
+local clone DProd.ProdSampling as DKR with
+  type t1 <- key_t,
+  type t2 <- rand_t
+  
+  proof *.
+
+local equiv Eqv_ROG_ROGSS_Get :
+  RO_G.get ~ RO_G_SSample.get : ={glob RO_G, arg} ==> ={glob RO_G, res}.
+proof.
+proc. 
+wp; conseq (: _ ==> r{1} = (k, r){2}) => //.
+transitivity{1} { r <@ DKR.S.sample(dkey, drand); } 
+                (true ==> ={r})
+                (true ==> r{1} = (k, r){2}) => //.
++ inline{2} DKR.S.sample; auto => />. 
+  by rewrite dkeyrand_dprod.
+transitivity{1} { r <@ DKR.S.sample2(dkey, drand); } 
+                (true ==> ={r})
+                (true ==> r{1} = (k, r){2}) => //.
++ by call (DKR.sample_sample2).
+by inline{1} DKR.S.sample2; auto.
+qed.  
+
+
+(* 
+  Alternative version of LEAK-BIND-K,CT-PK property 
+  for ML-KEM in ROM (with G modeled as a random oracle)
+  with concrete procedures inlined, several variables 
+  moved to the module level, and extraneous variables removed.
+*)
+local module LEAK_BINDKCTPK_ROM_MLKEM_V = {
+  var pk_pke0, pk_pke1 : pk_t_pke
+  var sk_pke0, sk_pke1 : sk_t_pke
+  var c0, c1 : ctxt_t
+  var h0, h1, z0, z1, r0', r1' : rand_t
+  var p0', p1' : ptxt_t 
+  var k0', k1' : key_t
+  var k0, k1 : key_t option
+  
+  proc main(bc : bindconf) : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    
+    RO_G_SSample.init();
+    
+    z0 <$ drand;
+    (pk_pke0, sk_pke0) <$ dkg;
+    pk0 <- pk_pke0;
+    sk0 <- (sk_pke0, pk0, H pk0, z0);
+    
+    z1 <$ drand;
+    (pk_pke1, sk_pke1) <$ dkg;
+    pk1 <- pk_pke1;
+    sk1 <- (sk_pke1, pk1, H pk1, z1);
+    
+    (c0, c1) <@ A(RO_G_SSample).find(KCT_Binds_PK, pk0, sk0, pk1, sk1);
+    
+    p0' <- dec sk_pke0 c0;
+    (k0', r0') <@ RO_G_SSample.get((p0', H pk0));
+    k0 <- Some (if c0 <> enc r0' pk_pke0 p0' then j z0 c0 else k0');
+    
+    p1' <- dec sk_pke1 c1;
+    (k1', r1') <@ RO_G_SSample.get((p1', H pk1));
+    k1 <- Some (if c1 <> enc r1' pk_pke1 p1' then j z1 c1 else k1');
+          
+    return is_bindbreak KCT_Binds_PK (oget k0) (oget k1) pk0 pk1 c0 c1;
+  }
+}.
+
+local lemma EqPr_LEAKBINDROM_V_KCTPK &m :
+  Pr[LEAK_BIND_ROM(RO_G, ML_KEM_HL_ROM_G, A).main(KCT_Binds_PK) @ &m : res]
+  =
+  Pr[LEAK_BINDKCTPK_ROM_MLKEM_V.main(KCT_Binds_PK) @ &m : res].
+proof.
+have ->:
+  Pr[LEAK_BIND_ROM(RO_G, ML_KEM_HL_ROM_G, A).main(KCT_Binds_PK) @ &m : res]
+  =
+  Pr[LEAK_BIND_ROM(RO_G, ML_KEM_HL_ROM_G_Trim, A).main(KCT_Binds_PK) @ &m : res].
++ byequiv => //.
+  proc.
+  inline{1} 2; inline{2} 2.
+  inline RO_G.init.
+  seq 3 3 : (#pre /\ ={glob RO_G, pk0, sk0, bc0} /\ bc0{1} = bc{1}).
+  + sp; rewrite equiv[{1} 1 (Eqv_ML_KEM_HL_ROM_G_Trim_Keygen RO_G)]. 
+    by call (: true); 1: auto.
+  rcondf{1} ^if; 2: rcondt{1} ^if; 1,2: by auto. 
+  rcondf{2} ^if; 2: rcondt{2} ^if; 1,2: by auto. 
+  wp; do 2! call (Eqv_ML_KEM_HL_ROM_G_Trim_Decaps RO_G).
+  call (: ={glob RO_G}); 1: by sim.
+  by call (Eqv_ML_KEM_HL_ROM_G_Trim_Keygen RO_G).
+byequiv => //.
+proc; inline{1} 2; inline{1} 3.
+seq 5 5 : (   #pre /\ ={glob RO_G, sk0, pk0}
+           /\ pk0{1} = LEAK_BINDKCTPK_ROM_MLKEM_V.pk_pke0{2}
+           /\ sk0{1}.`1 = LEAK_BINDKCTPK_ROM_MLKEM_V.sk_pke0{2}
+           /\ sk0{1}.`2 = LEAK_BINDKCTPK_ROM_MLKEM_V.pk_pke0{2}
+           /\ sk0{1}.`3 = H LEAK_BINDKCTPK_ROM_MLKEM_V.pk_pke0{2}
+           /\ sk0{1}.`4 = LEAK_BINDKCTPK_ROM_MLKEM_V.z0{2}
+           /\ bc0{1} = bc{2}).
++ by inline *; auto.
+rcondf{1} ^if; 2: rcondt{1} ^if; 1,2: by auto. 
+inline{1} ML_KEM_HL_ROM_G_Trim(G_RO.RO).decaps ML_KEM_HL_ROM_G_Trim(G_RO.RO).keygen.
+wp; call Eqv_ROG_ROGSS_Get. 
+wp; call Eqv_ROG_ROGSS_Get. 
+wp; call (: ={glob RO_G}); 1: by conseq Eqv_ROG_ROGSS_Get.
+by auto.
+qed.
+
+
+(* 
+  Auxiliary "multi-function single-value collision" property for j.  
+  Used to bound case where j z0 c = j z1 c
+  Can be reduced from regular (non-keyed) collision resistance.
+*)
+local module MF_SV_CR_j = {
+  proc main() : bool = {
+    var z0, z1 : rand_t;
+    var pk_pke0, pk_pke1 : pk_t_pke;
+    var sk_pke0, sk_pke1 : sk_t_pke;    
+    var c0, c1 : ctxt_t;
+    
+    RO_G.m <- empty;
+        
+    z0 <$ drand;
+    (pk_pke0, sk_pke0) <$ dkg;
+    
+    z1 <$ drand;
+    (pk_pke1, sk_pke1) <$ dkg;
+    
+    (c0, c1) <@ A(RO_G_SSample).find(KCT_Binds_PK, pk_pke0, (sk_pke0, pk_pke0, H pk_pke0, z0), pk_pke1, (sk_pke1, pk_pke1, H pk_pke1, z1));
+    
+    return z0 <> z1 /\ j z0 c0 = j z1 c1; 
+  }
+}.
+
+lemma MLKEMHL_LEAKBINDKCTPK_ROM &m : 
+  Pr[LEAK_BIND_ROM(RO_G, ML_KEM_HL_ROM_G, A).main(KCT_Binds_PK) @ &m : res] 
+  <=
+  mu1 drand witness
+  +
+
+  witness.
+proof.
+rewrite Pr[mu_split (LEAK_BINDKCTPK_ROM_MLKEM_V.c0 <> enc LEAK_BINDKCTPK_ROM_MLKEM_V.r0' LEAK_BINDKCTPK_ROM_MLKEM_V.pk_pke0 LEAK_BINDKCTPK_ROM_MLKEM_V.p0')]. 
+rewrite Pr[mu_split (LEAK_BINDKCTPK_ROM_MLKEM_V.c1 <> enc LEAK_BINDKCTPK_ROM_MLKEM_V.r1' LEAK_BINDKCTPK_ROM_MLKEM_V.pk_pke1 LEAK_BINDKCTPK_ROM_MLKEM_V.p1')] /=.
+rewrite -RField.addrA StdOrder.RealOrder.ler_add.
++ rewrite Pr[mu_split (LEAK_BINDKCTPK_ROM_MLKEM_V.z0 = LEAK_BINDKCTPK_ROM_MLKEM_V.z1)].
+  rewrite StdOrder.RealOrder.ler_add.
+  + byphoare => //.
+    proc.
+    seq 7 : (LEAK_BINDKCTPK_ROM_MLKEM_V.z0 = LEAK_BINDKCTPK_ROM_MLKEM_V.z1)
+            (mu1 drand witness)
+            1%r
+            _
+            0%r => //. 
+    + inline *; rnd; wp; rnd; rnd; wp; skip => /> z0 z0in.
+      rewrite -(drand_uni _ _ z0in (drand_fu witness)) => _ _. 
+      rewrite StdOrder.RealOrder.ler_eqVlt; left => @/pred1. 
+      by congr; rewrite fun_ext => ?; rewrite (eq_sym z0).
+    by hoare; conseq (: _ ==> true) => // />.
+  by admit.  
++ by admit.  
+by admit.
+qed.
+
+
+end section ML_KEM_HL_LEAKBINDKCTPK_ROM.
+
+
+
 section ML_KEM_HL_LEAKBINDKCTPK_ROMx2.
 
 declare module A <: Adv_LEAKBIND_ROMx2 {-RO_G, -RO_J}.
+
+declare op q_J : { int | 0 <= q_J } as ge0_qJ.
 
 local module RO_J_V = {
   include var RO_J [-get]
@@ -1272,6 +1473,9 @@ lemma MLKEMHL_LEAKBINDKCTPK_ROMx2 &m :
   <=
   mu1 drand witness
   +
+  q_J%r * mu1 dkey witness +
+  .
+  
   16%r * mu1 dkey witness.
 proof.
 rewrite (: 16%r = 4%r + 4%r + 4%r + 4%r) 1:// 3!RField.mulrDl EqPr_LEAKBINDROMx2_V_KCTPK.

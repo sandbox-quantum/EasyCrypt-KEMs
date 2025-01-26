@@ -1,0 +1,563 @@
+(*^ 
+  Binding security for (very) high-level specification of ML-KEM.
+  Specification considered here abstracts away from any algebraic
+  structure used in the construction, particularly 
+  viewing the PKE procedures as abstract (black box) operators.
+  To be instantiated and linked to lower-level specification
+  and, in turn, implementation.
+^*)
+(* Require/Import *)
+require import AllCore Distr.
+require (*--*) DMap DProd.
+require (*--*) KeyEncapsulationMechanisms.
+require (*--*) HashFunctions.
+
+
+(* Types *)
+(* General *)
+(** Randomness ("seeds") **)
+type rand_t.
+
+
+(* Underlying PKE scheme (K-PKE) *)
+(** Public keys **)
+type pk_t_pke.
+
+(** Secret keys **)
+type sk_t_pke.
+
+(** Plaintexts of underlying PKE scheme **)
+type ptxt_t = rand_t.
+
+(** Ciphertexts **)
+type ctxt_t_pke.
+
+
+(* KEM (ML-KEM *)
+(** Public keys **)
+type pk_t = pk_t_pke.
+
+(** Secret keys  **)
+type sk_t = sk_t_pke * pk_t * rand_t * rand_t.
+
+(** Shared/session keys (symmetric) **)
+type key_t = rand_t.
+
+(** Ciphertexts/Encapsulations **)
+type ctxt_t = ctxt_t_pke.
+
+
+(* Operators *)
+(** Hash function H, used to hash public keys to randomness **)
+op H : pk_t -> rand_t.
+
+(** 
+  Hash function G, used to hash (pairs of) plaintexts and 
+  hashes of public keys (randomness) to (pairs of) keys and randomness 
+**)
+op G : ptxt_t * rand_t -> key_t * rand_t. 
+
+(** 
+  Hash function J, used to hash (pairs of) randomness and ciphertexts 
+  to shared keys (for implicit rejection)
+**)
+op J : rand_t * ctxt_t -> key_t.
+
+(** Operator capturing "derandomized" key generation of underlying PKE scheme **)
+op kg : rand_t -> pk_t_pke * sk_t_pke.
+
+(** Operator capturing "derandomized" encryption function of underlying PKE scheme **)
+op enc : rand_t -> pk_t_pke -> ptxt_t -> ctxt_t_pke.
+
+(** Operator capturing decryption function of underlying PKE scheme **)
+(**
+  By design, the underlying PKE scheme never returns a failure, 
+  so we refrain from using option monad as output.
+**)
+op dec : sk_t_pke -> ctxt_t_pke -> ptxt_t.
+
+
+(* Distributions *)
+(** Proper, full, and uniform distribution over randomness **)
+op [lossless full uniform] drand : rand_t distr.
+
+(** Proper, full, and uniform distribution over (shared) keys **)
+op [lossless full uniform] dkey : key_t distr.
+
+(** Proper, full, and uniform distribution over pairs of (shared) keys and randomness **) 
+op [lossless full uniform] dkeyrand : (key_t * rand_t) distr.
+
+(** `dkeyrand` is equal to the product distribution of dkey and drand **)
+lemma dkeyrand_dprod : dkeyrand = dkey `*` drand.
+proof. 
+rewrite &(eq_funi_ll) ?is_full_funiform ?(dkeyrand_ll, dkeyrand_fu, dkeyrand_uni).
++ by rewrite dprod_fu_auto ?(dkey_fu, drand_fu) /=. 
++ by rewrite dprod_uni 1,2:(dkey_uni, drand_uni). 
+by rewrite dprod_ll_auto 1,2:(dkey_ll, drand_ll). 
+qed.
+
+(** Distribution representing key generation of underlying PKE scheme **)
+op dkg : (pk_t_pke * sk_t_pke) distr = dmap drand kg.
+
+(** `dkg` is a proper distribution **)
+lemma dkg_ll : is_lossless dkg.
+proof. by rewrite dmap_ll drand_ll. qed.
+
+
+(* Clones/Imports *)
+(* Definitions and properties for H as a (non-keyed) hash function *)
+clone import HashFunctions as H_HF with
+  type in_t <- pk_t,
+  type out_t <- rand_t,
+  
+  op f <- H
+  
+  proof *.
+ 
+(* Definitions and properties for KEMs with types as required for ML-KEM *)
+clone import KeyEncapsulationMechanisms as KEMs with
+  type pk_t <- pk_t,
+  type sk_t <- sk_t,
+  type key_t <- key_t,
+  type ctxt_t <- ctxt_t
+  
+  proof *.
+
+
+(* Schemes *)
+(** K-PKE, PKE scheme underlying ML-KEM **)
+(** 
+  As per FIPS 203, we specify the PKE in a derandomized manner.
+  That is, any procedure using randomness (i.e., key generation and encryption)
+  takes it as input rather than sampling it itself. This also means
+  it does not adhere to the regular syntax of a PKE scheme. 
+**)  
+(**
+  Further, this is a (very) high-level specification, essentially abstracting
+  away all algebraic structure and modeling the procedures as simple operators 
+  (which is possible because all randomness is taken as input)
+**)
+module K_PKE_HL = {
+  proc keygen(d : rand_t) : pk_t_pke * sk_t_pke = {
+    return kg d;
+  }
+  
+  proc enc(pk : pk_t_pke, p : ptxt_t, r : rand_t) : ctxt_t_pke = {
+    return enc r pk p;
+  }
+  
+  proc dec(sk : sk_t_pke, c : ctxt_t_pke) : ptxt_t = {
+    return dec sk c;
+  } 
+}.
+
+
+(**
+  ML-KEM in the standard model.
+  Closely follows FIPS 203 (without accounting for sampling failures, so 
+  the "internal" ML-KEM procedures--as they are called in FIPS 203--are 
+  most similar). 
+**)
+module ML_KEM_HL : Scheme = { 
+  proc keygen() : pk_t * sk_t = {
+    var pk_pke : pk_t_pke;
+    var sk_pke : sk_t_pke;
+    var d, z : rand_t;
+    var pk : pk_t;
+    var sk : sk_t;
+    
+    d <$ drand;
+    z <$ drand;
+    
+    (pk_pke, sk_pke) <@ K_PKE_HL.keygen(d);
+    
+    pk <- pk_pke;
+    sk <- (sk_pke, pk, H pk, z);
+    
+    return (pk, sk);
+  }
+  
+  proc encaps(pk : pk_t) : key_t * ctxt_t = {
+    var p, r : rand_t; 
+    var k : key_t;
+    var c : ctxt_t_pke;
+    
+    p <$ drand;
+    (k, r) <- G (p, H pk);
+    
+    c <@ K_PKE_HL.enc(pk, p, r);
+        
+    return (k, c);
+  }
+  
+  proc decaps(sk : sk_t, c : ctxt_t) : key_t option = {
+    var pk_pke : pk_t_pke;
+    var sk_pke : sk_t_pke;
+    var h, z, r' : rand_t;
+    var p' : ptxt_t;
+    var k', k_ : key_t;
+    var c' : ctxt_t;
+    
+    (sk_pke, pk_pke, h, z) <- sk;
+    
+    p' <@ K_PKE_HL.dec(sk_pke, c);
+    
+    (k', r') <- G (p', h);
+    k_ <- J (z, c);
+    
+    c' <@ K_PKE_HL.enc(pk_pke, p', r');
+    
+    if (c <> c') {
+      k' <- k_;
+    }
+    
+    return Some k';
+  }
+}.
+
+
+(** 
+  Trimmed version of ML_KEM_HL (e.g., inlined procedures, fewer variables).
+  Equivalent to the standard version above (as shown in the corresponding lemmas).
+**)
+(**
+  Besides inlining and removing variables, the sampling of randomness followed by the "derandomized" 
+  key generation is replaced by directly sampling from the appropriate distribution (dkg). 
+**)
+module ML_KEM_HL_Trim : Scheme = { 
+  proc keygen() : pk_t * sk_t = {
+    var z : rand_t;
+    var sk_pke : sk_t_pke;
+    var pk : pk_t;
+        
+    z <$ drand;
+    (pk, sk_pke) <$ dkg;
+    
+    return (pk, (sk_pke, pk, H pk, z));
+  }
+  
+  proc encaps(pk : pk_t) : key_t * ctxt_t = {
+    var p, r : rand_t; 
+    var k : key_t;
+    
+    p <$ drand;
+    (k, r) <- G (p, H pk);
+     
+    return (k, enc r pk p);
+  }
+  
+  proc decaps(sk : sk_t, c : ctxt_t) : key_t option = {
+    var pk_pke : pk_t_pke;
+    var sk_pke : sk_t_pke;
+    var h, z, r' : rand_t;
+    var p' : ptxt_t;
+    var k' : key_t;
+    
+    (sk_pke, pk_pke, h, z) <- sk;
+    
+    p' <- dec sk_pke c;
+    
+    (k', r') <- G (p', h);
+    
+    return Some (if c <> enc r' pk_pke p' then J (z, c) else k');
+  }
+}.
+
+
+
+(* Section for proving equivalence of key generation procedures, hiding auxiliary artifacts *)
+section.
+(* Auxiliary clone for proving sampling equivalence *)
+local clone DMap.DMapSampling as DMS with
+  type t1 <- rand_t,
+  type t2 <- pk_t_pke * sk_t_pke
+  
+  proof *.
+
+(** 
+  Equivalence between key generation procedures of ML_KEM_HL 
+  and ML_KEM_HL_Trim, for any instantiation of the oracle
+**)    
+equiv Eqv_ML_KEM_HL_Trim_Keygen :
+  ML_KEM_HL.keygen ~ ML_KEM_HL_Trim.keygen : true ==> ={res}.
+proof. 
+proc.
+inline K_PKE_HL.keygen; swap{1} 1 1.
+wp.
+transitivity{2} { z <$ drand; (pk, sk_pke) <@ DMS.S.sample(drand, kg); } 
+                (true 
+                 ==> 
+                 let tpl = kg d{1} in 
+                   (tpl.`1, (tpl.`2, tpl.`1, H tpl.`1, z{1})) 
+                   = 
+                   (pk{2}, (sk_pke{2}, pk{2}, H pk{2}, z{2}))) 
+                (true ==> ={z, pk, sk_pke}) => //.
++ rewrite equiv[{2} 2 DMS.sample].
+  inline{2} DMS.S.map.
+  by wp; rnd; wp; rnd; skip.
+inline{1} DMS.S.sample.
+by wp; rnd; wp; rnd. 
+qed.
+
+end section.
+
+(** 
+  Equivalence between encapsulation procedures of ML_KEM_HL 
+  and ML_KEM_HL_Trim, for any instantiation of the oracle
+**) 
+equiv Eqv_ML_KEM_HL_Trim_Encaps :
+  ML_KEM_HL.encaps ~ ML_KEM_HL_Trim.encaps : 
+    ={arg} ==> ={res}.
+proof. by proc; inline K_PKE_HL.enc; auto. qed.
+
+(** 
+  Equivalence between decapsulations procedures of ML_KEM_HL 
+  and ML_KEM_HL_Trim, for any instantiation of the oracle
+**) 
+equiv Eqv_ML_KEM_HL_Trim_Decaps :
+  ML_KEM_HL.decaps ~ ML_KEM_HL_Trim.decaps : 
+    ={arg} ==> ={res}.
+proof. by proc; inline K_PKE_HL.enc K_PKE_HL.dec; wp. qed.
+
+
+
+
+
+(*
+  New approach:
+  Specify some relatively simple auxiliary intermedate properties for the
+  hash functions, stripping as much of the irrelevant bits of the
+  games. 
+  Subsequently (separately), bound the probability of the adversary 
+  succeeding in these intermediate games by modeling (some of) the
+  hash functions as random oracles.
+*)  
+
+
+(* 
+  Intermediate/Auxiliary properties
+  Note: if so desired, these can most likely be made local
+  in the end. Alternatively, they can be made generic in a
+  separate theory (as well as the corresponding RO proofs).
+*)
+(* 
+  Intermediate property 1 (Partial Collision Resistance (PCR)):
+  Given two independently sampled random values r0 and r1, find two  
+  ciphertext c0 and c1 such that J (r0, c0) = J (r1, c1)
+  (c0 may be equal to c1).
+*)
+module type Adv_PCR = {
+  proc find(r0 : rand_t, r1 : rand_t) : ctxt_t * ctxt_t
+}.
+
+module PCR (A : Adv_PCR) = {
+  proc main() : bool = {
+    var r0, r1 : rand_t;
+    var c0, c1 : ctxt_t;
+    
+    r0 <$ drand;
+    r1 <$ drand;
+    
+    (c0, c1) <@ A.find(r0, r1);
+    
+    return J (r0, c0) = J (r1, c1);
+  }
+}.
+
+
+(* 
+  Intermediate property 2 (Single-value Partial Collision Resistance (SPCR)):
+  Extend PCR by requiring c0 = c1.
+*)
+module type Adv_SPCR = {
+  include Adv_PCR
+}.
+
+module SPCR (A : Adv_SPCR) = {
+  proc main() : bool = {
+    var r0, r1 : rand_t;
+    var c0, c1 : ctxt_t;
+    
+    r0 <$ drand;
+    r1 <$ drand;
+    
+    (c0, c1) <@ A.find(r0, r1);
+    
+    return J (r0, c0) = J (r1, c1) /\ c0 = c1;
+  }
+}.
+
+
+(* 
+  Intermediate property 3 (Mutual Collision Resistance after Decryption (MCRD)) 
+  Given two independently generated key pairs, find 
+  two ciphertexts c0 and c1 such that (the first part of) G (dec skpke0 c0, h0) and J (z1, c1) collide.
+*)
+module type Adv_MCRD = {
+  proc find(r0 : rand_t, pk_pke0 : pk_t_pke, sk_pke0 : sk_t_pke, 
+            r1 : rand_t, pk_pke1 : pk_t_pke, sk_pke1 : sk_t_pke) : ctxt_t * ctxt_t
+}.
+
+module MCRD (A : Adv_MCRD) ={
+  proc main() : bool = {
+    var r0, r1 : rand_t;
+    var pk_pke0, pk_pke1 : pk_t_pke;  
+    var sk_pke0, sk_pke1 : sk_t_pke;
+    var c0, c1 : ctxt_t;
+    
+    r0 <$ drand;
+    (pk_pke0, sk_pke0) <$ dkg;
+    
+    r1 <$ drand;
+    (pk_pke1, sk_pke1) <$ dkg;
+    
+    (c0, c1) <@ A.find(r0, pk_pke0, sk_pke0, r1, pk_pke1, sk_pke1);
+    
+    return (G (dec sk_pke0 c0, H pk_pke0)).`1 = J (r1, c1);
+  }
+}.
+
+
+(* 
+  Intermediate property 4 (Single-value Mutual Collision Resistance after Decryption (SMCRD)) 
+  Given two independently generated key pairs, find 
+  two ciphertexts c0 and c1 such that (the first part of) G (dec skpke0 c0, h0) and J (z1, c1) collide.
+*)
+module type Adv_SMCRD = {
+  include Adv_MCRD
+}.
+
+module SMCRD (A : Adv_MCRD) ={
+  proc main() : bool = {
+    var r0, r1 : rand_t;
+    var pk_pke0, pk_pke1 : pk_t_pke;  
+    var sk_pke0, sk_pke1 : sk_t_pke;
+    var c0, c1 : ctxt_t;
+    
+    r0 <$ drand;
+    (pk_pke0, sk_pke0) <$ dkg;
+    
+    r1 <$ drand;
+    (pk_pke1, sk_pke1) <$ dkg;
+    
+    (c0, c1) <@ A.find(r0, pk_pke0, sk_pke0, r1, pk_pke1, sk_pke1);
+    
+    return (G (dec sk_pke0 c0, H pk_pke0)).`1 = J (r1, c1) /\ c0 = c1;
+  }
+}.
+
+section ML_KEM_HL_LEAKBINDKCTPK_ROM.
+
+declare module A <: Adv_LEAKBIND.
+
+
+(* 
+  Alternative version of LEAK-BIND-K,CT-PK property for ML-KEM
+  with concrete procedures inlined, several variables 
+  moved to the module level, and extraneous variables removed.
+*)
+local module LEAK_BINDKCTPK_MLKEM_V = {
+  var pk_pke0, pk_pke1 : pk_t_pke
+  var sk_pke0, sk_pke1 : sk_t_pke
+  var c0, c1 : ctxt_t
+  var h0, h1, z0, z1, r0', r1' : rand_t
+  var p0', p1' : ptxt_t 
+  var k0', k1' : key_t
+  var k0, k1 : key_t option
+  
+  proc main(bc : bindconf) : bool = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;
+    
+    z0 <$ drand;
+    (pk_pke0, sk_pke0) <$ dkg;
+    pk0 <- pk_pke0;
+    sk0 <- (sk_pke0, pk0, H pk0, z0);
+    
+    z1 <$ drand;
+    (pk_pke1, sk_pke1) <$ dkg;
+    pk1 <- pk_pke1;
+    sk1 <- (sk_pke1, pk1, H pk1, z1);
+    
+    (c0, c1) <@ A.find(KCT_Binds_PK, pk0, sk0, pk1, sk1);
+    
+    p0' <- dec sk_pke0 c0;
+    (k0', r0') <- G (p0', H pk0);
+    k0 <- Some (if c0 <> enc r0' pk_pke0 p0' then J (z0, c0) else k0');
+    
+    p1' <- dec sk_pke1 c1;
+    (k1', r1') <- G (p1', H pk1);
+    k1 <- Some (if c1 <> enc r1' pk_pke1 p1' then J (z1, c1) else k1');
+          
+    return is_bindbreak KCT_Binds_PK (oget k0) (oget k1) pk0 pk1 c0 c1;
+  }
+}.
+
+local lemma EqPr_LEAKBINDROM_V_KCTPK &m :
+  Pr[LEAK_BIND(ML_KEM_HL, A).main(KCT_Binds_PK) @ &m : res]
+  =
+  Pr[LEAK_BINDKCTPK_MLKEM_V.main(KCT_Binds_PK) @ &m : res].
+proof.
+have ->:
+  Pr[LEAK_BIND(ML_KEM_HL, A).main(KCT_Binds_PK) @ &m : res]
+  =
+  Pr[LEAK_BIND(ML_KEM_HL_Trim, A).main(KCT_Binds_PK) @ &m : res].
++ byequiv => //.
+  proc.
+  rcondf{1} ^if; 2: rcondt{1} ^if; 1,2: by move=> ?; conseq (: _ ==> true). 
+  rcondf{2} ^if; 2: rcondt{2} ^if; 1,2: by move=> ?; conseq (: _ ==> true). 
+  wp; do 2! call (Eqv_ML_KEM_HL_Trim_Decaps).
+  by call (: true); do 2! call (Eqv_ML_KEM_HL_Trim_Keygen).
+byequiv => //.
+proc. 
+rcondf{1} ^if; 2: rcondt{1} ^if; 1,2: by move=> ?; conseq (: _ ==> true).
+inline{1} ML_KEM_HL_Trim.decaps ML_KEM_HL_Trim.keygen.
+by wp; call (: true); auto. 
+qed.
+
+
+lemma MLKEMHL_LEAKBINDKCTPK_ROM &m : 
+  Pr[LEAK_BIND(ML_KEM_HL, A).main(KCT_Binds_PK) @ &m : res] 
+  <=
+  mu1 drand witness
+  +
+  witness
+  +
+  witness
+  +
+  witness
+  +
+  witness.
+proof.
+rewrite EqPr_LEAKBINDROM_V_KCTPK.
+rewrite Pr[mu_split (LEAK_BINDKCTPK_MLKEM_V.c0 <> enc LEAK_BINDKCTPK_MLKEM_V.r0' LEAK_BINDKCTPK_MLKEM_V.pk_pke0 LEAK_BINDKCTPK_MLKEM_V.p0')]. 
+rewrite Pr[mu_split (LEAK_BINDKCTPK_MLKEM_V.c1 <> enc LEAK_BINDKCTPK_MLKEM_V.r1' LEAK_BINDKCTPK_MLKEM_V.pk_pke1 LEAK_BINDKCTPK_MLKEM_V.p1')] /=.
+rewrite -3!RField.addrA StdOrder.RealOrder.ler_add.
++ rewrite Pr[mu_split (LEAK_BINDKCTPK_MLKEM_V.z0 = LEAK_BINDKCTPK_MLKEM_V.z1)].
+  rewrite StdOrder.RealOrder.ler_add.
+  + byphoare => //.
+    proc.
+    seq 7 : (LEAK_BINDKCTPK_MLKEM_V.z0 = LEAK_BINDKCTPK_MLKEM_V.z1)
+            (mu1 drand witness)
+            1%r
+            _
+            0%r => //. 
+    + wp; rnd; rnd; wp; rnd; rnd; skip => /> z0 z0in.
+      rewrite -(drand_uni _ _ z0in (drand_fu witness)) => _ _. 
+      rewrite StdOrder.RealOrder.ler_eqVlt; left => @/pred1. 
+      by congr; rewrite fun_ext => ?; rewrite (eq_sym z0).
+    by hoare; conseq (: _ ==> true) => // />.
+  by admit.  (* Reduction from SPCR *)
+rewrite StdOrder.RealOrder.ler_add.
++ by admit. (* Reduction from MCRD *)
+rewrite Pr[mu_split (LEAK_BINDKCTPK_MLKEM_V.c1 <> enc LEAK_BINDKCTPK_MLKEM_V.r1' LEAK_BINDKCTPK_MLKEM_V.pk_pke1 LEAK_BINDKCTPK_MLKEM_V.p1')] /=.
+rewrite StdOrder.RealOrder.ler_add.
++ by admit. (* Reduction from MCRD *)
+by admit. (* Reduction from CR of G (and CR of H (after excluding pk_pke are equal) or SCFR of dec) *)
+qed.
+
+
+end section ML_KEM_HL_LEAKBINDKCTPK_ROM.
+
+
+

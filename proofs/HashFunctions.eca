@@ -20,4 +20,3 @@ module CR (A : Adv_CR) = {
     return x' <> x /\ f x' = f x;
   }
 }.
-
