@@ -113,6 +113,24 @@ clone import HashFunctions as H_HF with
   op f <- H
   
   proof *.
+
+(* Definitions and properties for G as a (non-keyed) hash function *)
+clone import HashFunctions as G_HF with
+  type in_t <- ptxt_t * rand_t,
+  type out_t <- key_t * rand_t,
+  
+  op f <- G
+  
+  proof *.
+  
+(* Definitions and properties for J as a (non-keyed) hash function *)
+clone import HashFunctions as J_HF with
+  type in_t <- rand_t * ctxt_t,
+  type out_t <- key_t,
+  
+  op f <- J
+  
+  proof *.
  
 (* Definitions and properties for KEMs with types as required for ML-KEM *)
 clone import KeyEncapsulationMechanisms as KEMs with
@@ -446,7 +464,62 @@ module SMCRD (A : Adv_MCRD) ={
   }
 }.
 
-section ML_KEM_HL_LEAKBINDKCTPK_ROM.
+
+(* 
+  Intermediate property 5 (First element Collision Resistance after Decryption (FCRD)) 
+  Given two independently generated key pairs, find 
+  two ciphertexts c0 and c1 such that (the first part of) 
+  G (dec skpke0 c0, h0) and G (dec skpke1 c1, h1) collide.
+*)
+module type Adv_FCRD = {
+  proc find(pk_pke0 : pk_t_pke, sk_pke0 : sk_t_pke, pk_pke1 : pk_t_pke, sk_pke1 : sk_t_pke) : ctxt_t * ctxt_t
+}.
+
+module FCRD (A : Adv_FCRD) ={
+  proc main() : bool = {
+    var r0, r1 : rand_t;
+    var pk_pke0, pk_pke1 : pk_t_pke;  
+    var sk_pke0, sk_pke1 : sk_t_pke;
+    var c0, c1 : ctxt_t;
+    
+    (pk_pke0, sk_pke0) <$ dkg;
+    (pk_pke1, sk_pke1) <$ dkg;
+    
+    (c0, c1) <@ A.find(pk_pke0, sk_pke0, pk_pke1, sk_pke1);
+    
+    return (G (dec sk_pke0 c0, H pk_pke0)).`1 = (G (dec sk_pke1 c1, H pk_pke1)).`1; 
+  }
+}.
+
+(* 
+  Intermediate property 5 (Single-value First-element Collision Resistance after Decryption (SFCRD))
+  As FCRD, but with the additional requirement that the ciphertexts are equal
+*)
+module type Adv_SFCRD = {
+  include Adv_FCRD
+}.
+
+module SFCRD (A : Adv_SFCRD) ={
+  proc main() : bool = {
+    var pk_pke0, pk_pke1 : pk_t_pke;  
+    var sk_pke0, sk_pke1 : sk_t_pke;
+    var c0, c1 : ctxt_t;
+    
+    (pk_pke0, sk_pke0) <$ dkg;
+    (pk_pke1, sk_pke1) <$ dkg;
+    
+    (c0, c1) <@ A.find(pk_pke0, sk_pke0, pk_pke1, sk_pke1);
+    
+    return (G (dec sk_pke0 c0, H pk_pke0)).`1 = (G (dec sk_pke1 c1, H pk_pke1)).`1 /\ c0 = c1; 
+  }
+}.
+
+section.
+
+
+end section.
+
+section ML_KEM_HL_LEAKBINDKCTPK.
 
 declare module A <: Adv_LEAKBIND.
 
@@ -516,48 +589,289 @@ by wp; call (: true); auto.
 qed.
 
 
-lemma MLKEMHL_LEAKBINDKCTPK_ROM &m : 
+local module R_SPCR_LEAKBIND : Adv_SPCR = {
+  proc find(r0 : rand_t, r1 : rand_t) : ctxt_t * ctxt_t  = {
+    var pk_pke0, pk_pke1 : pk_t_pke;
+    var sk_pke0, sk_pke1 : sk_t_pke;
+    var c0, c1 : ctxt_t;
+    
+    (pk_pke0, sk_pke0) <$ dkg;
+    (pk_pke1, sk_pke1) <$ dkg;
+    
+    (c0, c1) <@ A.find(KCT_Binds_PK, 
+                        pk_pke0, (sk_pke0, pk_pke0, H pk_pke0, r0), 
+                        pk_pke1, (sk_pke1, pk_pke1, H pk_pke1, r1));
+    
+    return (c0, c1);
+  }
+}.
+
+
+local module R_SMCRD_LEAKBIND0 : Adv_SMCRD = {
+  proc find(r0 : rand_t, pk_pke0 : pk_t_pke, sk_pke0 : sk_t_pke, r1 : rand_t, pk_pke1 : pk_t_pke, sk_pke1 : sk_t_pke) : ctxt_t * ctxt_t  = {
+    var c0, c1 : ctxt_t;
+    
+    (c0, c1) <@ A.find(KCT_Binds_PK, pk_pke0, (sk_pke0, pk_pke0, H pk_pke0, r0), pk_pke1, (sk_pke1, pk_pke1, H pk_pke1, r1));
+    
+    return (c0, c1);
+  }
+}.
+
+local module R_SMCRD_LEAKBIND1 : Adv_SMCRD = {
+  proc find(r0 : rand_t, pk_pke0 : pk_t_pke, sk_pke0 : sk_t_pke, r1 : rand_t, pk_pke1 : pk_t_pke, sk_pke1 : sk_t_pke) : ctxt_t * ctxt_t  = {
+    var c0, c1 : ctxt_t;
+    
+    (c0, c1) <@ A.find(KCT_Binds_PK, pk_pke1, (sk_pke1, pk_pke1, H pk_pke1, r1), pk_pke0, (sk_pke0, pk_pke0, H pk_pke0, r0));
+    
+    return (c1, c0);
+  }
+}.
+
+
+local module R_SFCRD_LEAKBIND : Adv_SFCRD = {
+  proc find(pk_pke0 : pk_t_pke, sk_pke0 : sk_t_pke, pk_pke1 : pk_t_pke, sk_pke1 : sk_t_pke) : ctxt_t * ctxt_t = {
+    var r0, r1 : rand_t;
+    var c0, c1 : ctxt_t;
+    
+    r0 <$ drand; 
+    r1 <$ drand;
+    
+    (c0, c1) <@ A.find(KCT_Binds_PK, pk_pke0, (sk_pke0, pk_pke0, H pk_pke0, r0), pk_pke1, (sk_pke1, pk_pke1, H pk_pke1, r1));
+    
+    return (c0, c1);
+  }
+}.
+
+
+local lemma MLKEMHL_LEAKBINDKCTPK &m : 
   Pr[LEAK_BIND(ML_KEM_HL, A).main(KCT_Binds_PK) @ &m : res] 
   <=
-  mu1 drand witness
+  (*mu1 drand witness +*)
+  Pr[SPCR(R_SPCR_LEAKBIND).main() @ &m : res]
   +
-  witness
+  Pr[SMCRD(R_SMCRD_LEAKBIND1).main() @ &m : res]
   +
-  witness
+  Pr[SMCRD(R_SMCRD_LEAKBIND0).main() @ &m : res]
   +
-  witness
-  +
-  witness.
+  Pr[SFCRD(R_SFCRD_LEAKBIND).main() @ &m : res].
 proof.
 rewrite EqPr_LEAKBINDROM_V_KCTPK.
 rewrite Pr[mu_split (LEAK_BINDKCTPK_MLKEM_V.c0 <> enc LEAK_BINDKCTPK_MLKEM_V.r0' LEAK_BINDKCTPK_MLKEM_V.pk_pke0 LEAK_BINDKCTPK_MLKEM_V.p0')]. 
 rewrite Pr[mu_split (LEAK_BINDKCTPK_MLKEM_V.c1 <> enc LEAK_BINDKCTPK_MLKEM_V.r1' LEAK_BINDKCTPK_MLKEM_V.pk_pke1 LEAK_BINDKCTPK_MLKEM_V.p1')] /=.
 rewrite -3!RField.addrA StdOrder.RealOrder.ler_add.
-+ rewrite Pr[mu_split (LEAK_BINDKCTPK_MLKEM_V.z0 = LEAK_BINDKCTPK_MLKEM_V.z1)].
-  rewrite StdOrder.RealOrder.ler_add.
-  + byphoare => //.
-    proc.
-    seq 7 : (LEAK_BINDKCTPK_MLKEM_V.z0 = LEAK_BINDKCTPK_MLKEM_V.z1)
-            (mu1 drand witness)
-            1%r
-            _
-            0%r => //. 
-    + wp; rnd; rnd; wp; rnd; rnd; skip => /> z0 z0in.
-      rewrite -(drand_uni _ _ z0in (drand_fu witness)) => _ _. 
-      rewrite StdOrder.RealOrder.ler_eqVlt; left => @/pred1. 
-      by congr; rewrite fun_ext => ?; rewrite (eq_sym z0).
-    by hoare; conseq (: _ ==> true) => // />.
-  by admit.  (* Reduction from SPCR *)
++ (* Reduction from SPCR *)
+  byequiv => //.
+  proc.  
+  swap{1} [13..14] -1.
+  wp -2 3.
+  conseq (: _ 
+            ==>
+               LEAK_BINDKCTPK_MLKEM_V.c0{1} = c0{2}
+            /\ LEAK_BINDKCTPK_MLKEM_V.c1{1} = c1{2}
+            /\ LEAK_BINDKCTPK_MLKEM_V.z0{1} = r0{2}
+            /\ LEAK_BINDKCTPK_MLKEM_V.z1{1} = r1{2}); 1: by move => /> /#. 
+  inline{2} 3.
+  swap{1} 5 -3.
+  by wp; call (: true); auto.
 rewrite StdOrder.RealOrder.ler_add.
-+ by admit. (* Reduction from MCRD *)
++ (* Reduction from MCRD *)
+  byequiv => //.
+  proc.
+  inline{2} 5.
+  wp -4 -1 => /=.
+  conseq (: _ 
+            ==>
+               LEAK_BINDKCTPK_MLKEM_V.c0{1} = c00{2}
+            /\ LEAK_BINDKCTPK_MLKEM_V.c1{1} = c10{2}
+            /\ LEAK_BINDKCTPK_MLKEM_V.z0{1} = r1{2}
+            /\ LEAK_BINDKCTPK_MLKEM_V.pk_pke1{1} = pk1{1}
+            /\ LEAK_BINDKCTPK_MLKEM_V.pk_pke1{1} = pk_pke0{2}
+            /\ LEAK_BINDKCTPK_MLKEM_V.sk_pke1{1} = sk_pke0{2}); 1: by move => /> /#.
+  swap{2} [1..2] 2.
+  by wp; call (: true); auto. 
 rewrite Pr[mu_split (LEAK_BINDKCTPK_MLKEM_V.c1 <> enc LEAK_BINDKCTPK_MLKEM_V.r1' LEAK_BINDKCTPK_MLKEM_V.pk_pke1 LEAK_BINDKCTPK_MLKEM_V.p1')] /=.
 rewrite StdOrder.RealOrder.ler_add.
-+ by admit. (* Reduction from MCRD *)
-by admit. (* Reduction from CR of G (and CR of H (after excluding pk_pke are equal) or SCFR of dec) *)
++ byequiv => //.
+  proc.
+  swap{1} [13..14] -3.
+  wp -4 5.
+  conseq (: _ 
+            ==>
+               LEAK_BINDKCTPK_MLKEM_V.c0{1} = c0{2}
+            /\ LEAK_BINDKCTPK_MLKEM_V.c1{1} = c1{2}
+            /\ LEAK_BINDKCTPK_MLKEM_V.z1{1} = r1{2}
+            /\ LEAK_BINDKCTPK_MLKEM_V.pk_pke0{1} = pk0{1}
+            /\ LEAK_BINDKCTPK_MLKEM_V.pk_pke0{1} = pk_pke0{2}
+            /\ LEAK_BINDKCTPK_MLKEM_V.sk_pke0{1} = sk_pke0{2}); 1: by move => /> /#.
+  inline{2} 5.
+  by wp; call (: true); auto.
+(* Reduction from SFCRD *)
+byequiv => //.
+proc.
+wp -6 3.
+conseq (: _ 
+          ==>
+             LEAK_BINDKCTPK_MLKEM_V.c0{1} = c0{2}
+          /\ LEAK_BINDKCTPK_MLKEM_V.c1{1} = c1{2}
+          /\ LEAK_BINDKCTPK_MLKEM_V.pk_pke0{1} = pk0{1}
+          /\ LEAK_BINDKCTPK_MLKEM_V.pk_pke0{1} = pk_pke0{2}
+          /\ LEAK_BINDKCTPK_MLKEM_V.pk_pke1{1} = pk1{1}
+          /\ LEAK_BINDKCTPK_MLKEM_V.pk_pke1{1} = pk_pke1{2}
+          /\ LEAK_BINDKCTPK_MLKEM_V.sk_pke0{1} = sk_pke0{2}
+          /\ LEAK_BINDKCTPK_MLKEM_V.sk_pke1{1} = sk_pke1{2}); 1: by move => /> /#.
+inline{2} 3. 
+swap{2} 7 -6; swap{2} 8 -5.         
+by wp; call (: true); auto.
 qed.
 
+(* from CR of G (and CR of H (after excluding pk_pke are equal) or SCFR of dec) *)
+end section ML_KEM_HL_LEAKBINDKCTPK.
 
-end section ML_KEM_HL_LEAKBINDKCTPK_ROM.
 
 
 
+
+(* 
+  Now, try to reduce further using known/established properties where possible.
+  Afterward, use ROM bound on these known/established properties.
+  If cannot reduce further, try to directly bound in ROM (and then use these bounds).
+*)
+
+(* SPCR kfrom CR, barring equality of sampled seeds *)
+module R_CR_SPCR (A : Adv_SPCR) : J_HF.Adv_CR = {
+  proc find() : (rand_t * ctxt_t) * (rand_t * ctxt_t) = {
+    var r0, r1 : rand_t;
+    var c0, c1 : ctxt_t;
+    
+    r0 <$ drand;
+    r1 <$ drand;
+    
+    (c0, c1) <@ A.find(r0, r1);
+    
+    return ((r0, c1), (r1, c1)); 
+  }
+}.
+
+section CR_SPCR.
+
+declare module A <: Adv_SPCR.
+
+local module SPCR_V = { 
+  var r0, r1 : rand_t
+    
+  proc main() : bool = {
+    var c0, c1 : ctxt_t;
+    
+    r0 <$ drand;
+    r1 <$ drand;
+    
+    (c0, c1) <@ A.find(r0, r1);
+    
+    return J (r0, c0) = J (r1, c1) /\ c0 = c1;
+  }
+}.
+ 
+lemma Bnd_SPCR_CR &m:
+  Pr[SPCR(A).main() @ &m : res] <= mu1 drand witness + Pr[J_HF.CR(R_CR_SPCR(A)).main() @ &m : res].
+proof.
+rewrite (: Pr[SPCR(A).main() @ &m : res] = Pr[SPCR_V.main() @ &m : res]). 
++ by byequiv => //; sim.
+rewrite Pr[mu_split (SPCR_V.r0 = SPCR_V.r1)].
+rewrite StdOrder.RealOrder.ler_add.
++ byphoare => //.
+  proc.
+  seq 2 : (SPCR_V.r0 = SPCR_V.r1)
+          (mu1 drand witness)
+          1%r
+          _
+          0%r => //. 
+  + rnd; rnd; skip => /> r0 r0in.
+    rewrite -(drand_uni _ _ r0in (drand_fu witness)). 
+    rewrite StdOrder.RealOrder.ler_eqVlt; left => @/pred1. 
+    by congr; rewrite fun_ext => ?; rewrite (eq_sym r0).
+  by hoare; conseq (: _ ==> true) => // />.
+byequiv => //.
+proc.
+inline{2} R_CR_SPCR(A).find.
+wp; call (: true).
+by auto => /> /#. 
+qed.
+
+end section CR_SPCR.
+
+
+(* SFCRD of CR of G (excluding possibility of H colliding on independently sampled public keys) *)
+module CR_KG_H = {
+  proc main() = {
+    var pk_pke0, pk_pke1 : pk_t_pke;  
+    var sk_pke0, sk_pke1 : sk_t_pke;
+    
+    (pk_pke0, sk_pke0) <$ dkg;
+    (pk_pke1, sk_pke1) <$ dkg;
+    
+    return H pk_pke0 = H pk_pke1;
+  }
+}.
+(*
+module R_CR_SFCRD (A : Adv_SFCRD) : G_HF.Adv_CR = {
+  proc find() : (ptxt_t * rand_t) * (ptxt_t * rand_t) = {
+    var pk_pke0, pk_pke1 : pk_t_pke;  
+    var sk_pke0, sk_pke1 : sk_t_pke;
+    var c0, c1 : ctxt_t;
+    
+    (pk_pke0, sk_pke0) <$ dkg;
+    (pk_pke1, sk_pke1) <$ dkg;
+    
+    (c0, c1) <@ A.find(pk_pke0, sk_pke0, pk_pke1, sk_pke1);
+    
+    return ((dec sk_pke0 c0, H pk_pke0), (dec sk_pke1 c1, H pk_pke1)); 
+  }
+}.
+
+section CR_SFCRD.
+
+declare module A <: Adv_SFCRD.
+declare axiom A_find_ll : islossless A.find.
+
+local module SFCRD_V = { 
+  var pk_pke0, pk_pke1 : pk_t_pke
+    
+  proc main() : bool = {    
+    var sk_pke0, sk_pke1 : sk_t_pke;
+    var c0, c1 : ctxt_t;
+    
+    (pk_pke0, sk_pke0) <$ dkg;
+    (pk_pke1, sk_pke1) <$ dkg;
+    
+    (c0, c1) <@ A.find(pk_pke0, sk_pke0, pk_pke1, sk_pke1);
+    
+    return (G (dec sk_pke0 c0, H pk_pke0)).`1 = (G (dec sk_pke1 c1, H pk_pke1)).`1 /\ c0 = c1; 
+  }
+}.
+
+ 
+lemma Bnd_SFCRD_CR &m:
+  Pr[SFCRD(A).main() @ &m : res] 
+  <= 
+  Pr[CR_KG_H.main() @ &m : res] 
+  + 
+  Pr[G_HF.CR(R_CR_SFCRD(A)).main() @ &m : res].
+proof.
+rewrite (: Pr[SFCRD(A).main() @ &m : res] = Pr[SFCRD_V.main() @ &m : res]). 
++ by byequiv => //; sim.
+rewrite Pr[mu_split (H SFCRD_V.pk_pke0 = H SFCRD_V.pk_pke1)].
+rewrite StdOrder.RealOrder.ler_add.
++ byequiv => //.
+  proc.
+  by call{1} A_find_ll; auto.
+byequiv => //.
+proc.
+inline{2} R_CR_SFCRD(A).find.
+wp; call (: true).
+auto => />. 
+progress. smt(). smt().
+c/#. 
+qed.
+
+end section CR_SPCR.
+*)

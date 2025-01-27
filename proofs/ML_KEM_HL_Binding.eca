@@ -1295,12 +1295,13 @@ lemma MLKEMHL_LEAKBINDKCTPK_ROM &m :
   <=
   mu1 drand witness
   +
-
   witness.
 proof.
 rewrite Pr[mu_split (LEAK_BINDKCTPK_ROM_MLKEM_V.c0 <> enc LEAK_BINDKCTPK_ROM_MLKEM_V.r0' LEAK_BINDKCTPK_ROM_MLKEM_V.pk_pke0 LEAK_BINDKCTPK_ROM_MLKEM_V.p0')]. 
 rewrite Pr[mu_split (LEAK_BINDKCTPK_ROM_MLKEM_V.c1 <> enc LEAK_BINDKCTPK_ROM_MLKEM_V.r1' LEAK_BINDKCTPK_ROM_MLKEM_V.pk_pke1 LEAK_BINDKCTPK_ROM_MLKEM_V.p1')] /=.
 rewrite -RField.addrA StdOrder.RealOrder.ler_add.
++ admit.
+(*
 + rewrite Pr[mu_split (LEAK_BINDKCTPK_ROM_MLKEM_V.z0 = LEAK_BINDKCTPK_ROM_MLKEM_V.z1)].
   rewrite StdOrder.RealOrder.ler_add.
   + byphoare => //.
@@ -1317,6 +1318,7 @@ rewrite -RField.addrA StdOrder.RealOrder.ler_add.
     by hoare; conseq (: _ ==> true) => // />.
   by admit.  
 + by admit.  
+*)
 by admit.
 qed.
 
@@ -1474,7 +1476,6 @@ lemma MLKEMHL_LEAKBINDKCTPK_ROMx2 &m :
   mu1 drand witness
   +
   q_J%r * mu1 dkey witness +
-  .
   
   16%r * mu1 dkey witness.
 proof.
