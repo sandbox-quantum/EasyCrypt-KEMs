@@ -1,0 +1,402 @@
+(* Require/Import *)
+require import AllCore Distr PROM.
+require (*--*) DMap DProd.
+require (*--*) KeyEncapsulationMechanisms.
+require (*--*) HashFunctions.
+
+
+(* Types *)
+(* General *)
+(** Randomness ("seeds") **)
+type rand_t.
+
+
+(* Underlying PKE scheme (K-PKE) *)
+(** Public keys **)
+type pk_t_pke.
+
+(** Secret keys **)
+type sk_t_pke.
+
+(** Plaintexts of underlying PKE scheme **)
+type ptxt_t = rand_t.
+
+(** Ciphertexts **)
+type ctxt_t_pke.
+
+
+(* KEM (ML-KEM *)
+(** Public keys **)
+type pk_t = pk_t_pke.
+
+(** Secret keys  **)
+type sk_t = sk_t_pke * pk_t * rand_t * rand_t.
+
+(** Shared/session keys (symmetric) **)
+type key_t = rand_t.
+
+(** Ciphertexts/Encapsulations **)
+type ctxt_t = ctxt_t_pke.
+
+
+(* Operators *)
+(** Hash function H, used to hash public keys to randomness **)
+op H : pk_t -> rand_t.
+
+(** 
+  Hash function G, used to hash (pairs of) plaintexts and 
+  hashes of public keys (randomness) to (pairs of) keys and randomness 
+**)
+op G : ptxt_t * rand_t -> key_t * rand_t. 
+
+(** 
+  Hash function J, used to hash (pairs of) randomness and ciphertexts 
+  to shared keys (for implicit rejection)
+**)
+op J : rand_t * ctxt_t -> key_t.
+
+(** Operator capturing "derandomized" key generation of underlying PKE scheme **)
+op kg : rand_t -> pk_t_pke * sk_t_pke.
+
+(** Operator capturing "derandomized" encryption function of underlying PKE scheme **)
+op enc : rand_t -> pk_t_pke -> ptxt_t -> ctxt_t_pke.
+
+(** Operator capturing decryption function of underlying PKE scheme **)
+(**
+  By design, the underlying PKE scheme never returns a failure, 
+  so we refrain from using option monad as output.
+**)
+op dec : sk_t_pke -> ctxt_t_pke -> ptxt_t.
+
+
+(* Distributions *)
+(** Proper, full, and uniform distribution over randomness **)
+op [lossless full uniform] drand : rand_t distr.
+
+(** Proper, full, and uniform distribution over (shared) keys **)
+op [lossless full uniform] dkey : key_t distr.
+
+(** Proper, full, and uniform distribution over pairs of (shared) keys and randomness **) 
+op [lossless full uniform] dkeyrand : (key_t * rand_t) distr.
+
+(** `dkeyrand` is equal to the product distribution of dkey and drand **)
+lemma dkeyrand_dprod : dkeyrand = dkey `*` drand.
+proof. 
+rewrite &(eq_funi_ll) ?is_full_funiform ?(dkeyrand_ll, dkeyrand_fu, dkeyrand_uni).
++ by rewrite dprod_fu_auto ?(dkey_fu, drand_fu) /=. 
++ by rewrite dprod_uni 1,2:(dkey_uni, drand_uni). 
+by rewrite dprod_ll_auto 1,2:(dkey_ll, drand_ll). 
+qed.
+
+(** Distribution representing key generation of underlying PKE scheme **)
+op dkg : (pk_t_pke * sk_t_pke) distr = dmap drand kg.
+
+(** `dkg` is a proper distribution **)
+lemma dkg_ll : is_lossless dkg.
+proof. by rewrite dmap_ll drand_ll. qed.
+
+
+(* Clones/Imports *)
+(* Definitions and properties for H as a (non-keyed) hash function *)
+clone import HashFunctions as H_HF with
+  type in_t <- pk_t,
+  type out_t <- rand_t,
+  
+  op f <- H
+  
+  proof *.
+
+(* Definitions and properties for G as a (non-keyed) hash function *)
+clone import HashFunctions as G_HF with
+  type in_t <- ptxt_t * rand_t,
+  type out_t <- key_t * rand_t,
+  
+  op f <- G
+  
+  proof *.
+  
+(* Definitions and properties for J as a (non-keyed) hash function *)
+clone import HashFunctions as J_HF with
+  type in_t <- rand_t * ctxt_t,
+  type out_t <- key_t,
+  
+  op f <- J
+  
+  proof *.
+  
+
+print G.  
+(* Definitions and properties for G as a RO *)
+clone FullRO as G_RO with
+  type in_t <- ptxt_t * rand_t,
+  type out_t <- key_t * rand_t,
+  
+  op dout <- fun _ => dkeyrand
+  
+  
+  proof *.
+
+module RO_G = G_RO.RO.
+  
+  
+(* Definitions and properties for J as a RO *)
+clone FullRO as J_RO with
+  type in_t <- rand_t * ctxt_t,
+  type out_t <- key_t,
+  
+  op dout <- fun _ => dkey
+  
+  
+  proof *.
+
+module RO_J = J_RO.RO.
+
+
+print J_HF.
+print J_RO.
+
+module type Adv_SFCRD_ROM (GO : G_RO.RO) = {
+  proc find(pk_pke0 : pk_t_pke, sk_pke0 : sk_t_pke, pk_pke1 : pk_t_pke, sk_pke1 : sk_t_pke) : ctxt_t * ctxt_t { GO.get }
+}.
+
+module SFCRD_ROM (GO : G_RO.RO) (A : Adv_SFCRD_ROM) = { 
+  proc main() : bool = {    
+    var pk_pke0, pk_pke1 : pk_t_pke;
+    var sk_pke0, sk_pke1 : sk_t_pke;
+    var c0, c1 : ctxt_t;
+    var k0', k1' : key_t;
+    var r0', r1' : rand_t;
+    
+    GO.init();
+    
+    (pk_pke0, sk_pke0) <$ dkg;
+    (pk_pke1, sk_pke1) <$ dkg;
+    
+    (c0, c1) <@ A(GO).find(pk_pke0, sk_pke0, pk_pke1, sk_pke1);
+    
+    (k0', r0') <@ GO.get(dec sk_pke0 c0, H pk_pke0);
+    (k1', r1') <@ GO.get(dec sk_pke1 c1, H pk_pke1);
+    
+    return k0' = k1' /\ c0 = c1; 
+  }
+}.
+
+module CRKG = {
+  proc main() = {
+    var pk_pke0, pk_pke1 : pk_t_pke;
+    var sk_pke0, sk_pke1 : sk_t_pke;
+    
+    (pk_pke0, sk_pke0) <$ dkg;
+    (pk_pke1, sk_pke1) <$ dkg;
+    
+    return H pk_pke0 = H pk_pke1;
+  }
+}.
+
+section. 
+
+declare module A <: Adv_SFCRD_ROM {-RO_G}.
+declare axiom A_find_ll (O <: G_RO.RO {-A}) : 
+  islossless A(O).find.
+  
+declare const q_G : { int | 0 <= q_G } as ge0_qG.
+
+require import FMap.
+(*
+  Split sampling (of pairs) in RO G
+  two independent samplings of each element
+*)
+local module RO_G_SSample = {
+  include var RO_G [-get]
+
+  proc get(ph : ptxt_t * rand_t) : key_t * rand_t = { 
+    var k : key_t;
+    var r : rand_t;
+    
+    k <$ dkey;
+    r <$ drand;
+    if (ph \notin m) {
+      m.[ph] <- (k, r); 
+    }
+    
+    return oget m.[ph];
+  }
+}.
+
+local clone DProd.ProdSampling as DKR with
+  type t1 <- key_t,
+  type t2 <- rand_t
+  
+  proof *.
+
+local equiv Eqv_ROG_ROGSS_Get :
+  RO_G.get ~ RO_G_SSample.get : ={arg, glob RO_G} ==> ={res, glob RO_G}.
+proof.
+proc. 
+wp; conseq (: _ ==> r{1} = (k, r){2}) => //.
+transitivity{1} { r <@ DKR.S.sample(dkey, drand); } 
+                (true ==> ={r})
+                (true ==> r{1} = (k, r){2}) => //.
++ inline{2} DKR.S.sample; auto => />. 
+  by rewrite dkeyrand_dprod.
+transitivity{1} { r <@ DKR.S.sample2(dkey, drand); } 
+                (true ==> ={r})
+                (true ==> r{1} = (k, r){2}) => //.
++ by call (DKR.sample_sample2).
+by inline{1} DKR.S.sample2; auto.
+qed.  
+
+local module SFCRD_ROM_V = { 
+  var pk_pke0, pk_pke1 : pk_t_pke  
+    
+  proc main() : bool = {
+    var sk_pke0, sk_pke1 : sk_t_pke;
+    var c0, c1 : ctxt_t;
+    var k0', k1' : key_t;
+    var r0', r1' : rand_t;
+    
+    RO_G_SSample.init();
+    
+    (pk_pke0, sk_pke0) <$ dkg;
+    (pk_pke1, sk_pke1) <$ dkg;
+    
+    (c0, c1) <@ A(RO_G_SSample).find(pk_pke0, sk_pke0, pk_pke1, sk_pke1);
+    
+    (k0', r0') <@ RO_G_SSample.get(dec sk_pke0 c0, H pk_pke0);
+    (k1', r1') <@ RO_G_SSample.get(dec sk_pke1 c1, H pk_pke1);
+    
+    return k0' = k1' /\ c0 = c1; 
+  }
+}.
+
+lemma testPRG &m  :
+  Pr[SFCRD_ROM(RO_G, A).main() @ &m : res] 
+  <= 
+  Pr[CRKG.main() @ &m : res]
+  +
+  (q_G + 1)%r * mu1 dkey witness.
+proof.
+rewrite (: Pr[SFCRD_ROM(RO_G, A).main() @ &m : res] = Pr[SFCRD_ROM_V.main() @ &m : res]).
++ byequiv => //.
+  proc.
+  do 2! call Eqv_ROG_ROGSS_Get.
+  call (: ={glob RO_G}); 1: by apply Eqv_ROG_ROGSS_Get.
+  inline RO_G.init.
+  by rnd; rnd; wp. 
+rewrite Pr[mu_split (H SFCRD_ROM_V.pk_pke0 = H SFCRD_ROM_V.pk_pke1)].
+rewrite StdOrder.RealOrder.ler_add.
++ byequiv => //. 
+  proc.
+  seq 3 2 : (#pre /\ ={sk_pke0, sk_pke1} /\ SFCRD_ROM_V.pk_pke0{1} = pk_pke0{2} /\  SFCRD_ROM_V.pk_pke1{1} = pk_pke1{2}).
+  inline . auto.
+  conseq (: _ ==> true) => //.
+  inline *; auto.
+  by call{1} (A_find_ll RO_G_SSample). 
+rewrite fromintD RField.mulrDl /=.
+pose bnd := q_G%r * _.
+byphoare => //.
+proc. 
+inline RO_G.init. 
+seq 4 : (   exists (k : key_t) (r r' : rand_t),
+                RO_G.m.[(dec sk_pke0 c0, H SFCRD_ROM_V.pk_pke0)] = Some (k, r)
+             /\ RO_G.m.[(dec sk_pke1 c1, H SFCRD_ROM_V.pk_pke1)] = Some (k, r'))
+        bnd
+        1%r
+        1%r
+        (mu1 dkey witness) => //.
++ admit.               
+case (c0 = c1 /\ H SFCRD_ROM_V.pk_pke0 <> H SFCRD_ROM_V.pk_pke1).
+conseq (:   (forall (k : key_t) (r r' : rand_t),
+                RO_G.m.[(dec sk_pke0 c0, H SFCRD_ROM_V.pk_pke0)] <> Some (k, r)
+             \/ RO_G.m.[(dec sk_pke1 c1, H SFCRD_ROM_V.pk_pke1)] <> Some (k, r'))
+         /\ c0 = c1 /\ H SFCRD_ROM_V.pk_pke0 <> H SFCRD_ROM_V.pk_pke1
+         ==> 
+         k0' = k1') => [/#|/#|].
+inline *.
+sp 1. 
+swap [5..7] -4.
+sp 1.
+swap 2 -1; swap 4 -2.
+seq 2 : true 1%r (mu1 dkey witness) 0%r _ (#pre) => //; 1: by auto.
+case (ph \notin RO_G.m). 
+wp; rnd; rnd; skip => /> &m'. 
+pose ph0 := (dec sk_pke0{m'} c1{m'}, H SFCRD_ROM_V.pk_pke0{m'}).
+pose ph1 := (dec sk_pke1{m'} c1{m'}, H SFCRD_ROM_V.pk_pke1{m'}).
+
+progress.
+rewrite (mu_eq dkey _ 
+               (pred1 (if ph1 \notin G_RO.RO.m{m'} then k00 else
+                         (oget G_RO.RO.m{m'}.[ph1]).`1))). 
+move => k /=. 
+rewrite mem_set (eq_sym _ ph0) /= 2?get_set_eqE 1,2:// 2!oget_some.
+by rewrite get_set_neqE 1:eq_sym 1:// /#.
+case (ph1 \notin G_RO.RO.m{m'}) => phin.
+by rewrite (rnd_funi _ _ _ witness) 1:is_full_funiform ?(dkey_fu, dkey_uni).  
+by rewrite (rnd_funi _ _ _ witness) 1:is_full_funiform ?(dkey_fu, dkey_uni).
+swap 1 1.
+wp; rnd; rnd; skip => /> &m'. progress.
+pose ph0 := (dec sk_pke0{m'} c1{m'}, H SFCRD_ROM_V.pk_pke0{m'}).
+pose ph1 := (dec sk_pke1{m'} c1{m'}, H SFCRD_ROM_V.pk_pke1{m'}).
+case (ph1 \notin G_RO.RO.m{m'}) => phin.
+rewrite (mu_eq dkey _ (pred1 (oget G_RO.RO.m{m'}.[ph0]).`1)). 
+move => k; rewrite get_set_eqE // oget_some /#.
+by rewrite (rnd_funi _ _ _ witness) 1:is_full_funiform ?(dkey_fu, dkey_uni).
+rewrite (mu_eq _ _ pred0). 
+move => k @/pred0 /=. rewrite neqF. 
+smt().
+by rewrite mu0 ge0_mu.
+conseq (: _ ==> false).
+move => /> ? ?; rewrite negb_and; by case => />.
+inline *.
+do 2! (wp; do 2! rnd). 
+wp; skip => /> *. 
+by rewrite /pred1 -/pred0 mu0 ge0_mu.
+qed.  
+
+end section.
+module type Adv_SMCRD_ROM (JO : J_RO.RO) (GO : G_RO.RO) = {
+  proc find(r0 : rand_t, pk_pke0 : pk_t_pke, sk_pke0 : sk_t_pke, 
+            r1 : rand_t, pk_pke1 : pk_t_pke, sk_pke1 : sk_t_pke) : ctxt_t * ctxt_t {JO.get, GO.get}
+}.
+
+module SMCRD_ROM (JO : J_RO.RO) (GO : G_RO.RO) (A : Adv_SMCRD_ROM) = {
+  proc main() : bool = {
+    var r0, r1 : rand_t;
+    var pk_pke0, pk_pke1 : pk_t_pke;  
+    var sk_pke0, sk_pke1 : sk_t_pke;
+    var c0, c1 : ctxt_t;
+   
+    JO.init();
+    GO.init();
+    
+    r0 <$ drand;
+    (pk_pke0, sk_pke0) <$ dkg;
+    
+    r1 <$ drand;
+    (pk_pke1, sk_pke1) <$ dkg;
+    
+    (c0, c1) <@ A(JO, GO).find(r0, pk_pke0, sk_pke0, r1, pk_pke1, sk_pke1);
+    
+    return (G (dec sk_pke0 c0, H pk_pke0)).`1 = J (r1, c1) /\ c0 = c1;
+  }
+}.
+
+
+
+
+module type Adv_CR_ROM (JO : J_RO.RO) = {
+  proc find() : (rand_t * ctxt_t) * (rand_t * ctxt_t) { JO.get }
+}.
+
+module CR_ROM (JO : J_RO.RO) (A : Adv_CR_ROM) = {
+  proc main() : bool = {
+    var x : rand_t * ctxt_t;
+    var x' : rand_t * ctxt_t;
+    
+    JO.init();
+    
+    (x, x') <@ A(JO).find();
+
+    return x' <> x /\ J x' = J x;
+  }
+}.

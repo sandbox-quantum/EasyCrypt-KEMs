@@ -416,7 +416,7 @@ module type Adv_MCRD = {
             r1 : rand_t, pk_pke1 : pk_t_pke, sk_pke1 : sk_t_pke) : ctxt_t * ctxt_t
 }.
 
-module MCRD (A : Adv_MCRD) ={
+module MCRD (A : Adv_MCRD) = {
   proc main() : bool = {
     var r0, r1 : rand_t;
     var pk_pke0, pk_pke1 : pk_t_pke;  
@@ -445,7 +445,7 @@ module type Adv_SMCRD = {
   include Adv_MCRD
 }.
 
-module SMCRD (A : Adv_MCRD) ={
+module SMCRD (A : Adv_SMCRD) ={
   proc main() : bool = {
     var r0, r1 : rand_t;
     var pk_pke0, pk_pke1 : pk_t_pke;  
