@@ -247,10 +247,10 @@ by inline{1} DKR.S.sample2; auto.
 qed.  
 
 local module SFCRD_ROM_V = { 
-  var pk_pke0, pk_pke1 : pk_t_pke  
+  var pk_pke0, pk_pke1 : pk_t_pke
     
   proc main() : bool = {
-    var sk_pke0, sk_pke1 : sk_t_pke;
+    var sk_pke0, sk_pke1 : sk_t_pke;  
     var c0, c1 : ctxt_t;
     var k0', k1' : key_t;
     var r0', r1' : rand_t;
@@ -268,6 +268,155 @@ local module SFCRD_ROM_V = {
     return k0' = k1' /\ c0 = c1; 
   }
 }.
+
+require import FelTactic.
+
+local module Fel = {
+  var c0, c1 : ctxt_t
+  
+  proc main(pk_pke0 : pk_t_pke, sk_pke0 : sk_t_pke, pk_pke1 : pk_t_pke, sk_pke1 : sk_t_pke) = {
+    RO_G_SSample.init();
+    (c0, c1) <@ A(RO_G_SSample).find(pk_pke0, sk_pke0, pk_pke1, sk_pke1);
+  }
+}.
+
+
+local lemma testfel2 &m (pk_pke0, pk_pke1 : pk_t_pke) (sk_pke0, sk_pke1 : sk_t_pke) :
+     H pk_pke0 <> H pk_pke1 
+  => Pr[Fel.main(pk_pke0, sk_pke0, pk_pke1, sk_pke1) @ &m : 
+            fsize RO_G.m <= q_G 
+            /\
+            (exists (k : key_t) (r r' : rand_t),
+                RO_G.m.[(dec sk_pke0 Fel.c0, H pk_pke0)] = Some (k, r)
+             /\ RO_G.m.[(dec sk_pke1 Fel.c0, H pk_pke1)] = Some (k, r'))]
+     <=
+     (q_G * (q_G - 1))%r / 2%r * mu1 dkey witness.
+proof.  
+move=> eqH.
+fel 1 
+    (fsize RO_G.m) 
+    (fun i => i%r * mu1 dkey witness)
+    q_G
+    (exists (c : ctxt_t) (k : key_t) (r r' : rand_t),
+            RO_G.m.[(dec sk_pke0 c, H pk_pke0)] = Some (k, r)
+         /\ RO_G.m.[(dec sk_pke1 c, H pk_pke1)] = Some (k, r'))
+    [ RO_G_SSample.get : (arg \notin RO_G.m) ] => //.
++ by rewrite -StdBigop.Bigreal.BRA.mulr_suml StdBigop.Bigreal.sumidE 1:ge0_qG.
++ progress.
+  by exists Fel.c0{m0} k r r'.
++ inline *. 
+  wp; skip => />. smt(fsize_empty mem_empty).
++ proc.
+  swap 1 1.
+  wp.
+  case (exists c, 
+            (ph = (dec sk_pke0 c, H pk_pke0) /\ (dec sk_pke1 c, H pk_pke1) \in RO_G.m)
+         \/ (ph = (dec sk_pke1 c, H pk_pke1) /\ (dec sk_pke0 c, H pk_pke0) \in RO_G.m)).
+  + wp.
+    rnd; rnd.
+    skip => />.
+    progress.
+    apply (StdOrder.RealOrder.ler_trans (mu dkey (fun x => exists pht, pht \in RO_G.m{hr} /\ (oget RO_G.m{hr}.[pht]).`1 = x))). 
+    apply mu_sub => x.
+    move => -[c0 k0 r1 r'] [].
+    move: H3 => [] [pheq inm].
+      case (ph{hr} <> (dec sk_pke0 c0, Top.H pk_pke0)) => /= pheq2.
+      + by rewrite 2?get_set_neqE /#.
+      rewrite pheq get_set_eqE 1:/# get_set_neqE 1:/# => h1 h2.
+      exists (dec sk_pke1 c0, Top.H pk_pke1). split. smt().
+      rewrite h2 oget_some /= /#.
+    case (ph{hr} <> (dec sk_pke1 c0, Top.H pk_pke1)) => /= pheq2.
+    + by rewrite 2?get_set_neqE /#.
+    rewrite pheq get_set_neqE 1:/# get_set_eqE 1:/# => h1 h2.
+    exists (dec sk_pke0 c0, Top.H pk_pke0). split. smt().
+    by rewrite h1 oget_some /= /#.
+    apply Mu_mem.mu_mem_le_fsize.
+    + move => ph phin.
+    
+      rewrite  (mu_eq _ _ (pred1 (oget RO_G.m{hr}.[ph]).`1)).
+      move => pr. smt(). 
+      by rewrite (dkey_uni _ witness) 1,2:dkey_fu.
+ conseq (: _ ==> false); 1: smt(get_setE).
+  by hoare; 1: smt(StdOrder.RealOrder.mulr_ge0 ge0_mu).
++ move=> c.
+  proc.
+  wp.
+  conseq (: _ ==> true) => //.
+  progress.
+  smt(fsize_set).
++ progress.
+  proc.
+  wp.
+  by conseq (: _ ==> true).
+qed.
+
+(* 
+ Even though returned ciphertexts must be equal,
+ bound is still quadratic in the number of queries because,
+ in the worst case, ALL ciphertxts that decrypt to a SINGLE plaintext
+ under sk0 (note that, due to randomized encryption, there always are a 
+ lot of ciphertexts decrypting to the same plaintext under the same secret key) while,
+ simultaneously, all of these ciphertexts decrypt to DIFFERENT plaintexts under
+ sk1. This means that "the worst case query" to G can still be a collision with
+ all of the other elements in the random oracle...
+ Since the Fel takes a upperbound for each step that does not depend on the 
+ query input, I don't see a way to specify that a worst case query can only occur
+ after having issued a lot of queries htat have probability 0 of colliding.
+ As such, we get a quadratic bound.
+*)
+local lemma testfelopt &m (pk_pke0, pk_pke1 : pk_t_pke) (sk_pke0, sk_pke1 : sk_t_pke) :
+     H pk_pke0 <> H pk_pke1 
+  => Pr[Fel.main(pk_pke0, sk_pke0, pk_pke1, sk_pke1) @ &m : 
+            fsize RO_G.m <= q_G 
+            /\
+            (exists (k : key_t) (r r' : rand_t),
+                RO_G.m.[(dec sk_pke0 Fel.c0, H pk_pke0)] = Some (k, r)
+             /\ RO_G.m.[(dec sk_pke1 Fel.c0, H pk_pke1)] = Some (k, r'))]
+     <=
+     q_G%r * mu1 dkey witness.
+proof.  
+move => neqHpk.
+fel 1 
+    (fsize RO_G.m) 
+    (fun _ => mu1 dkey witness)
+    q_G
+    (exists (c : ctxt_t) (k : key_t) (r r' : rand_t),
+            RO_G.m.[(dec sk_pke0 c, H pk_pke0)] = Some (k, r)
+         /\ RO_G.m.[(dec sk_pke1 c, H pk_pke1)] = Some (k, r'))
+    [ RO_G_SSample.get : (arg \notin RO_G.m) ].
++ progress.
+  rewrite StdBigop.Bigreal.sumr_const. 
+  rewrite List.count_predT.
+  by rewrite List.Range.size_range lez_maxr; 1: smt(ge0_qG). 
++ progress. 
+  exists (Fel.c0{m0}) k r r'.
+  smt().
++ inline *. wp; skip => />.
+  rewrite fsize_empty /=.
+  do ? (rewrite negb_exists /= => ?). 
+  by rewrite negb_and emptyE. 
++ proc.
+  swap 1 1.
+  seq 1 : true 1%r (mu1 dkey witness) 0%r _ #pre => //.
+  + by rnd.
+  rcondt 2; 1: by auto.
+  case (exists c, 
+            (ph = (dec sk_pke0 c, H pk_pke0) /\ (dec sk_pke1 c, H pk_pke1) \in RO_G.m)
+         \/ (ph = (dec sk_pke1 c, H pk_pke1) /\ (dec sk_pke0 c, H pk_pke0) \in RO_G.m)).
+  + wp.
+    admit. 
+  admit.
++ move => c.  
+  proc. 
+  wp.
+  conseq (: _ ==> true) => //.
+  progress.
+  rewrite fsize_set /#.
+move => b c.
+proc.
+wp.
+by conseq (: _ ==> true).
+qed.
 
 lemma testPRG &m  :
   Pr[SFCRD_ROM(RO_G, A).main() @ &m : res] 
@@ -296,16 +445,23 @@ rewrite fromintD RField.mulrDl /=.
 pose bnd := q_G%r * _.
 byphoare => //.
 proc. 
-inline RO_G.init. 
-seq 4 : (   exists (k : key_t) (r r' : rand_t),
+inline RO_G.init.
+swap 1 2.
+seq 2 : true 1%r (bnd + mu1 dkey witness) 0%r _ => //. 
+case (H SFCRD_ROM_V.pk_pke0 = H SFCRD_ROM_V.pk_pke1).
++ conseq (: _ ==> false) => />. 
+  by hoare; 1: smt(ge0_mu ge0_qG).
+seq 2 : (   exists (k : key_t) (r r' : rand_t),
                 RO_G.m.[(dec sk_pke0 c0, H SFCRD_ROM_V.pk_pke0)] = Some (k, r)
              /\ RO_G.m.[(dec sk_pke1 c1, H SFCRD_ROM_V.pk_pke1)] = Some (k, r'))
         bnd
         1%r
         1%r
-        (mu1 dkey witness) => //.
-+ admit.               
-case (c0 = c1 /\ H SFCRD_ROM_V.pk_pke0 <> H SFCRD_ROM_V.pk_pke1).
+        (mu1 dkey witness) 
+        (#pre) => //.
++ by conseq (: _ ==> true).
++ admit.
+case (c0 = c1).
 conseq (:   (forall (k : key_t) (r r' : rand_t),
                 RO_G.m.[(dec sk_pke0 c0, H SFCRD_ROM_V.pk_pke0)] <> Some (k, r)
              \/ RO_G.m.[(dec sk_pke1 c1, H SFCRD_ROM_V.pk_pke1)] <> Some (k, r'))
