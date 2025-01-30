@@ -1,5 +1,5 @@
 (* Require/Import *)
-require import AllCore Distr PROM.
+require import AllCore Distr PROM FMap FelTactic.
 require (*--*) DMap DProd.
 require (*--*) KeyEncapsulationMechanisms.
 require (*--*) HashFunctions.
@@ -152,9 +152,6 @@ clone FullRO as J_RO with
 module RO_J = J_RO.RO.
 
 
-print J_HF.
-print J_RO.
-
 module type Adv_SFCRD_ROM (GO : G_RO.RO) = {
   proc find(pk_pke0 : pk_t_pke, sk_pke0 : sk_t_pke, pk_pke1 : pk_t_pke, sk_pke1 : sk_t_pke) : ctxt_t * ctxt_t { GO.get }
 }.
@@ -201,7 +198,6 @@ declare axiom A_find_ll (O <: G_RO.RO {-A}) :
   
 declare const q_G : { int | 0 <= q_G } as ge0_qG.
 
-require import FMap.
 (*
   Split sampling (of pairs) in RO G
   two independent samplings of each element
@@ -301,7 +297,6 @@ local module SFCRD_ROM_V_Split = {
   }
 }.
 
-require import FelTactic.
 
 local lemma testfel3 &m :
      H SFCRD_ROM_V_Split.pk_pke0{m} <> H SFCRD_ROM_V_Split.pk_pke1{m} 
@@ -374,84 +369,6 @@ fel 1
   by conseq (: _ ==> true).
 qed.
 
-local module Fel = {
-  var c0, c1 : ctxt_t
-  
-  proc main(pk_pke0 : pk_t_pke, sk_pke0 : sk_t_pke, pk_pke1 : pk_t_pke, sk_pke1 : sk_t_pke) = {
-    RO_G_SSample.init();
-    (c0, c1) <@ A(RO_G_SSample).find(pk_pke0, sk_pke0, pk_pke1, sk_pke1);
-  }
-}.
-
-
-local lemma testfel2 &m (pk_pke0, pk_pke1 : pk_t_pke) (sk_pke0, sk_pke1 : sk_t_pke) :
-     H pk_pke0 <> H pk_pke1 
-  => Pr[Fel.main(pk_pke0, sk_pke0, pk_pke1, sk_pke1) @ &m : 
-            fsize RO_G.m <= q_G 
-            /\
-            (exists (k : key_t) (r r' : rand_t),
-                RO_G.m.[(dec sk_pke0 Fel.c0, H pk_pke0)] = Some (k, r)
-             /\ RO_G.m.[(dec sk_pke1 Fel.c0, H pk_pke1)] = Some (k, r'))]
-     <=
-     (q_G * (q_G - 1))%r / 2%r * mu1 dkey witness.
-proof.  
-move=> eqH.
-fel 1 
-    (fsize RO_G.m) 
-    (fun i => i%r * mu1 dkey witness)
-    q_G
-    (exists (c : ctxt_t) (k : key_t) (r r' : rand_t),
-            RO_G.m.[(dec sk_pke0 c, H pk_pke0)] = Some (k, r)
-         /\ RO_G.m.[(dec sk_pke1 c, H pk_pke1)] = Some (k, r'))
-    [ RO_G_SSample.get : (arg \notin RO_G.m) ] => //.
-+ by rewrite -StdBigop.Bigreal.BRA.mulr_suml StdBigop.Bigreal.sumidE 1:ge0_qG.
-+ progress.
-  by exists Fel.c0{m0} k r r'.
-+ inline *. 
-  wp; skip => />. smt(fsize_empty mem_empty).
-+ proc.
-  swap 1 1.
-  wp.
-  case (exists c, 
-            (ph = (dec sk_pke0 c, H pk_pke0) /\ (dec sk_pke1 c, H pk_pke1) \in RO_G.m)
-         \/ (ph = (dec sk_pke1 c, H pk_pke1) /\ (dec sk_pke0 c, H pk_pke0) \in RO_G.m)).
-  + wp.
-    rnd; rnd.
-    skip => />.
-    progress.
-    apply (StdOrder.RealOrder.ler_trans (mu dkey (fun x => exists pht, pht \in RO_G.m{hr} /\ (oget RO_G.m{hr}.[pht]).`1 = x))). 
-    apply mu_sub => x.
-    move => -[c0 k0 r1 r'] [].
-    move: H3 => [] [pheq inm].
-      case (ph{hr} <> (dec sk_pke0 c0, Top.H pk_pke0)) => /= pheq2.
-      + by rewrite 2?get_set_neqE /#.
-      rewrite pheq get_set_eqE 1:/# get_set_neqE 1:/# => h1 h2.
-      exists (dec sk_pke1 c0, Top.H pk_pke1). split. smt().
-      rewrite h2 oget_some /= /#.
-    case (ph{hr} <> (dec sk_pke1 c0, Top.H pk_pke1)) => /= pheq2.
-    + by rewrite 2?get_set_neqE /#.
-    rewrite pheq get_set_neqE 1:/# get_set_eqE 1:/# => h1 h2.
-    exists (dec sk_pke0 c0, Top.H pk_pke0). split. smt().
-    by rewrite h1 oget_some /= /#.
-    apply Mu_mem.mu_mem_le_fsize.
-    + move => ph phin.
-      rewrite  (mu_eq _ _ (pred1 (oget RO_G.m{hr}.[ph]).`1)).
-      move => pr. smt(). 
-      by rewrite (dkey_uni _ witness) 1,2:dkey_fu.
- conseq (: _ ==> false); 1: smt(get_setE).
-  by hoare; 1: smt(StdOrder.RealOrder.mulr_ge0 ge0_mu).
-+ move=> c.
-  proc.
-  wp.
-  conseq (: _ ==> true) => //.
-  progress.
-  smt(fsize_set).
-+ progress.
-  proc.
-  wp.
-  by conseq (: _ ==> true).
-qed.
-
 (* 
  Even though returned ciphertexts must be equal,
  bound is still quadratic in the number of queries because,
@@ -465,7 +382,7 @@ qed.
  query input, I don't see a way to specify that a worst case query can only occur
  after having issued a lot of queries htat have probability 0 of colliding.
  As such, we get a quadratic bound.
-*)
+
 local lemma testfelopt &m (pk_pke0, pk_pke1 : pk_t_pke) (sk_pke0, sk_pke1 : sk_t_pke) :
      H pk_pke0 <> H pk_pke1 
   => Pr[Fel.main(pk_pke0, sk_pke0, pk_pke1, sk_pke1) @ &m : 
@@ -519,6 +436,7 @@ proc.
 wp.
 by conseq (: _ ==> true).
 qed.
+*)
 
 declare axiom A_G_qs :
   hoare[A(RO_G).find : fsize RO_G.m = 0 ==> fsize RO_G.m <= q_G].
@@ -648,6 +566,8 @@ qed.
 
 end section.
 
+
+
 module type Adv_SMCRD_ROM (JO : J_RO.RO) (GO : G_RO.RO) = {
   proc find(r0 : rand_t, pk_pke0 : pk_t_pke, sk_pke0 : sk_t_pke, 
             r1 : rand_t, pk_pke1 : pk_t_pke, sk_pke1 : sk_t_pke) : ctxt_t * ctxt_t {JO.get, GO.get}
@@ -675,6 +595,8 @@ module SMCRD_ROM (JO : J_RO.RO) (GO : G_RO.RO) (A : Adv_SMCRD_ROM) = {
   }
 }.
 
+print J_RO.RO.
+
 
 
 
@@ -684,13 +606,95 @@ module type Adv_CR_ROM (JO : J_RO.RO) = {
 
 module CR_ROM (JO : J_RO.RO) (A : Adv_CR_ROM) = {
   proc main() : bool = {
-    var x : rand_t * ctxt_t;
-    var x' : rand_t * ctxt_t;
+    var x, x' : rand_t * ctxt_t;
+    var y, y' : key_t;
     
     JO.init();
     
     (x, x') <@ A(JO).find();
-
-    return x' <> x /\ J x' = J x;
+    
+    y <@ JO.get(x);
+    y' <@ JO.get(x');
+    
+    return x' <> x /\ y = y';
   }
 }.
+
+
+section.
+
+
+declare module A <: Adv_CR_ROM {-RO_J}.
+
+declare op q_J : { int | 0 <= q_J } as ge0_qJ.
+
+declare axiom A_J_qs :
+  hoare[A(RO_J).find : fsize RO_J.m = 0 ==> fsize RO_J.m <= q_J].
+
+  
+local module CR_ROM_V_Split = {
+  var x, x' : rand_t * ctxt_t
+    
+  proc adv() = {
+    RO_J.init();
+    (x, x') <@ A(RO_J).find();
+  }
+  
+  proc main() : bool = {
+    var y, y' : key_t;
+     
+    adv();
+    
+    y <@ RO_J.get(x);
+    y' <@ RO_J.get(x');
+    
+    return x' <> x /\ y = y';
+  }  
+}.
+
+
+local lemma testPR &m :
+  Pr[CR_ROM_V_Split.adv() @ &m : 
+         fsize RO_J.m <= q_J
+      /\ CR_ROM_V_Split.x \in RO_J.m
+      /\ CR_ROM_V_Split.x <> CR_ROM_V_Split.x'
+      /\ RO_J.m.[CR_ROM_V_Split.x] = RO_J.m.[CR_ROM_V_Split.x']] 
+  <= 
+  (q_J * (q_J - 1))%r / 2%r * mu1 dkey witness.
+proof.
+fel 1
+    (fsize RO_J.m)
+    (fun i => i%r * mu1 dkey witness)
+    q_J
+    (exists rc rc', rc <> rc' /\ rc \in RO_J.m /\ rc' \in RO_J.m /\ RO_J.m.[rc] = RO_J.m.[rc'])
+    [ J_RO.RO.get : (arg \notin RO_J.m) ] => //.
++ by rewrite -StdBigop.Bigreal.BRA.mulr_suml StdBigop.Bigreal.sumidE 1:ge0_qJ.
++ smt().  
++ by inline; wp; skip => />; smt(emptyE fsize_empty).
++ proc.
+  rcondt 2; 1: by conseq (: _ ==> true).
+  wp; rnd; skip => />.
+  progress.
+  apply (StdOrder.RealOrder.ler_trans (mu dkey (fun y => exists x', x' \in RO_J.m{hr} /\ oget RO_J.m{hr}.[x'] = y))). 
+  apply mu_sub => y.
+  move => -[rc rc'] [#] neqrc rcin rcpin.
+  rewrite 2!get_setE.
+  case (rc = x{hr} \/ rc' = x{hr}); last first.
+  smt(get_setE).
+  case => eqx; rewrite eqx /= => h1.
+  exists rc'. smt(get_setE).
+  exists rc. smt(get_setE).
+  print Mu_mem.  
+  apply Mu_mem.mu_mem_le_fsize => rc rcin /=.
+  rewrite (mu_eq _ _ (pred1 (oget RO_J.m{hr}.[rc]))). smt().  
+  by smt(dkey_uni dkey_fu).
++ move => c.  
+  proc.
+  wp; rnd; skip => />; smt(fsize_set).
+move => b c.
+proc. 
+rcondf 2; 1: by conseq (: _ ==> true).
+by rnd.  
+qed.
+
+end section.
