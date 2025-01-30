@@ -124,8 +124,7 @@ clone import HashFunctions as J_HF with
   
   proof *.
   
-
-print G.  
+ 
 (* Definitions and properties for G as a RO *)
 clone FullRO as G_RO with
   type in_t <- ptxt_t * rand_t,
@@ -138,7 +137,7 @@ clone FullRO as G_RO with
 
 module RO_G = G_RO.RO.
   
-  
+    
 (* Definitions and properties for J as a RO *)
 clone FullRO as J_RO with
   type in_t <- rand_t * ctxt_t,
@@ -150,6 +149,32 @@ clone FullRO as J_RO with
   proof *.
 
 module RO_J = J_RO.RO.
+
+module type Adv_FCRD_ROM (GO : G_RO.RO) = {
+  proc find(pk_pke0 : pk_t_pke, sk_pke0 : sk_t_pke, pk_pke1 : pk_t_pke, sk_pke1 : sk_t_pke) : ctxt_t * ctxt_t { GO.get }
+}.
+
+module FCRD_ROM (GO : G_RO.RO) (A : Adv_FCRD_ROM) = { 
+  proc main() : bool = {    
+    var pk_pke0, pk_pke1 : pk_t_pke;
+    var sk_pke0, sk_pke1 : sk_t_pke;
+    var c0, c1 : ctxt_t;
+    var k0', k1' : key_t;
+    var r0', r1' : rand_t;
+    
+    GO.init();
+    
+    (pk_pke0, sk_pke0) <$ dkg;
+    (pk_pke1, sk_pke1) <$ dkg;
+    
+    (c0, c1) <@ A(GO).find(pk_pke0, sk_pke0, pk_pke1, sk_pke1);
+    
+    (k0', r0') <@ GO.get(dec sk_pke0 c0, H pk_pke0);
+    (k1', r1') <@ GO.get(dec sk_pke1 c1, H pk_pke1);
+    
+    return k0' = k1'; 
+  }
+}.
 
 
 module type Adv_SFCRD_ROM (GO : G_RO.RO) = {
@@ -240,7 +265,7 @@ transitivity{1} { r <@ DKR.S.sample2(dkey, drand); }
                 (true ==> r{1} = (k, r){2}) => //.
 + by call (DKR.sample_sample2).
 by inline{1} DKR.S.sample2; auto.
-qed.  
+qed.
 
 (*
 local module SFCRD_ROM_V = { 
@@ -266,6 +291,110 @@ local module SFCRD_ROM_V = {
   }
 }.
 *)
+
+local module FCRD_ROM_V_Split = { 
+  var pk_pke0, pk_pke1 : pk_t_pke
+  var sk_pke0, sk_pke1 : sk_t_pke  
+  var c0, c1 : ctxt_t
+   
+  proc kg() : unit  = {
+    (pk_pke0, sk_pke0) <$ dkg;
+    (pk_pke1, sk_pke1) <$ dkg;
+  }
+  
+  proc adv() : unit = {
+    RO_G_SSample.init();
+    (c0, c1) <@ A(RO_G_SSample).find(pk_pke0, sk_pke0, pk_pke1, sk_pke1);    
+  }
+   
+  proc main() : bool = {
+    var k0', k1' : key_t;
+    var r0', r1' : rand_t;
+    
+    kg();
+    
+    adv();
+     
+    (k0', r0') <@ RO_G_SSample.get(dec sk_pke0 c0, H pk_pke0);
+    (k1', r1') <@ RO_G_SSample.get(dec sk_pke1 c1, H pk_pke1);
+    
+    return k0' = k1'; 
+  }
+}.
+
+
+local lemma testfel2 &m :
+     H FCRD_ROM_V_Split.pk_pke0{m} <> H FCRD_ROM_V_Split.pk_pke1{m} 
+  => Pr[FCRD_ROM_V_Split.adv() @ &m : 
+            fsize RO_G.m <= q_G 
+            /\
+            (exists (k : key_t) (r r' : rand_t),
+                RO_G.m.[(dec FCRD_ROM_V_Split.sk_pke0 FCRD_ROM_V_Split.c0, H FCRD_ROM_V_Split.pk_pke0)] = Some (k, r)
+             /\ RO_G.m.[(dec FCRD_ROM_V_Split.sk_pke1 FCRD_ROM_V_Split.c1, H FCRD_ROM_V_Split.pk_pke1)] = Some (k, r'))]
+     <=
+     (q_G * (q_G - 1))%r / 2%r * mu1 dkey witness.
+proof.  
+move=> eqH.
+fel 1 
+    (fsize RO_G.m) 
+    (fun i => i%r * mu1 dkey witness)
+    q_G
+    (exists (c0 c1 : ctxt_t) (k : key_t) (r r' : rand_t),
+            RO_G.m.[(dec FCRD_ROM_V_Split.sk_pke0 c0, H FCRD_ROM_V_Split.pk_pke0)] = Some (k, r)
+         /\ RO_G.m.[(dec FCRD_ROM_V_Split.sk_pke1 c1, H FCRD_ROM_V_Split.pk_pke1)] = Some (k, r'))
+    [ RO_G_SSample.get : (arg \notin RO_G.m) ]
+    (H FCRD_ROM_V_Split.pk_pke0 <> H FCRD_ROM_V_Split.pk_pke1) => //.
++ by rewrite -StdBigop.Bigreal.BRA.mulr_suml StdBigop.Bigreal.sumidE 1:ge0_qG.
++ progress.
+  by exists FCRD_ROM_V_Split.c0{m0} FCRD_ROM_V_Split.c1{m0} k r r'.
++ inline *. 
+  wp; skip => />. smt(fsize_empty mem_empty).
++ proc.
+  swap 1 1.
+  wp.
+  case (exists c c', 
+            (   ph = (dec FCRD_ROM_V_Split.sk_pke0 c, H FCRD_ROM_V_Split.pk_pke0) 
+             /\ (dec FCRD_ROM_V_Split.sk_pke1 c', H FCRD_ROM_V_Split.pk_pke1) \in RO_G.m)
+         \/ (   ph = (dec FCRD_ROM_V_Split.sk_pke1 c', H FCRD_ROM_V_Split.pk_pke1) 
+             /\ (dec FCRD_ROM_V_Split.sk_pke0 c, H FCRD_ROM_V_Split.pk_pke0) \in RO_G.m)).
+  + wp.
+    rnd; rnd.
+    skip => />.
+    progress.
+    apply (StdOrder.RealOrder.ler_trans (mu dkey (fun x => exists pht, pht \in RO_G.m{hr} /\ (oget RO_G.m{hr}.[pht]).`1 = x))). 
+    apply mu_sub => x.
+    move => -[c0 c1 k0 r1 r'] [].
+    move: H4 => [] [pheq inm].
+      case (ph{hr} <> (dec FCRD_ROM_V_Split.sk_pke0{hr} c0, Top.H FCRD_ROM_V_Split.pk_pke0{hr})) => /= pheq2.
+      + rewrite 2?get_set_neqE /#. 
+      rewrite pheq get_set_eqE 1:/# get_set_neqE 1:/# => h1 h2.
+      exists (dec FCRD_ROM_V_Split.sk_pke1{hr} c1, Top.H FCRD_ROM_V_Split.pk_pke1{hr}). split. smt().
+      rewrite h2 oget_some /= /#.
+    case (ph{hr} <> (dec FCRD_ROM_V_Split.sk_pke1{hr} c1, H FCRD_ROM_V_Split.pk_pke1{hr})) => /= pheq2.
+    + by rewrite 2?get_set_neqE /#.
+    rewrite pheq get_set_neqE 1:/# get_set_eqE 1:/# => h1 h2.
+    exists (dec FCRD_ROM_V_Split.sk_pke0{hr} c0, H FCRD_ROM_V_Split.pk_pke0{hr}). split. smt().
+    by rewrite h1 oget_some /= /#.
+    apply Mu_mem.mu_mem_le_fsize.
+    + move => ph phin.    
+      rewrite  (mu_eq _ _ (pred1 (oget RO_G.m{hr}.[ph]).`1)).
+      move => pr. smt(). 
+      by rewrite (dkey_uni _ witness) 1,2:dkey_fu.
+ conseq (: _ ==> false); 1: smt(get_setE).
+  by hoare; 1: smt(StdOrder.RealOrder.mulr_ge0 ge0_mu).
++ move=> c.
+  proc.
+  wp.
+  conseq (: _ ==> true) => //.
+  progress.
+  smt(fsize_set).
++ progress.
+  proc.
+  wp.
+  by conseq (: _ ==> true).
+qed.
+
+
 
 local module SFCRD_ROM_V_Split = { 
   var pk_pke0, pk_pke1 : pk_t_pke
@@ -457,7 +586,108 @@ by apply A_G_qs.
 qed.
 
 
-lemma testPRG &m  :
+lemma testFCRD_PR &m  :
+  Pr[FCRD_ROM(RO_G, A).main() @ &m : res] 
+  <= 
+  Pr[CRKG.main() @ &m : res]
+  +
+  ((q_G * (q_G - 1))%r / 2%r + 1%r) * mu1 dkey witness.
+proof.
+rewrite (: Pr[FCRD_ROM(RO_G, A).main() @ &m : res] = Pr[FCRD_ROM_V_Split.main() @ &m : res]).
++ byequiv => //.
+  proc.
+  do 2! call Eqv_ROG_ROGSS_Get.
+  inline *.
+  call (: ={glob RO_G}); 1: by apply Eqv_ROG_ROGSS_Get.
+  by wp; rnd; rnd; wp. 
+rewrite Pr[mu_split (H FCRD_ROM_V_Split.pk_pke0 = H FCRD_ROM_V_Split.pk_pke1)].
+rewrite StdOrder.RealOrder.ler_add.
++ byequiv => //. 
+  proc.
+  inline{1} 1.
+  seq 2 2 : (    #pre 
+              /\ FCRD_ROM_V_Split.sk_pke0{1} = sk_pke0{2}
+              /\ FCRD_ROM_V_Split.sk_pke1{1} = sk_pke1{2}
+              /\ FCRD_ROM_V_Split.pk_pke0{1} = pk_pke0{2} 
+              /\ FCRD_ROM_V_Split.pk_pke1{1} = pk_pke1{2}).
+  + by auto. 
+  conseq (: _ ==> true) => //.
+  inline *; auto.
+  by call{1} (A_find_ll RO_G_SSample); wp.
+rewrite RField.mulrDl /=. 
+pose bnd := (_ * _ / _).
+byphoare => //.
+proc. 
+inline FCRD_ROM_V_Split.kg.
+seq 2 : true 1%r (bnd + mu1 dkey witness) 0%r _ => //. 
+case (H FCRD_ROM_V_Split.pk_pke0 = H FCRD_ROM_V_Split.pk_pke1).
++ conseq (: _ ==> false) => />. 
+  by hoare; 1: smt(ge0_mu ge0_qG).
+seq 1 : (   fsize RO_G.m <= q_G /\
+            exists (k : key_t) (r r' : rand_t),
+                RO_G.m.[(dec FCRD_ROM_V_Split.sk_pke0 FCRD_ROM_V_Split.c0, H FCRD_ROM_V_Split.pk_pke0)] = Some (k, r)
+             /\ RO_G.m.[(dec FCRD_ROM_V_Split.sk_pke1 FCRD_ROM_V_Split.c1, H FCRD_ROM_V_Split.pk_pke1)] = Some (k, r'))
+        bnd
+        1%r
+        1%r
+        (mu1 dkey witness) 
+        (#pre /\ fsize RO_G.m <= q_G) => //.
++ conseq (: _ ==> fsize RO_G.m <= q_G) => //.  
+  inline 1.
+  call (A_G_qs_S).
+  inline 1.
+  by wp; skip => />; rewrite fsize_empty.
+call (: H FCRD_ROM_V_Split.pk_pke0 <> H FCRD_ROM_V_Split.pk_pke1
+        ==>
+        fsize RO_G.m <= q_G        
+        /\ exists (k : key_t) (r r' : rand_t),
+          RO_G.m.[dec FCRD_ROM_V_Split.sk_pke0 FCRD_ROM_V_Split.c0, H FCRD_ROM_V_Split.pk_pke0] = Some (k, r) /\
+          RO_G.m.[dec FCRD_ROM_V_Split.sk_pke1 FCRD_ROM_V_Split.c1, H FCRD_ROM_V_Split.pk_pke1] = Some (k, r')).
+bypr => &m' neqHpk.
+by apply (testfel2 &m' neqHpk). 
+by trivial.
+conseq (:   (forall (k : key_t) (r r' : rand_t),
+                RO_G.m.[(dec FCRD_ROM_V_Split.sk_pke0 FCRD_ROM_V_Split.c0, H FCRD_ROM_V_Split.pk_pke0)] <> Some (k, r)
+             \/ RO_G.m.[(dec FCRD_ROM_V_Split.sk_pke1 FCRD_ROM_V_Split.c1, H FCRD_ROM_V_Split.pk_pke1)] <> Some (k, r'))
+         /\ H FCRD_ROM_V_Split.pk_pke0 <> H FCRD_ROM_V_Split.pk_pke1
+         ==> 
+         k0' = k1') => [/#|/#|].
+inline *.
+sp 1. 
+swap [5..7] -4.
+sp 1.
+swap 2 -1; swap 4 -2.
+seq 2 : true 1%r (mu1 dkey witness) 0%r _ (#pre) => //; 1: by auto.
+case (ph \notin RO_G.m). 
+wp; rnd; rnd; skip => /> &m'. 
+pose ph0 := (dec FCRD_ROM_V_Split.sk_pke0{m'} FCRD_ROM_V_Split.c0{m'}, H FCRD_ROM_V_Split.pk_pke0{m'}).
+pose ph1 := (dec FCRD_ROM_V_Split.sk_pke1{m'} FCRD_ROM_V_Split.c1{m'}, H FCRD_ROM_V_Split.pk_pke1{m'}).
+progress.
+rewrite (mu_eq dkey _ 
+               (pred1 (if ph1 \notin G_RO.RO.m{m'} then k00 else
+                         (oget G_RO.RO.m{m'}.[ph1]).`1))). 
+move => k /=. 
+rewrite mem_set (eq_sym _ ph0) /= 2?get_set_eqE 1,2:// 2!oget_some.
+by rewrite get_set_neqE 1:eq_sym 1:// /#.
+case (ph1 \notin G_RO.RO.m{m'}) => phin.
+by rewrite (rnd_funi _ _ _ witness) 1:is_full_funiform ?(dkey_fu, dkey_uni).  
+by rewrite (rnd_funi _ _ _ witness) 1:is_full_funiform ?(dkey_fu, dkey_uni).
+swap 1 1.
+wp; rnd; rnd; skip => /> &m'. progress.
+pose ph0 := (dec FCRD_ROM_V_Split.sk_pke0{m'} FCRD_ROM_V_Split.c0{m'}, H FCRD_ROM_V_Split.pk_pke0{m'}).
+pose ph1 := (dec FCRD_ROM_V_Split.sk_pke1{m'} FCRD_ROM_V_Split.c1{m'}, H FCRD_ROM_V_Split.pk_pke1{m'}).
+case (ph1 \notin G_RO.RO.m{m'}) => phin.
+rewrite (mu_eq dkey _ (pred1 (oget G_RO.RO.m{m'}.[ph0]).`1)). 
+move => k; rewrite get_set_eqE // oget_some /#.
+by rewrite (rnd_funi _ _ _ witness) 1:is_full_funiform ?(dkey_fu, dkey_uni).
+rewrite (mu_eq _ _ pred0). 
+move => k @/pred0 /=. rewrite neqF. 
+smt().
+by rewrite mu0 ge0_mu.
+qed.
+
+
+lemma testSFCRD_Pr &m  :
   Pr[SFCRD_ROM(RO_G, A).main() @ &m : res] 
   <= 
   Pr[CRKG.main() @ &m : res]
@@ -568,6 +798,36 @@ end section.
 
 
 
+
+
+
+module type Adv_MCRD_ROM (JO : J_RO.RO) (GO : G_RO.RO) = {
+  proc find(r0 : rand_t, pk_pke0 : pk_t_pke, sk_pke0 : sk_t_pke, 
+            r1 : rand_t, pk_pke1 : pk_t_pke, sk_pke1 : sk_t_pke) : ctxt_t * ctxt_t {JO.get, GO.get}
+}.
+
+module MCRD_ROM (JO : J_RO.RO) (GO : G_RO.RO) (A : Adv_MCRD_ROM) = {
+  proc main() : bool = {
+    var r0, r1 : rand_t;
+    var pk_pke0, pk_pke1 : pk_t_pke;  
+    var sk_pke0, sk_pke1 : sk_t_pke;
+    var c0, c1 : ctxt_t;
+   
+    JO.init();
+    GO.init();
+    
+    r0 <$ drand;
+    (pk_pke0, sk_pke0) <$ dkg;
+    
+    r1 <$ drand;
+    (pk_pke1, sk_pke1) <$ dkg;
+    
+    (c0, c1) <@ A(JO, GO).find(r0, pk_pke0, sk_pke0, r1, pk_pke1, sk_pke1);
+    
+    return (G (dec sk_pke0 c0, H pk_pke0)).`1 = J (r1, c1);
+  }
+}.
+
 module type Adv_SMCRD_ROM (JO : J_RO.RO) (GO : G_RO.RO) = {
   proc find(r0 : rand_t, pk_pke0 : pk_t_pke, sk_pke0 : sk_t_pke, 
             r1 : rand_t, pk_pke1 : pk_t_pke, sk_pke1 : sk_t_pke) : ctxt_t * ctxt_t {JO.get, GO.get}
@@ -595,9 +855,88 @@ module SMCRD_ROM (JO : J_RO.RO) (GO : G_RO.RO) (A : Adv_SMCRD_ROM) = {
   }
 }.
 
-print J_RO.RO.
+
+section.
+
+declare module A <: Adv_MCRD_ROM {-RO_J, -RO_G}.
+
+declare op q_J : { int | 0 <= q_J } as ge0_qJ.
+declare op q_G : { int | 0 <= q_G } as ge0_qG.
+
+declare axiom A_J_qs :
+  hoare[A(RO_J, RO_G).find : fsize RO_J.m = 0 ==> fsize RO_J.m <= q_J ].
+
+declare axiom A_G_qs :
+  hoare[A(RO_J, RO_G).find : fsize RO_G.m = 0 ==> fsize RO_G.m <= q_G ].
 
 
+module MCRD_ROM_V_Split = {
+  var r0, r1 : rand_t
+  var pk_pke0, pk_pke1 : pk_t_pke  
+  var sk_pke0, sk_pke1 : sk_t_pke
+  var c0, c1 : ctxt_t
+
+  proc adv() = {
+    RO_J.init();
+    RO_G.init();
+    
+    (c0, c1) <@ A(RO_J, RO_G).find(r0, pk_pke0, sk_pke0, r1, pk_pke1, sk_pke1);
+  }
+  
+  proc main() : bool = {
+    r0 <$ drand;
+    (pk_pke0, sk_pke0) <$ dkg;
+    
+    r1 <$ drand;
+    (pk_pke1, sk_pke1) <$ dkg;
+    
+    adv();
+    
+    return (G (dec sk_pke0 c0, H pk_pke0)).`1 = J (r1, c1);
+  }
+}.
+
+
+module SMCRD_ROM_V_Split = {
+  var r0, r1 : rand_t
+  var pk_pke0, pk_pke1 : pk_t_pke  
+  var sk_pke0, sk_pke1 : sk_t_pke
+  var c0, c1 : ctxt_t
+
+  proc adv() = {
+    RO_J.init();
+    RO_G.init();
+    
+    (c0, c1) <@ A(RO_J, RO_G).find(r0, pk_pke0, sk_pke0, r1, pk_pke1, sk_pke1);
+  }
+  
+  proc main() : bool = {
+    r0 <$ drand;
+    (pk_pke0, sk_pke0) <$ dkg;
+    
+    r1 <$ drand;
+    (pk_pke1, sk_pke1) <$ dkg;
+    
+    adv();
+    
+    return (G (dec sk_pke0 c0, H pk_pke0)).`1 = J (r1, c1) /\ c0 = c1;
+  }
+}.
+
+
+lemma felMCRD &m :
+  Pr[MCRD_ROM_V_Split.adv() @ &m : 
+            fsize RO_J.m <= q_J /\ fsize RO_G.m <= q_G 
+            /\
+            (exists (k : key_t) (r r' : rand_t),
+                RO_J.m.[(MCRD_ROM_V_Split.r1, MCRD_ROM_V_Split.c0)] = Some k
+             /\ RO_G.m.[(dec MCRD_ROM_V_Split.sk_pke1 MCRD_ROM_V_Split.c1, H MCRD_ROM_V_Split.pk_pke1)] = Some (k, r'))]
+     <=
+     (q_G * (q_G - 1))%r / 2%r * mu1 dkey witness.
+proof.
+admit.
+qed.
+end section.
 
 
 module type Adv_CR_ROM (JO : J_RO.RO) = {
