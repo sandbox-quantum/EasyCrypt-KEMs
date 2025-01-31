@@ -95,7 +95,6 @@ op dkg : (pk_t_pke * sk_t_pke) distr = dmap drand kg.
 lemma dkg_ll : is_lossless dkg.
 proof. by rewrite dmap_ll drand_ll. qed.
 
-
 (* Clones/Imports *)
 (* Definitions and properties for H as a (non-keyed) hash function *)
 clone import HashFunctions as H_HF with
@@ -863,40 +862,60 @@ declare module A <: Adv_MCRD_ROM {-RO_J, -RO_G}.
 declare op q_J : { int | 0 <= q_J } as ge0_qJ.
 declare op q_G : { int | 0 <= q_G } as ge0_qG.
 
+
 declare axiom A_J_qs :
   hoare[A(RO_J, RO_G).find : fsize RO_J.m = 0 ==> fsize RO_J.m <= q_J ].
 
 declare axiom A_G_qs :
   hoare[A(RO_J, RO_G).find : fsize RO_G.m = 0 ==> fsize RO_G.m <= q_G ].
 
+op q : int = q_J + q_G.
 
-module MCRD_ROM_V_Split = {
-  var r0, r1 : rand_t
-  var pk_pke0, pk_pke1 : pk_t_pke  
-  var sk_pke0, sk_pke1 : sk_t_pke
-  var c0, c1 : ctxt_t
+(*
+  Split sampling (of pairs) in RO G
+  two independent samplings of each element
+*)
+local module RO_G_SSample = {
+  include var RO_G [-get]
 
-  proc adv() = {
-    RO_J.init();
-    RO_G.init();
+  proc get(ph : ptxt_t * rand_t) : key_t * rand_t = { 
+    var k : key_t;
+    var r : rand_t;
     
-    (c0, c1) <@ A(RO_J, RO_G).find(r0, pk_pke0, sk_pke0, r1, pk_pke1, sk_pke1);
-  }
-  
-  proc main() : bool = {
-    r0 <$ drand;
-    (pk_pke0, sk_pke0) <$ dkg;
+    k <$ dkey;
+    r <$ drand;
+    if (ph \notin m) {
+      m.[ph] <- (k, r); 
+    }
     
-    r1 <$ drand;
-    (pk_pke1, sk_pke1) <$ dkg;
-    
-    adv();
-    
-    return (G (dec sk_pke0 c0, H pk_pke0)).`1 = J (r1, c1);
+    return oget m.[ph];
   }
 }.
 
+local clone DProd.ProdSampling as DKR with
+  type t1 <- key_t,
+  type t2 <- rand_t
+  
+  proof *.
 
+local equiv Eqv_ROG_ROGSS_Get :
+  RO_G.get ~ RO_G_SSample.get : ={arg, glob RO_G} ==> ={res, glob RO_G}.
+proof.
+proc. 
+wp; conseq (: _ ==> r{1} = (k, r){2}) => //.
+transitivity{1} { r <@ DKR.S.sample(dkey, drand); } 
+                (true ==> ={r})
+                (true ==> r{1} = (k, r){2}) => //.
++ inline{2} DKR.S.sample; auto => />. 
+  by rewrite dkeyrand_dprod.
+transitivity{1} { r <@ DKR.S.sample2(dkey, drand); } 
+                (true ==> ={r})
+                (true ==> r{1} = (k, r){2}) => //.
++ by call (DKR.sample_sample2).
+by inline{1} DKR.S.sample2; auto.
+qed.
+
+(*
 module SMCRD_ROM_V_Split = {
   var r0, r1 : rand_t
   var pk_pke0, pk_pke1 : pk_t_pke  
@@ -922,7 +941,12 @@ module SMCRD_ROM_V_Split = {
     return (G (dec sk_pke0 c0, H pk_pke0)).`1 = J (r1, c1) /\ c0 = c1;
   }
 }.
+*)
 
+(* 
+  This is the actual bound. 
+  Perhaps we can perform eager sampling on one of the oracles,
+  and then do fel for the other one?
 
 lemma felMCRD &m :
   Pr[MCRD_ROM_V_Split.adv() @ &m : 
@@ -932,10 +956,126 @@ lemma felMCRD &m :
                 RO_J.m.[(MCRD_ROM_V_Split.r1, MCRD_ROM_V_Split.c0)] = Some k
              /\ RO_G.m.[(dec MCRD_ROM_V_Split.sk_pke1 MCRD_ROM_V_Split.c1, H MCRD_ROM_V_Split.pk_pke1)] = Some (k, r'))]
      <=
-     (q_G * (q_G - 1))%r / 2%r * mu1 dkey witness.
+     (q_G * q_J)%r * mu1 dkey witness.
 proof.
-admit.
+*)
+
+local module MCRD_ROM_V_Split = {
+  var r0, r1 : rand_t
+  var pk_pke0, pk_pke1 : pk_t_pke  
+  var sk_pke0, sk_pke1 : sk_t_pke
+  var c0, c1 : ctxt_t
+
+  proc adv() = {
+    RO_J.init();
+    RO_G_SSample.init();
+    
+    (c0, c1) <@ A(RO_J, RO_G_SSample).find(r0, pk_pke0, sk_pke0, r1, pk_pke1, sk_pke1);
+  }
+  
+  proc main() : bool = {
+    r0 <$ drand;
+    (pk_pke0, sk_pke0) <$ dkg;
+    
+    r1 <$ drand;
+    (pk_pke1, sk_pke1) <$ dkg;
+    
+    adv();
+    
+    return (G (dec sk_pke0 c0, H pk_pke0)).`1 = J (r1, c1);
+  }
+}.
+
+local lemma felMCRD &m :
+  Pr[MCRD_ROM_V_Split.adv() @ &m : 
+            fsize RO_J.m <= q_J /\ fsize RO_G.m <= q_G 
+            /\
+            (exists (k : key_t) (r : rand_t),
+                RO_J.m.[(MCRD_ROM_V_Split.r1, MCRD_ROM_V_Split.c0)] = Some k
+             /\ RO_G.m.[(dec MCRD_ROM_V_Split.sk_pke1 MCRD_ROM_V_Split.c1, H MCRD_ROM_V_Split.pk_pke1)] = Some (k, r))]
+     <=
+     (q * (q - 1))%r / 2%r * mu1 dkey witness.
+proof.
+fel 2
+    (fsize RO_J.m + fsize RO_G.m)
+    (fun i => i%r * mu1 dkey witness)
+    q
+    (exists (c c' : ctxt_t) (k : key_t) (r : rand_t),
+        RO_J.m.[(MCRD_ROM_V_Split.r1, c)] = Some k
+     /\ RO_G.m.[(dec MCRD_ROM_V_Split.sk_pke1 c', H MCRD_ROM_V_Split.pk_pke1)] = Some (k, r))
+    [ J_RO.RO.get : (arg \notin J_RO.RO.m); RO_G_SSample.get : (arg \notin G_RO.RO.m)].
++ rewrite -StdBigop.Bigreal.BRA.mulr_suml StdBigop.Bigreal.sumidE 2://. 
+  by rewrite /q StdOrder.IntOrder.addr_ge0 1:ge0_qJ 1:ge0_qG. 
++ progress.
+  by exists MCRD_ROM_V_Split.c0{m0} MCRD_ROM_V_Split.c1{m0} k r.
++ by rewrite StdOrder.IntOrder.ler_add.  
++ inline *.
+  wp; skip => />.
+  rewrite 2!fsize_empty /=.
+  smt(mem_empty).
++ proc.
+  rcondt 3; 1: by auto. 
+  swap 1 1; wp; rnd; rnd; skip => />.
+  progress.
+  apply (StdOrder.RealOrder.ler_trans (mu dkey (fun x => exists rc, rc \in RO_J.m{hr} /\ oget RO_J.m{hr}.[rc] = x))). 
+  apply mu_sub => x.
+  move => -[c0 c1 k0 r1] [].
+  case (ph{hr} <> (dec MCRD_ROM_V_Split.sk_pke1{hr} c1, Top.H MCRD_ROM_V_Split.pk_pke1{hr})) => /= pheq2.
+  + by rewrite 2?get_set_neqE /#. 
+  rewrite pheq2 get_set_eqE 1:/#.  
+  move => h1 h2.
+  by exists (MCRD_ROM_V_Split.r1{hr}, c0) => /#. 
+  apply (StdOrder.RealOrder.ler_trans ((fsize J_RO.RO.m{hr})%r * mu1 dkey witness)).
+  apply Mu_mem.mu_mem_le_fsize.
+    + move => rc rcin.    
+      rewrite  (mu_eq _ _ (pred1 (oget RO_J.m{hr}.[rc]))).
+      move => k. smt(). 
+      by rewrite (dkey_uni _ witness) 1,2:dkey_fu.
+  search fsize 0.
+  elim/fmapW: (G_RO.RO.m{hr}). 
+  smt(fsize_empty). 
+  move=> m k0 v knin.
+  rewrite fsize_set /b2i.
+  rewrite -mem_fdom knin /=.
+  smt(ge0_mu). 
++ move => c.
+  proc.
+  by wp; rnd; rnd; skip => />; smt(fsize_set).
++ move => b c.
+  proc.
+  by wp; rnd; rnd; skip => />; smt(fsize_set).
++ proc.
+  rcondt 2; 1: by auto.
+  wp; rnd; skip => />.
+  progress.
+  apply (StdOrder.RealOrder.ler_trans (mu dkey (fun x => exists ph, ph \in RO_G.m{hr} /\ (oget RO_G.m{hr}.[ph]).`1 = x))). 
+  apply mu_sub => k.
+  move => -[c0 c1 k0 r0] [].
+  case (x{hr} <> (MCRD_ROM_V_Split.r1{hr}, c0)) => /= xneq.
+  + by rewrite 2?get_set_neqE /#. 
+  rewrite xneq get_set_eqE 1:/#.  
+  move => h1 h2.
+  by exists (dec MCRD_ROM_V_Split.sk_pke1{hr} c1, Top.H MCRD_ROM_V_Split.pk_pke1{hr}) => /#. 
+  apply (StdOrder.RealOrder.ler_trans ((fsize G_RO.RO.m{hr})%r * mu1 dkey witness)).
+  apply Mu_mem.mu_mem_le_fsize.
+    + move => ph phin.    
+      rewrite  (mu_eq _ _ (pred1 (oget RO_G.m{hr}.[ph]).`1)).
+      move => k. smt(). 
+      by rewrite (dkey_uni _ witness) 1,2:dkey_fu.
+  elim/fmapW: (J_RO.RO.m{hr}). 
+  smt(fsize_empty). 
+  move=> m k0 v knin.
+  rewrite fsize_set /b2i.
+  rewrite -mem_fdom knin /=.
+  smt(ge0_mu). 
++ move => c.
+  proc.
+  by wp; rnd; skip => />; smt(fsize_set).
++ move => b c.
+  proc.
+  by wp; rnd; skip => />; smt(fsize_set).
 qed.
+
 end section.
 
 
