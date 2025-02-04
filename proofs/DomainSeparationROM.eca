@@ -1,0 +1,82 @@
+(*^
+  This file formalizes a specific form of domain separation
+  that (implicitly) occurs in the binding proofs for ML-KEM.
+  Albeit not the most generic/general, this might later
+  be generalized. 
+^*)
+require import AllCore Distr FMap List PROM FinType.
+
+
+(* First, suppose we have a regular random oracle, as per usual *)
+clone include FullRO. 
+
+(* 
+  Now, assume that, from each input, we can meaningfully extract a 
+  "domain separator" and an "actual input". In effect, such separators split up the domain
+  of the oracle, giving a separate random oracle for each value of the separator.
+  Here, the "separate random oracles" are defined on a domain consisting
+  of the "actual input" (i.e. non-separator part).
+*)  
+type sep_t.
+type ins_t.
+op spl : in_t -> sep_t * ins_t.
+
+(* 
+  Starting off, we consider only two relevant separator values, 
+  which we provide to the oracle on initialization. 
+  (Also, for now, we do not consider any more advanced
+  random oracle functionality (e.g., reprogramming))   
+*)
+module type RO_S2 = {
+  proc init(s0 : sep_t, s1 : sep_t) : unit
+  proc get(x : in_t) : out_t  
+}.
+
+
+module RO_S2 : RO_S2 = {
+  var s0, s1 : sep_t
+  var m0, m1 : (ins_t, out_t) fmap 
+  var mr : (in_t, out_t) fmap
+  
+  proc init(s0 : sep_t, s1 : sep_t) : unit = {
+    m0 <- empty;
+    m1 <- empty;
+    mr <- empty;
+  }
+  
+  proc get(x : in_t) : out_t = {
+    var r, y : out_t;
+    var s : sep_t;
+    var xs : ins_t;
+    
+    (s, xs) <- spl x;
+    
+    r <$ dout x;
+    if (s = s0) {
+      if (xs \notin m0) {
+        m0.[xs] <- r;
+      }
+      y <- oget m0.[xs];
+    } elif (s = s1) {
+      if (xs \notin m1) {
+        m1.[xs] <- r;
+      }
+      y <- oget m1.[xs];
+    } else { (* s <> s0 /\ s <> s1 *)
+      if (x \notin mr) {
+        mr.[x] <- r;
+      }
+      y <- oget mr.[x];
+    }
+    
+    return y;
+  }
+}.
+
+
+(* 
+  Surely though, returning colliding inputs for the two
+  separators is nothign but a special case of doing the same
+  for two independent random oracles
+*)   
+ 

@@ -144,7 +144,6 @@ clone FullRO as J_RO with
   
   op dout <- fun _ => dkey
   
-  
   proof *.
 
 module RO_J = J_RO.RO.
@@ -986,6 +985,7 @@ local module MCRD_ROM_V_Split = {
   }
 }.
 
+
 local lemma felMCRD &m :
   Pr[MCRD_ROM_V_Split.adv() @ &m : 
             fsize RO_J.m <= q_J /\ fsize RO_G.m <= q_G 
@@ -1075,6 +1075,130 @@ fel 2
   proc.
   by wp; rnd; skip => />; smt(fsize_set).
 qed.
+
+require import List.
+local module MCRD_ROM_V_Split_Lazy = {
+  import var MCRD_ROM_V_Split
+  var kl : key_t list
+  
+  module RO_J_L = {
+    include RO_J [-get]
+    var i : int
+    proc get(x : rand_t * ctxt_t) : key_t = {
+      var k : key_t <- witness;
+      (*
+      if (fsize RO_J.m < q_J) {
+        RO_J.set(x, nth witness kl (fsize RO_J.m));
+      }  
+      
+      k <@ RO_J.get(x);
+      *)
+      if (i < q_J) {
+        k <- nth witness kl i;
+        i <- i + 1;
+      }
+      
+      return k;
+    }
+  }
+  
+  proc adv() = {
+    var k : key_t;
+    
+    RO_J_L.init();
+    RO_J_L.i <- 0;
+    
+    kl <- [];
+    while (size kl < q_J) {
+      k <$ dkey;
+      kl <- rcons kl k;
+    }
+    
+    RO_G_SSample.init();
+    
+    (c0, c1) <@ A(RO_J_L, RO_G_SSample).find(r0, pk_pke0, sk_pke0, r1, pk_pke1, sk_pke1);
+  }
+  
+  proc main() : bool = {
+    r0 <$ drand;
+    (pk_pke0, sk_pke0) <$ dkg;
+    
+    r1 <$ drand;
+    (pk_pke1, sk_pke1) <$ dkg;
+    
+    adv();
+    
+    return (G (dec sk_pke0 c0, H pk_pke0)).`1 = J (r1, c1);
+  }
+}.
+
+
+
+local lemma felMCRD_Lazy &m :
+  Pr[MCRD_ROM_V_Split_Lazy.adv() @ &m : 
+            fsize RO_J.m <= q_J /\ fsize RO_G.m <= q_G 
+            /\
+            (exists (k : key_t) (r : rand_t),
+                k \in MCRD_ROM_V_Split_Lazy.kl
+             /\ RO_G.m.[(dec MCRD_ROM_V_Split.sk_pke1 MCRD_ROM_V_Split.c1, H MCRD_ROM_V_Split.pk_pke1)] = Some (k, r))]
+     <=
+     (q_J * q_G)%r * mu1 dkey witness.
+proof.
+fel 5
+    (fsize RO_G.m)
+    (fun _ => q_J%r * mu1 dkey witness)
+    q_G
+    (exists (c' : ctxt_t) (k : key_t) (r : rand_t),
+        k \in MCRD_ROM_V_Split_Lazy.kl
+     /\ RO_G.m.[(dec MCRD_ROM_V_Split.sk_pke1 c', H MCRD_ROM_V_Split.pk_pke1)] = Some (k, r))
+    [ MCRD_ROM_V_Split_Lazy.RO_J_L.get : false; RO_G_SSample.get : (arg \notin G_RO.RO.m)]
+    (MCRD_ROM_V_Split_Lazy.RO_J_L.i <= q_J /\ size MCRD_ROM_V_Split_Lazy.kl = q_J).
++ rewrite StdBigop.Bigreal.BRA.sumri_const 1:ge0_qG.
+  rewrite RField.intmulr /#.
++ progress.
+  by exists MCRD_ROM_V_Split.c1{m0} k r.
++ inline *.
+  wp.
+  while (size MCRD_ROM_V_Split_Lazy.kl <= q_J); 1: by auto => />; smt(size_rcons).
+  wp; skip => />.
+  rewrite ?fsize_empty /=.
+  smt(mem_empty ge0_qJ).
++ trivial.
+  trivial.
++ progress.  
+  proc.
+  wp; skip => />. smt().
++ proc.
+  rcondt 3; 1: by auto. 
+  swap 1 1; wp; rnd; rnd; skip => />.
+  progress.
+  apply (StdOrder.RealOrder.ler_trans (mu dkey (mem MCRD_ROM_V_Split_Lazy.kl{hr}))).
+  apply mu_sub => k.
+  move => -[c' k0 r1] [].
+  case (ph{hr} <> (dec MCRD_ROM_V_Split.sk_pke1{hr} c', Top.H MCRD_ROM_V_Split.pk_pke1{hr})) => /= xneq.
+  + by rewrite 2?get_set_neqE /#. 
+  rewrite xneq get_set_eqE 1:/#.  
+  move => h1 h2 /#. print Mu_mem.
+  rewrite -H3.
+  apply Mu_mem.mu_mem_le_size.
+    + move => x xin.    
+      by rewrite (dkey_uni _ witness) 1,2:dkey_fu.
++ progress.
+  proc.
+  rcondt 3.
+  auto.
+  auto.
+  progress.
+  smt(fsize_set).
+progress.
+proc.
+rcondf 3. auto.
+auto.
+qed.
+
+
+
+
 
 end section.
 
