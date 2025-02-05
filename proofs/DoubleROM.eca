@@ -1114,3 +1114,32 @@ smt(pmax_ge0).
 qed.
 
 end section.
+
+
+
+
+(* 
+  Now, consider a variant of the "Double ROM" CR property 
+  where the adversary is only asked to produce a *single* input x 
+  such that x maps (under the first random oracle) to the
+  same output as another input x' (derived from x) does (under the
+  second random oracle). Here, the deriviation may be anything, i.e.,
+  x' = f(x) for some arbitrary f.
+  
+  This is an abstraction for the binding properties where the binding sources,
+  or mappings thereof, are used as input to the random oracle.
+  Even more abstractly, we might consider an injective function h
+  such that h x, given to the first random oracle, must collide with 
+  f x, given to the second random oracle. (Indeed, the situation without such 
+  an injective h is actually a special case where h is the identity function)
+  
+  Then, the appraoch is:
+  - Eagerly sample the random oracle that is given (as input) the output of the
+    non-injective function.
+  - Use fel over the oracle call that is given (as input) the output of the
+    injective function:
+    > In each iteration, the upperbound on a collision is p_max dout because
+      the input query to the random oracle (taking injective input) has at most
+      one preimage x, for which it must collide with the other random oracle on
+      f x.
+*)
