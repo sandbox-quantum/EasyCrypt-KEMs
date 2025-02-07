@@ -1307,9 +1307,28 @@ by wp; rnd{1}; wp; skip.
 qed.
 
 
-lemma size_behead (s : 'a list) :
-  s <> [] => size (behead s) = size s - 1. by smt().
+lemma size_behead (s : 'a list) : 
+  size (behead s) = if s = [] then 0 else size s - 1.
+proof. by elim: s. qed.
+
+lemma behead_drop (s : 'a list) (n : int) :
+  0 <= n => behead (drop n s) = drop (n + 1) s. 
+proof. by elim: s n => // /#. qed. 
+
+lemma eq_ss (s1 s2 : 'a list) :
+  uniq s1 => mem s1 <= mem s2 => size s2 <= size s1 => perm_eq s1 s2. 
+proof.
+elim: s1 s2 => [| x l ih s2 /= [ninl uql] lemem le1sz]; 1: smt(size_ge0). 
+move: (ih (rem x s2) uql _ _); 1,2: smt(mem_rem_neq size_rem).
+rewrite -(perm_cons x) => peqxc.
+rewrite (perm_eq_trans _ _ _ peqxc) perm_eq_sym perm_to_rem 1:/#.
 qed.
+
+
+lemma uniq_drop (s : 'a list) (n : int) :
+  uniq s => uniq (drop n s). 
+proof. by elim: s n => // /#. qed.
+
 
 local lemma Bnd_CRROMx2Eager1V_CR_RS &m :
   Pr[CR_ROM_x2_M_I_V.cr() @ &m : 
@@ -1333,14 +1352,24 @@ fel 2
   exists CR_ROM_x2_M_I_V.x{m0}. smt().
 + inline.
   wp.
-  while (    dom FullRO1.RO.m = mem (take (card - size l) enum)
-          /\ l = drop (card - size l) enum).
+  while (   (forall x, ! (x \in l) <=> x \in FullRO1.RO.m)   
+         /\ l = drop (card - size l) enum).
 auto. 
-move => &m0 [] /= + + r0 r0in.
-case (l{m0}). smt().
-admit.
- wp; skip => />;
-  smt(mem_empty fsize_empty take0 take_size).  
+move => &m0 [] /= + + r0 r0in -[memdef lval] nem_l.
+rewrite (: head witness l{m0} \notin FullRO1.RO.m{m0}) 1:/# /=. 
+split.
+move => x1. 
+rewrite mem_set; split. 
+move: (memdef x1). 
+smt(mem_head_behead). 
+move: (memdef x1). 
+rewrite -eq_iff => <-. case. smt().
+search head behead. search uniq (::).
+have /# : uniq l{m0} by smt(uniq_drop enum_uniq). 
+rewrite size_behead nem_l /=. 
+rewrite {1}lval behead_drop /#.
+
+ wp; skip => />. progress;   smt(enumP mem_empty fsize_empty take0 take_size).  
 + proc.
   wp; rnd.
   skip => />.
@@ -1363,6 +1392,103 @@ admit.
 progress.
 proc.  
 by wp; rnd; skip => />; smt(fsize_set).
+qed.
+
+local lemma A_RO2_qs :
+  hoare[A(FinEagerRO1.FinRO, FullRO2.RO).find : fsize FullRO2.RO.m = 0 ==> fsize FullRO2.RO.m <= q2]. 
+proof. admit. qed.
+
+lemma Bnd_CRROMx2M &m :
+  Pr[CR_ROM_x2_M(FullRO1.RO, FullRO2.RO, A).main() @ &m : res] 
+  <=
+  (q2 + 1)%r * p_max dout.
+proof.
+have ->: 
+  Pr[CR_ROM_x2_M(FullRO1.RO, FullRO2.RO, A).main() @ &m : res]
+  =
+  Pr[CR_ROM_x2_M_I_V.main() @ &m : res].
++ byequiv (: ={glob A} ==> _) => //.
+  transitivity CR_ROM_x2_M_I_D(FullRO1.RO).main
+               (={glob A} ==> ={res})
+               (={glob A} ==> ={res}) => //.
+  smt().
+  apply T.
+  transitivity CR_ROM_x2_M_I_D(FinEagerRO1.FinRO).main
+               (={glob A} ==> ={res})
+               (={glob A} ==> ={res}) => //.
+  smt().
+  apply S.
+  by apply U.
+rewrite fromintD RField.mulrDl /=.
+byphoare => //.
+proc.
+seq 1 : (   CR_ROM_x2_M_I_V.x \in FullRO2.RO.m 
+         /\ FullRO1.RO.m.[f CR_ROM_x2_M_I_V.x] = FullRO2.RO.m.[CR_ROM_x2_M_I_V.x])
+        (q2%r * p_max dout) 
+        1%r 
+        1%r 
+        (p_max dout) 
+        (forall x, x \in FullRO1.RO.m) => //.
+inline cr.        
+call (: true) => //. 
+inline init.
+wp.
+  while (   (forall x, ! (x \in l) <=> x \in FullRO1.RO.m)   
+         /\ l = drop (card - size l) enum).
+inline; auto. 
+move => &m0 [] /= + + r0 r0in -[memdef lval] nem_l.
+rewrite (: head witness l{m0} \notin FullRO1.RO.m{m0}) 1:/# /=. 
+split.
+move => x1. 
+rewrite mem_set; split. 
+move: (memdef x1). 
+smt(mem_head_behead). 
+move: (memdef x1). 
+rewrite -eq_iff => <-. case. smt().
+have /# : uniq l{m0} by smt(uniq_drop enum_uniq). 
+rewrite size_behead nem_l /=. 
+rewrite {1}lval behead_drop /#.
+ wp; skip => />. progress;   smt(enumP mem_empty fsize_empty take0 take_size).  
+call (: true ==>
+        CR_ROM_x2_M_I_V.x \in FullRO2.RO.m 
+         /\ FullRO1.RO.m.[f CR_ROM_x2_M_I_V.x] = FullRO2.RO.m.[CR_ROM_x2_M_I_V.x]) => //.
++ bypr. 
+  progress.
+  have ->:
+  Pr[CR_ROM_x2_M_I_V.cr() @ &m0 :
+CR_ROM_x2_M_I_V.x \in FullRO2.RO.m 
+         /\ FullRO1.RO.m.[f CR_ROM_x2_M_I_V.x] = FullRO2.RO.m.[CR_ROM_x2_M_I_V.x]]  = 
+  Pr[CR_ROM_x2_M_I_V.cr() @ &m0 : 
+         fsize FullRO2.RO.m <= q2 /\
+      CR_ROM_x2_M_I_V.x \in FullRO2.RO.m 
+         /\ FullRO1.RO.m.[f CR_ROM_x2_M_I_V.x] = FullRO2.RO.m.[CR_ROM_x2_M_I_V.x]]
+        . 
+ byequiv=> //.
+  proc.
+  call (: ={glob A, glob FullRO1.RO, glob FullRO2.RO} /\ FullRO2.RO.m{2} = empty
+          ==>
+          fsize FullRO2.RO.m{2} <= q2 /\ ={res, glob FullRO1.RO, glob FullRO2.RO}).
+  conseq (: ={glob A, glob FullRO1.RO, glob FullRO2.RO} ==> ={res, glob FullRO1.RO, glob FullRO2.RO}) _ A_RO2_qs => //.
+  + smt(fsize_empty). 
+  proc (={glob FullRO1.RO, glob FullRO2.RO}) => //.
+  proc.
+  wp. skip => />.
+  proc. wp; rnd ; skip => />. 
+  inline.
+  wp.
+  while (={l, FullRO1.RO.m}). 
+  by auto. 
+  
+  auto.  
+  by apply (Bnd_CRROMx2Eager1V_CR_RS &m0).  
+sp 1; if => //. 
+rnd. skip => />. 
+progress.
+rewrite (mu_eq _ _ (pred1 (oget FullRO1.RO.m{hr}.[f CR_ROM_x2_M_I_V.x{hr}]))) 1:/#.
+smt(pmax_upper_bound).
+wp; conseq (: _ ==> false). smt(). 
+hoare. progress. smt(pmax_ge0).
+trivial.
 qed.
 
 
