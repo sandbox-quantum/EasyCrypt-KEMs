@@ -1,5 +1,28 @@
 require import AllCore Distr List FMap PROM.
 
+
+lemma size_behead (s : 'a list) : 
+  size (behead s) = if s = [] then 0 else size s - 1.
+proof. by elim: s. qed.
+
+lemma behead_drop (s : 'a list) (n : int) :
+  0 <= n => behead (drop n s) = drop (n + 1) s. 
+proof. by elim: s n => // /#. qed. 
+
+lemma eq_ss (s1 s2 : 'a list) :
+  uniq s1 => mem s1 <= mem s2 => size s2 <= size s1 => perm_eq s1 s2. 
+proof.
+elim: s1 s2 => [| x l ih s2 /= [ninl uql] lemem le1sz]; 1: smt(size_ge0). 
+move: (ih (rem x s2) uql _ _); 1,2: smt(mem_rem_neq size_rem).
+rewrite -(perm_cons x) => peqxc.
+rewrite (perm_eq_trans _ _ _ peqxc) perm_eq_sym perm_to_rem 1:/#.
+qed.
+
+
+lemma uniq_drop (s : 'a list) (n : int) :
+  uniq s => uniq (drop n s). 
+proof. by elim: s n => // /#. qed.
+
 (* 
   Start with simple (most specific and relevant for ML-KEM) case: 
   only input type (potentially) different between ROs and constant/fixed distribution
@@ -1306,30 +1329,6 @@ rcondf{2} ^if; 1: by auto.
 by wp; rnd{1}; wp; skip.
 qed.
 
-
-lemma size_behead (s : 'a list) : 
-  size (behead s) = if s = [] then 0 else size s - 1.
-proof. by elim: s. qed.
-
-lemma behead_drop (s : 'a list) (n : int) :
-  0 <= n => behead (drop n s) = drop (n + 1) s. 
-proof. by elim: s n => // /#. qed. 
-
-lemma eq_ss (s1 s2 : 'a list) :
-  uniq s1 => mem s1 <= mem s2 => size s2 <= size s1 => perm_eq s1 s2. 
-proof.
-elim: s1 s2 => [| x l ih s2 /= [ninl uql] lemem le1sz]; 1: smt(size_ge0). 
-move: (ih (rem x s2) uql _ _); 1,2: smt(mem_rem_neq size_rem).
-rewrite -(perm_cons x) => peqxc.
-rewrite (perm_eq_trans _ _ _ peqxc) perm_eq_sym perm_to_rem 1:/#.
-qed.
-
-
-lemma uniq_drop (s : 'a list) (n : int) :
-  uniq s => uniq (drop n s). 
-proof. by elim: s n => // /#. qed.
-
-
 local lemma Bnd_CRROMx2Eager1V_CR_RS &m :
   Pr[CR_ROM_x2_M_I_V.cr() @ &m : 
          fsize FullRO2.RO.m <= q2
@@ -1490,7 +1489,6 @@ wp; conseq (: _ ==> false). smt().
 hoare. progress. smt(pmax_ge0).
 trivial.
 qed.
-
 
 (*
 (* 
@@ -2097,3 +2095,318 @@ local module CR_ROM_x2_M_Eager1 = {
 *)
 
 end section.
+
+type t.
+
+op g : t -> in_t1.
+op h : t -> in_t2.
+
+module type Adv_CRROMx2MD(RO1 : FullRO1.RO, RO2 : FullRO2.RO) = {
+  proc find() : t {RO1.get, RO2.get} 
+}.
+
+module CR_ROM_x2_MD(RO1 : FullRO1.RO, RO2 : FullRO2.RO, A : Adv_CRROMx2MD) = {
+  proc main() : bool = {
+    var x : t;
+    var y1 : out_t;
+    var y2 : out_t;
+    
+    RO1.init();
+    RO2.init();
+    x <@ A(RO1, RO2).find();
+    y1 <@ RO1.get(g x);
+    y2 <@ RO2.get(h x);
+    
+    return y1 = y2;
+  }
+}.
+
+
+
+section.
+
+
+declare module A <: Adv_CRROMx2MD { -FullRO1.RO, -FullRO2.RO, -FullRO1.FRO}.
+
+declare op q1 : { int | 0 <= q1 } as ge0_q1.
+declare op q2 : { int | 0 <= q2 } as ge0_q2.
+
+
+  
+local module CR_ROM_x2_M_I_D (RO1 : FullRO1.RO) = {
+  proc distinguish() = {
+    var x : t;
+    var y1 : out_t;
+    var y2 : out_t;
+    
+    x <@ A(RO1, FullRO2.RO).find();
+    y1 <@ RO1.get(g x);
+    y2 <@ FullRO2.RO.get(h x);
+    
+    return y1 = y2;
+  }
+   
+  proc main() = {        
+    var b : bool;
+    
+    RO1.init();
+    FullRO2.RO.init();
+    
+    b <@ distinguish();
+    
+    return b;
+  }  
+}.
+
+
+local equiv T :
+  CR_ROM_x2_MD(FullRO1.RO, FullRO2.RO, A).main ~ CR_ROM_x2_M_I_D(FullRO1.RO).main :
+    ={glob A} ==> ={res}.
+proof. by proc; inline distinguish; wp; sim. qed. 
+     
+local equiv R : 
+   FullRO1.MainD(CR_ROM_x2_M_I_D, FullRO1.RO).distinguish ~ FullRO1.MainD(CR_ROM_x2_M_I_D, FinEagerRO1.FinRO).distinguish : 
+     ={glob CR_ROM_x2_M_I_D} ==> ={res}. 
+proof. 
+conseq (: _ ==> ={res, glob CR_ROM_x2_M_I_D}) => //. 
+apply (FinEagerRO1.RO_FinRO_D _ CR_ROM_x2_M_I_D). 
+by move => ?; rewrite dout_ll. 
+qed.
+
+local equiv S :
+   CR_ROM_x2_M_I_D(FullRO1.RO).main ~ CR_ROM_x2_M_I_D(FinEagerRO1.FinRO).main :
+     ={glob A} ==> ={res}. 
+proof.
+proc. 
+swap{1} 1 1; swap{2} 1 1.
+seq 1 1 : (={glob CR_ROM_x2_M_I_D}); 1: by inline; wp. 
+transitivity{1} { b <@ FullRO1.MainD(CR_ROM_x2_M_I_D, FullRO1.RO).distinguish(); } 
+                (={glob CR_ROM_x2_M_I_D} ==> ={b})
+                (={glob CR_ROM_x2_M_I_D} ==> ={b}) => [/# | // | |].
++ by inline distinguish; sim.
+rewrite equiv [{1} 1 R].
+by inline distinguish; sim.
+qed.
+
+   
+
+local module CR_ROM_x2_M_I_V = {
+  var x : t
+
+  
+  proc cr() = {
+    FinEagerRO1.FinRO.init();
+    FullRO2.RO.init();
+
+    x <@ A(FinEagerRO1.FinRO, FullRO2.RO).find();
+  }
+  
+  
+  proc main() = {
+    var y1 : out_t;
+    var y2 : out_t;
+    
+    cr();
+    
+    y1 <- oget FullRO1.RO.m.[g x];
+    
+    if (h x \notin FullRO2.RO.m) {
+      y2 <$ dout;
+    } else {
+      y2 <- oget FullRO2.RO.m.[h x];
+    }
+    
+    return y1 = y2;
+  }
+}.
+
+local equiv U :
+  CR_ROM_x2_M_I_D(FinEagerRO1.FinRO).main ~ CR_ROM_x2_M_I_V.main :
+     ={glob A} ==> ={res}. 
+proof.
+proc.
+inline cr distinguish get.
+seq 3 3 : (={FullRO1.RO.m, FullRO2.RO.m} /\ x{1} = CR_ROM_x2_M_I_V.x{2}); 1: by sim.
+case (h x{1} \notin FullRO2.RO.m{1}).
++ rcondt{1} ^if; 1: by auto.
+  rcondt{2} ^if; 1: by auto.
+  wp; rnd; wp; skip => />; smt(get_set_sameE). 
+rcondf{1} ^if; 1: by auto.
+rcondf{2} ^if; 1: by auto.
+by wp; rnd{1}; wp; skip.
+qed.
+
+declare axiom h_inj : injective h.
+search choiceb.
+
+ 
+local lemma Bnd_CRROMx2Eager1V_CR_RS &m :
+  Pr[CR_ROM_x2_M_I_V.cr() @ &m : 
+         fsize FullRO2.RO.m <= q2
+      /\ h CR_ROM_x2_M_I_V.x \in FullRO2.RO.m 
+      /\ FullRO1.RO.m.[g CR_ROM_x2_M_I_V.x] = FullRO2.RO.m.[h CR_ROM_x2_M_I_V.x]]
+  <=
+  q2%r * p_max dout.
+proof.
+fel 2
+    (fsize FullRO2.RO.m)
+    (fun _ => p_max dout)
+    q2
+    (exists (x : t),
+           h x \in FullRO2.RO.m
+        /\ FullRO1.RO.m.[g x] = FullRO2.RO.m.[h x])
+    [ FinEagerRO1.FinRO.get : false; FullRO2.RO.get : (arg \notin FullRO2.RO.m) ] 
+    (dom FullRO1.RO.m = mem enum) => //.
++ by rewrite StdBigop.Bigreal.BRA.sumri_const 1:ge0_q2 RField.intmulr /#.
++ progress.
+  exists CR_ROM_x2_M_I_V.x{m0}. smt().
++ inline.
+  wp.
+  while (   (forall x, ! (x \in l) <=> x \in FullRO1.RO.m)   
+         /\ l = drop (card - size l) enum).
+auto. 
+move => &m0 [] /= + + r0 r0in -[memdef lval] nem_l.
+rewrite (: head witness l{m0} \notin FullRO1.RO.m{m0}) 1:/# /=. 
+split.
+move => x1. 
+rewrite mem_set; split. 
+move: (memdef x1). 
+smt(mem_head_behead). 
+move: (memdef x1). 
+rewrite -eq_iff => <-. case. smt().
+search head behead. search uniq (::).
+have /# : uniq l{m0} by smt(uniq_drop enum_uniq). 
+rewrite size_behead nem_l /=. 
+rewrite {1}lval behead_drop /#.
+ wp; skip => />. 
+ progress; smt(enumP mem_empty fsize_empty take0 take_size).  
++ proc.
+  wp. 
+  rnd.
+  skip => />.
+  progress.
+  case (! (exists x1, h x1 = x{hr})) => [nex| [x1 eqhx1]]. 
+  rewrite (mu_eq dout _ pred0) 2:mu0 2:pmax_ge0 => y. 
+  rewrite /pred0 neqF negb_exists => x' /=. 
+  rewrite negb_and.
+  rewrite mem_set negb_or.
+  rewrite get_setE.
+  rewrite (: h x' <> x{hr}) /#.  
+  rewrite -eqhx1.
+  rewrite (mu_eq dout _ (pred1 (oget FullRO1.RO.m{hr}.[g x1]))).
+  move => y /=.
+  rewrite eq_iff.
+  split. smt(get_setE h_inj).
+  move => eqy.   
+  exists x1.
+  split. smt(mem_set). 
+  rewrite get_set_sameE.
+  smt(enumP).
+  smt(pmax_upper_bound).
++ progress.  
+  proc.
+  wp; rnd; skip => />; smt(fsize_set).
+progress.
+proc.  
+by wp; rnd; skip => />; smt(fsize_set).
+qed.
+
+local lemma A_RO2_qs :
+  hoare[A(FinEagerRO1.FinRO, FullRO2.RO).find : fsize FullRO2.RO.m = 0 ==> fsize FullRO2.RO.m <= q2]. 
+proof. admit. qed.
+
+lemma Bnd_CRROMx2MD &m :
+  Pr[CR_ROM_x2_MD(FullRO1.RO, FullRO2.RO, A).main() @ &m : res] 
+  <=
+  (q2 + 1)%r * p_max dout.
+proof.
+have ->: 
+  Pr[CR_ROM_x2_MD(FullRO1.RO, FullRO2.RO, A).main() @ &m : res]
+  =
+  Pr[CR_ROM_x2_M_I_V.main() @ &m : res].
++ byequiv (: ={glob A} ==> _) => //.
+  transitivity CR_ROM_x2_M_I_D(FullRO1.RO).main
+               (={glob A} ==> ={res})
+               (={glob A} ==> ={res}) => //.
+  smt().
+  apply T.
+  transitivity CR_ROM_x2_M_I_D(FinEagerRO1.FinRO).main
+               (={glob A} ==> ={res})
+               (={glob A} ==> ={res}) => //.
+  smt().
+  apply S.
+  by apply U.
+rewrite fromintD RField.mulrDl /=.
+byphoare => //.
+proc.
+seq 1 : (   h CR_ROM_x2_M_I_V.x \in FullRO2.RO.m 
+         /\ FullRO1.RO.m.[g CR_ROM_x2_M_I_V.x] = FullRO2.RO.m.[h CR_ROM_x2_M_I_V.x])
+        (q2%r * p_max dout) 
+        1%r 
+        1%r 
+        (p_max dout) 
+        (forall x, x \in FullRO1.RO.m) => //.
+inline cr.        
+call (: true) => //. 
+inline init.
+wp.
+  while (   (forall x, ! (x \in l) <=> x \in FullRO1.RO.m)   
+         /\ l = drop (card - size l) enum).
+inline; auto. 
+move => &m0 [] /= + + r0 r0in -[memdef lval] nem_l.
+rewrite (: head witness l{m0} \notin FullRO1.RO.m{m0}) 1:/# /=. 
+split.
+move => x1. 
+rewrite mem_set; split. 
+move: (memdef x1). 
+smt(mem_head_behead). 
+move: (memdef x1). 
+rewrite -eq_iff => <-. case. smt().
+have /# : uniq l{m0} by smt(uniq_drop enum_uniq). 
+rewrite size_behead nem_l /=. 
+rewrite {1}lval behead_drop /#.
+ wp; skip => />. progress;   smt(enumP mem_empty fsize_empty take0 take_size).  
+call (: true ==>
+        h CR_ROM_x2_M_I_V.x \in FullRO2.RO.m 
+         /\ FullRO1.RO.m.[g CR_ROM_x2_M_I_V.x] = FullRO2.RO.m.[h CR_ROM_x2_M_I_V.x]) => //.
++ bypr. 
+  progress.
+  have ->:
+  Pr[CR_ROM_x2_M_I_V.cr() @ &m0 :
+h CR_ROM_x2_M_I_V.x \in FullRO2.RO.m 
+         /\ FullRO1.RO.m.[g CR_ROM_x2_M_I_V.x] = FullRO2.RO.m.[h CR_ROM_x2_M_I_V.x]]  = 
+  Pr[CR_ROM_x2_M_I_V.cr() @ &m0 : 
+         fsize FullRO2.RO.m <= q2 /\
+      h CR_ROM_x2_M_I_V.x \in FullRO2.RO.m 
+         /\ FullRO1.RO.m.[g CR_ROM_x2_M_I_V.x] = FullRO2.RO.m.[h CR_ROM_x2_M_I_V.x]]
+        . 
+ byequiv=> //.
+  proc.
+  call (: ={glob A, glob FullRO1.RO, glob FullRO2.RO} /\ FullRO2.RO.m{2} = empty
+          ==>
+          fsize FullRO2.RO.m{2} <= q2 /\ ={res, glob FullRO1.RO, glob FullRO2.RO}).
+  conseq (: ={glob A, glob FullRO1.RO, glob FullRO2.RO} ==> ={res, glob FullRO1.RO, glob FullRO2.RO}) _ A_RO2_qs => //.
+  + smt(fsize_empty). 
+  proc (={glob FullRO1.RO, glob FullRO2.RO}) => //.
+  proc.
+  wp. skip => />.
+  proc. wp; rnd ; skip => />. 
+  inline.
+  wp.
+  while (={l, FullRO1.RO.m}). 
+  by auto. 
+  
+  auto.  
+  by apply (Bnd_CRROMx2Eager1V_CR_RS &m0).  
+sp 1; if => //. 
+rnd. skip => />. 
+progress.
+rewrite (mu_eq _ _ (pred1 (oget FullRO1.RO.m{hr}.[g CR_ROM_x2_M_I_V.x{hr}]))) 1:/#.
+smt(pmax_upper_bound).
+wp; conseq (: _ ==> false). smt(). 
+hoare. progress. smt(pmax_ge0).
+trivial.
+qed.
+
+
+
