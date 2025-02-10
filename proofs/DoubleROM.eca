@@ -1,6 +1,5 @@
 require import AllCore Distr List FMap PROM.
 
-
 lemma size_behead (s : 'a list) : 
   size (behead s) = if s = [] then 0 else size s - 1.
 proof. by elim: s. qed.
@@ -17,7 +16,6 @@ move: (ih (rem x s2) uql _ _); 1,2: smt(mem_rem_neq size_rem).
 rewrite -(perm_cons x) => peqxc.
 rewrite (perm_eq_trans _ _ _ peqxc) perm_eq_sym perm_to_rem 1:/#.
 qed.
-
 
 lemma uniq_drop (s : 'a list) (n : int) :
   uniq s => uniq (drop n s). 
@@ -2408,5 +2406,4 @@ hoare. progress. smt(pmax_ge0).
 trivial.
 qed.
 
-
-
+end section.

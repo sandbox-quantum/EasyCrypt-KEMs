@@ -1,0 +1,68 @@
+require import AllCore Distr.
+require KeyedHashFunctionsx2.
+
+type key_t.
+
+type in_t.
+
+type out_t.
+
+op f : key_t -> in_t -> out_t.
+
+op dkey : key_t distr.
+
+module type Adv_CRAlt = {
+  proc find(k1 : key_t, k2 : key_t) : in_t * in_t 
+}.
+
+module CRAlt(A : Adv_CRAlt) = {
+  proc main() : bool = {
+    var k1, k2 : key_t;
+    var x1, x2 : in_t;
+
+    k1 <$ dkey;
+    k2 <$ dkey;
+
+    (x1, x2) <@ A.find(k1, k2);
+
+    return f k1 x1 = f k2 x2;
+  }
+}.
+
+
+theory ROM.
+
+module type KHF_ROi = {
+  proc init() : unit
+  proc get(kx : key_t * in_t) : out_t
+}.
+
+module type KHF_RO = {
+  include KHF_ROi [init]
+}.
+
+module type Adv_CRAlt_ROM (F_RO : KHF_RO) = {
+  include Adv_CRAlt
+}.
+
+module CRAlt_ROM (F_RO : KHF_ROi) (A : Adv_CRAlt_ROM) = { 
+  proc main() : bool = { 
+    var k1, k2 : key_t;
+    var x1, x2 : in_t;
+    var y1, y2 : out_t;
+    
+    F_RO.init();
+    
+    k1 <$ dkey;
+    k2 <$ dkey;
+    
+    (x1, x2) <@ A(F_RO).find(k1, k2);
+  
+    y1 <@ F_RO.get((k1, x1));
+    y2 <@ F_RO.get((k2, x2));
+    
+    return y1 = y2;
+  }
+}.
+
+end ROM.

@@ -1,0 +1,282 @@
+(*^ 
+  Binding security for (very) high-level specification of ML-KEM.
+  Specification considered here abstracts away from any algebraic
+  structure used in the construction, particularly 
+  viewing the PKE procedures as abstract (black box) operators.
+  To be instantiated and linked to lower-level specification
+  and, in turn, implementation.
+^*)
+(* Require/Import *)
+require import AllCore Distr.
+require (*--*) DMap DProd.
+require (*--*) KeyEncapsulationMechanisms.
+require (*--*) HashFunctions KeyedHashFunctionsAlt KeyedHashFunctionsx2.
+
+
+(* Types *)
+(* General *)
+(** Randomness ("seeds") **)
+type rand_t.
+
+
+(* Underlying PKE scheme (K-PKE) *)
+(** Public keys **)
+type pk_t_pke.
+
+(** Secret keys **)
+type sk_t_pke.
+
+(** Plaintexts of underlying PKE scheme **)
+type ptxt_t = rand_t.
+
+(** Ciphertexts **)
+type ctxt_t_pke.
+
+
+(* KEM (ML-KEM *)
+(** Public keys **)
+type pk_t = pk_t_pke.
+
+(** Secret keys  **)
+type sk_t = sk_t_pke * pk_t * rand_t * rand_t.
+
+(** Shared/session keys (symmetric) **)
+type key_t = rand_t.
+
+(** Ciphertexts/Encapsulations **)
+type ctxt_t = ctxt_t_pke.
+
+
+(* Operators *)
+(** Hash function H, used to hash public keys to randomness **)
+op H : pk_t -> rand_t.
+
+(** 
+  Hash function G, used to hash (pairs of) plaintexts and 
+  hashes of public keys (randomness) to (pairs of) keys and randomness 
+**)
+op G : ptxt_t * rand_t -> key_t * rand_t. 
+
+(** 
+  Hash function J, used to hash (pairs of) randomness and ciphertexts 
+  to shared keys (for implicit rejection)
+**)
+op J : rand_t -> ctxt_t -> key_t.
+
+(** Operator capturing "derandomized" key generation of underlying PKE scheme **)
+op kg : rand_t -> pk_t_pke * sk_t_pke.
+
+(** Operator capturing "derandomized" encryption function of underlying PKE scheme **)
+op enc : rand_t -> pk_t_pke -> ptxt_t -> ctxt_t_pke.
+
+(** Operator capturing decryption function of underlying PKE scheme **)
+(**
+  By design, the underlying PKE scheme never returns a failure, 
+  so we refrain from using option monad as output.
+**)
+op dec : sk_t_pke -> ctxt_t_pke -> ptxt_t.
+
+
+(* Distributions *)
+(** Proper, full, and uniform distribution over randomness **)
+op [lossless full uniform] drand : rand_t distr.
+
+(** Proper, full, and uniform distribution over (shared) keys **)
+op [lossless full uniform] dkey : key_t distr.
+
+(** Proper, full, and uniform distribution over pairs of (shared) keys and randomness **) 
+op [lossless full uniform] dkeyrand : (key_t * rand_t) distr.
+
+(** `dkeyrand` is equal to the product distribution of dkey and drand **)
+lemma dkeyrand_dprod : dkeyrand = dkey `*` drand.
+proof. 
+rewrite &(eq_funi_ll) ?is_full_funiform ?(dkeyrand_ll, dkeyrand_fu, dkeyrand_uni).
++ by rewrite dprod_fu_auto ?(dkey_fu, drand_fu) /=. 
++ by rewrite dprod_uni 1,2:(dkey_uni, drand_uni). 
+by rewrite dprod_ll_auto 1,2:(dkey_ll, drand_ll). 
+qed.
+
+(** Distribution representing key generation of underlying PKE scheme **)
+op dkg : (pk_t_pke * sk_t_pke) distr = dmap drand kg.
+
+(** `dkg` is a proper distribution **)
+lemma dkg_ll : is_lossless dkg.
+proof. by rewrite dmap_ll drand_ll. qed.
+
+
+(* Clones/Imports *)
+(* Definitions and properties for H as a (non-keyed) hash function *)
+clone import HashFunctions as H_HF with
+  type in_t <- pk_t,
+  type out_t <- rand_t,
+  
+  op f <- H
+  
+  proof *.
+
+(* Definitions and properties for G as a (non-keyed) hash function
+clone import HashFunctions as G_HF with
+  type in_t <- ptxt_t * rand_t,
+  type out_t <- key_t * rand_t,
+  
+  op f <- G
+  
+  proof *.
+*)
+  
+(* Definitions and properties for J as a (non-keyed) hash function
+clone import HashFunctions as J_HF with
+  type in_t <- rand_t * ctxt_t,
+  type out_t <- key_t,
+  
+  op f <- J
+  
+  proof *.
+*)
+ 
+(* Definitions and properties for KEMs with types as required for ML-KEM *)
+clone import KeyEncapsulationMechanisms as KEMs with
+  type pk_t <- pk_t,
+  type sk_t <- sk_t,
+  type key_t <- key_t,
+  type ctxt_t <- ctxt_t
+  
+  proof *.
+
+
+(* Schemes *)
+(** K-PKE, PKE scheme underlying ML-KEM **)
+(** 
+  As per FIPS 203, we specify the PKE in a derandomized manner.
+  That is, any procedure using randomness (i.e., key generation and encryption)
+  takes it as input rather than sampling it itself. This also means
+  it does not adhere to the regular syntax of a PKE scheme. 
+**)  
+(**
+  Further, this is a (very) high-level specification, essentially abstracting
+  away all algebraic structure and modeling the procedures as simple operators 
+  (which is possible because all randomness is taken as input)
+**)
+module K_PKE_HL = {
+  proc keygen(d : rand_t) : pk_t_pke * sk_t_pke = {
+    return kg d;
+  }
+  
+  proc enc(pk : pk_t_pke, p : ptxt_t, r : rand_t) : ctxt_t_pke = {
+    return enc r pk p;
+  }
+  
+  proc dec(sk : sk_t_pke, c : ctxt_t_pke) : ptxt_t = {
+    return dec sk c;
+  } 
+}.
+
+(**
+  ML-KEM in the standard model.
+  Closely follows FIPS 203 (without accounting for sampling failures, so 
+  the "internal" ML-KEM procedures--as they are called in FIPS 203--are 
+  most similar). 
+**)
+module ML_KEM_HL : Scheme = { 
+  proc keygen() : pk_t * sk_t = {
+    var pk_pke : pk_t_pke;
+    var sk_pke : sk_t_pke;
+    var d, z : rand_t;
+    var pk : pk_t;
+    var sk : sk_t;
+    
+    d <$ drand;
+    z <$ drand;
+    
+    (pk_pke, sk_pke) <@ K_PKE_HL.keygen(d);
+    
+    pk <- pk_pke;
+    sk <- (sk_pke, pk, H pk, z);
+    
+    return (pk, sk);
+  }
+  
+  proc encaps(pk : pk_t) : key_t * ctxt_t = {
+    var p, r : rand_t; 
+    var k : key_t;
+    var c : ctxt_t_pke;
+    
+    p <$ drand;
+    (k, r) <- G (p, H pk);
+    
+    c <@ K_PKE_HL.enc(pk, p, r);
+        
+    return (k, c);
+  }
+  
+  proc decaps(sk : sk_t, c : ctxt_t) : key_t option = {
+    var pk_pke : pk_t_pke;
+    var sk_pke : sk_t_pke;
+    var h, z, r' : rand_t;
+    var p' : ptxt_t;
+    var k', k_ : key_t;
+    var c' : ctxt_t;
+    
+    (sk_pke, pk_pke, h, z) <- sk;
+    
+    p' <@ K_PKE_HL.dec(sk_pke, c);
+    
+    (k', r') <- G (p', h);
+    k_ <- J z c;
+    
+    c' <@ K_PKE_HL.enc(pk_pke, p', r');
+    
+    if (c <> c') {
+      k' <- k_;
+    }
+    
+    return Some k';
+  }
+}.
+
+
+(*
+
+*)
+clone import KeyedHashFunctionsAlt as KHF_J with
+  type key_t <- rand_t,
+  type in_t <- ctxt_t,
+  type out_t <- key_t,
+  
+  op f <- J,
+  
+  op dkey <- drand
+  
+  proof *.
+
+op G' (r : rand_t) (p : ptxt_t) : key_t * rand_t = G (p, r).
+
+clone import KeyedHashFunctionsAlt as KHF_Gp with
+  type key_t <- rand_t,
+  type in_t <- ptxt_t,
+  type out_t <- key_t * rand_t,
+  
+  op f <- G',
+  
+  op dkey <- drand
+  
+  proof *.
+  
+op G'' (r : rand_t) (p : ptxt_t) : key_t = (G (p, r)).`1.
+
+clone import KeyedHashFunctionsx2 as KHF_JGpp with
+  type key_t1 <- rand_t,
+  type in_t1 <- ctxt_t,
+  type key_t2 <- rand_t,
+  type in_t2 <- ptxt_t,
+  
+  type out_t <- key_t,
+  
+  op f <- J,
+  op g <- G'',
+  
+  op dkey1 <- drand,
+  op dkey2 <- drand
+  
+  proof *.
+

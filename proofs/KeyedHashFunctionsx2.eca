@@ -1,39 +1,52 @@
-require import AllCore.
+require import AllCore Distr.
+
+type key_t1.
+type key_t2.
 
 type in_t1.
 type in_t2.
+
 type out_t.
 
-op f : in_t1 -> out_t.
-op g : in_t2 -> out_t.
+op f : key_t1 -> in_t1 -> out_t.
+op g : key_t2 -> in_t2 -> out_t.
+
+op dkey1 : key_t1 distr.
+op dkey2 : key_t2 distr.
+
 
 module type Adv_CRx2 = {
-  proc find() : in_t1 * in_t2
+  proc find(k1 : key_t1, k2 : key_t2) : in_t1 * in_t2
 }.
 
 module CRx2 (A : Adv_CRx2) = {
   proc main() : bool = {
+    var k1 : key_t1;
+    var k2 : key_t2;
     var x1 : in_t1;
     var x2 : in_t2;
 
-    (x1, x2) <@ A.find();
+    k1 <$ dkey1;
+    k2 <$ dkey2;
     
-    return f x1 = g x2;
+    (x1, x2) <@ A.find(k1, k2);
+    
+    return f k1 x1 = g k2 x2;
   }
 }.
 
 
-theory ROM.
 
+theory ROM.
 
 module type KHF_RO1i = {
   proc init() : unit
-  proc get(x : in_t1) : out_t
+  proc get(kx : key_t1 * in_t1) : out_t
 }.
 
 module type KHF_RO2i = {
   proc init() : unit
-  proc get(x : in_t2) : out_t
+  proc get(kx : key_t2 * in_t2) : out_t
 }.
 
 module type KHF_RO1 = {
@@ -52,6 +65,8 @@ module type Adv_CRx2_ROM (F_RO : KHF_RO1) (G_RO : KHF_RO2) = {
 
 module CRx2_ROM (F_RO : KHF_RO1i) (G_RO : KHF_RO2i) (A : Adv_CRx2_ROM) = { 
   proc main() : bool = { 
+    var k1 : key_t1;
+    var k2 : key_t2;
     var x1 : in_t1;
     var x2 : in_t2;
     var y1, y2 : out_t;
@@ -59,10 +74,13 @@ module CRx2_ROM (F_RO : KHF_RO1i) (G_RO : KHF_RO2i) (A : Adv_CRx2_ROM) = {
     F_RO.init();
     G_RO.init();
     
-    (x1, x2) <@ A(F_RO, G_RO).find();
+    k1 <$ dkey1;
+    k2 <$ dkey2;
+    
+    (x1, x2) <@ A(F_RO, G_RO).find(k1, k2);
   
-    y1 <@ F_RO.get(x1);
-    y2 <@ G_RO.get(x2);
+    y1 <@ F_RO.get((k1, x1));
+    y2 <@ G_RO.get((k2, x2));
     
     return y1 = y2;
   }

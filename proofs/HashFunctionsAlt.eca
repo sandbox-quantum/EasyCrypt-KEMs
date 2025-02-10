@@ -1,0 +1,55 @@
+require import AllCore Distr.
+
+type in_t.
+
+type out_t.
+
+op f : in_t -> out_t.
+
+module type Adv_CRAlt = {
+  proc find() : in_t * in_t 
+}.
+
+module CRAlt(A : Adv_CRAlt) = {
+  proc main() : bool = {
+    var x1, x2 : in_t;
+
+    (x1, x2) <@ A.find();
+
+    return f x1 = f x2;
+  }
+}.
+
+
+theory ROM.
+
+module type KHF_ROi = {
+  proc init() : unit
+  proc get(x : in_t) : out_t
+}.
+
+module type KHF_RO = {
+  include KHF_ROi [init]
+}.
+
+module type Adv_CRAlt_ROM (F_RO : KHF_RO) = {
+  include Adv_CRAlt
+}.
+
+module CRAlt_ROM (F_RO : KHF_ROi) (A : Adv_CRAlt_ROM) = { 
+  proc main() : bool = { 
+    var x1, x2 : in_t;
+    var y1, y2 : out_t;
+    
+    F_RO.init();
+    
+    (x1, x2) <@ A(F_RO).find();
+  
+    y1 <@ F_RO.get(x1);
+    y2 <@ F_RO.get(x2);
+    
+    return y1 = y2;
+  }
+}.
+
+end ROM.
