@@ -1064,7 +1064,14 @@ fel 2
   wp.
   while (   (forall x, ! (x \in l) <=> x \in FullRO1.RO.m)   
          /\ l = drop (card - size l) enum).
-  + by auto => />; smt(mem_set uniq_drop enum_uniq behead_drop).
+  + auto => /> &m0 mdef eql nemptyl r0 r0in.
+    split => [hlnin | hlin]. 
+    + split => [x1 |]; 2: smt(behead_drop).
+      move: (mdef x1); rewrite -{1}(head_behead _ (witness) nemptyl) /= negb_or mem_set => <-. 
+      by split => [/# | [// |]]; smt(uniq_drop enum_uniq).
+    split => [x1 |]; 2: smt(behead_drop).
+    move: (mdef x1); rewrite -{1}(head_behead _ (witness) nemptyl)/= negb_or => <-. 
+    by split; smt(uniq_drop enum_uniq). 
   wp; skip => />.
   by split; smt(mem_empty fsize_empty enumP).
 + proc.
