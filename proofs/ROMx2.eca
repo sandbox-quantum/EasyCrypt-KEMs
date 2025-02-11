@@ -9,7 +9,7 @@ lemma behead_drop (s : 'a list) (n : int) :
   0 <= n => behead (drop n s) = drop (n + 1) s. 
 proof. by elim: s n => // /#. qed. 
 
-lemma eq_ss (s1 s2 : 'a list) :
+lemma uniq_le_mem_size_perm_eq (s1 s2 : 'a list) :
   uniq s1 => mem s1 <= mem s2 => size s2 <= size s1 => perm_eq s1 s2. 
 proof.
 elim: s1 s2 => [| x l ih s2 /= [ninl uql] lemem le1sz]; 1: smt(size_ge0). 
@@ -146,7 +146,7 @@ module Counting_RO2 (RO2 : RandomOracle2) : RandomOracle2 = {
 }.
 
 
-(* Security *)
+(* Properties *)
 (* Collision resistance between two random oracles (CR-ROM-x2) *)
 (** Adversary class for CR-ROM-x2 **)
 module type Adv_CRROMx2 (RO1 : RandomOracle1) (RO2 : RandomOracle2) ={ 
@@ -194,16 +194,6 @@ declare op q2 : { int | 0 <= q2 } as ge0_q2.
 declare axiom A_find_qs2 (RO1 <: RandomOracle1{-A}) (RO2 <: RandomOracle2{-A}) (n : int) :
   hoare[A(RO1, Counting_RO2(RO2)).find : Counting_RO2.q = n ==> Counting_RO2.q <= n + q2].
 
-(* 
-  Prove the conjucntion of the above assumptions 
-  regarding the adversary's oracle queries
-*)
-lemma A_find_qs (RO1 <: RandomOracle1{-A}) (RO2 <: RandomOracle2{-A}) (n1 n2 : int) :
-  hoare[A(Counting_RO1(RO1), Counting_RO2(RO2)).find : 
-          Counting_RO1.q = n1 /\ Counting_RO2.q = n2 ==> 
-            Counting_RO1.q <= n1 + q1 /\ Counting_RO2.q <= n2 + q2].  
-proof. by conseq (A_find_qs1 RO1 (Counting_RO2(RO2)) n1) (A_find_qs2 (Counting_RO1(RO1)) RO2 n2). qed.
-
 
 (* 
   Clone and import relevant ROM-related results 
@@ -222,7 +212,7 @@ local clone FullRO as FullRO1 with
 
 (* 
   Clone and import relevant ROM-related results 
-  for first (type of) random oracle
+  for second (type of) random oracle
 *)  
 local clone FullRO as FullRO2 with
   type in_t <- in_t2,
@@ -425,7 +415,7 @@ qed.
   Apply the results from PROM to show move from lazy sampling to eagerly sampling
   (up to q1 queries) for the first (type of) random oracle.
 *)
-local equiv Eqv_CRROMx2RS_Dist_LRO_RO :
+local equiv Eqv_CRROMx2_Dist_LRO_RO :
   CR_ROM_x2_I(FullROI.LRO).distinguish ~ CR_ROM_x2_I(FullROI.RO).distinguish :
     ={glob CR_ROM_x2_I, FullROI.RO.m} ==> ={res, glob CR_ROM_x2_I}.   
 proof.
@@ -434,13 +424,13 @@ conseq (FullROI.FullEager.RO_LRO_D CR_ROM_x2_I _) => //.
 by move => ?; apply dout_ll.
 qed.
 
-local equiv Eqv_CRROMx2RS_Main_LRO_RO :
+local equiv Eqv_CRROMx2_Main_LRO_RO :
   CR_ROM_x2_I(FullROI.LRO).main ~ CR_ROM_x2_I(FullROI.RO).main :
     ={glob A} ==> ={res}.   
 proof.
 proc.
 seq 4 4 : ( ={glob CR_ROM_x2_I, FullROI.RO.m}); 1: by inline *; auto. 
-by rewrite equiv[{1} 1 Eqv_CRROMx2RS_Dist_LRO_RO]; sim.
+by rewrite equiv[{1} 1 Eqv_CRROMx2_Dist_LRO_RO]; sim.
 qed.
 
 
@@ -519,10 +509,7 @@ local module CR_ROM_x2_Eager1 = {
   }
 }.
 
-(*
-declare axiom A_find_qs1 (RO1 <: RandomOracle1{-A}) (RO2 <: RandomOracle2{-A}) (n : int) :
-  hoare[A(Counting_RO1(RO1), RO2).find : Counting_RO1.q = n ==> Counting_RO1.q <= n + q1].
-*)
+
 (*
   Step (3.5):
   Translate the assumption regarding the adversary's (first) oracle 
@@ -551,7 +538,7 @@ qed.
   Show equivalence between (1) auxiliary CR-ROM-x2 using RO1_WI(RO) as first oracle
   and (2) auxiliary CR-ROM-x2 using RO1_Eager as first oracle
 *)
-local equiv Eqv_CRROMx2RO_ILROT_RS :
+local equiv Eqv_CRROMx2IRO_Eager1 :
   CR_ROM_x2_I(FullROI.RO).main ~ CR_ROM_x2_Eager1.main :
     ={glob A} ==> ={res}.
 proof.
@@ -621,7 +608,7 @@ qed.
   (i.e., the final potential samplings after the adversary has returned are not
   taken into account here).
 *)
-local lemma Bnd_CRROMx2Eager1V_CR_RS &m :
+local lemma Bnd_CRROMx2Eager1_AdvCR &m :
   Pr[CR_ROM_x2_Eager1.advcr() @ &m : 
          fsize FullRO2.RO.m <= q2
       /\ CR_ROM_x2_Eager1.x1 \in FullRO1.RO.m 
@@ -673,77 +660,162 @@ rcondf ^if; 1: by auto.
 by rnd.
 qed.
 
+(*
+  Step (5.5):
+  Translate the assumption regarding the adversary's (second) oracle 
+  queries to a concrete statement usable in the current stage 
+  of the proof.
+*)
+local lemma A_find_qs2_RO1Eager :
+  hoare[A(RO1_Eager, FullRO2.LRO).find : fsize FullRO2.RO.m = 0 ==> fsize FullRO2.RO.m <= q2].
+proof.
+have eqv_fszq :
+  equiv[ A(RO1_Eager, FullRO2.LRO).find ~ A(RO1_Eager, Counting_RO2(FullRO2.LRO)).find : 
+          ={glob A, glob RO1_Eager, glob FullRO2.LRO} /\ fsize FullRO2.RO.m{2} <= Counting_RO2.q{2} 
+            ==> 
+          ={res, glob FullRO2.RO} /\ fsize FullRO2.RO.m{2} <= Counting_RO2.q{2} ]. 
++ proc (={glob RO1_Eager, glob FullRO2.LRO} /\ fsize FullRO2.RO.m{2} <= Counting_RO2.q{2}) => //.  
+  + proc; inline get. 
+    by auto => />; smt(fsize_set).
+  by proc; wp.
+conseq eqv_fszq (: Counting_RO2.q = 0 ==> Counting_RO2.q <= q2); 1,2: by smt(). 
+by apply (A_find_qs2 (RO1_Eager) (FullRO2.LRO)).
+qed. 
+
+
+(* 
+  Step (6) (Final):
+  Show bound on CR-ROM-x2 by combining previously obtained results.
+*)
+(**
+  Bounds success probability of any adversary playing in CR-ROM-x2
+  by `(q1 * q2 + 1) * p_max dout`. Here, q1 and q2 are the number of
+  queries to the first and second random oracle, respecively, and 
+  `p_max dout` is the maximum probability assigned to a single 
+  value by distribution `dout` (indeed, if dout is the usual uniform 
+  distribution, this is simply 1 / |out_t|).
+**)   
+lemma Bnd_CRROMx2 &m :
+  Pr[CR_ROM_x2(RO1_Default, RO2_Default, A).main() @ &m : res] 
+  <=
+  (q1 * q2 + 1)%r * p_max dout.
+proof.
+have ->: 
+  Pr[CR_ROM_x2(RO1_Default, RO2_Default, A).main() @ &m : res]
+  =
+  Pr[CR_ROM_x2_Eager1.main() @ &m : res].
++ byequiv (: ={glob A} ==> _) => //.
+  transitivity CR_ROM_x2(FullRO1.LRO, FullRO2.LRO, A).main
+               (={glob A} ==> ={res})
+               (={glob A} ==> ={res}) => //; 1: smt().
+  + by apply Eqv_CRROMx2_PROM.  
+  transitivity CR_ROM_x2_I(LRO).main
+               (={glob A} ==> ={res})
+               (={glob A} ==> ={res}) => //; 1: smt().
+  + by apply Eqv_CRROMx2RO_ILRO.
+  transitivity CR_ROM_x2_I(RO).main
+               (={glob A} ==> ={res})
+               (={glob A} ==> ={res}) => //; 1: smt().
+  + by apply Eqv_CRROMx2_Main_LRO_RO.
+  by apply Eqv_CRROMx2IRO_Eager1. 
+rewrite fromintD RField.mulrDl /=.
+byphoare => //.
+proc.
+seq 1 : (    CR_ROM_x2_Eager1.x1 \in FullRO1.RO.m 
+          /\ CR_ROM_x2_Eager1.x2 \in FullRO2.RO.m 
+          /\ FullRO1.RO.m.[CR_ROM_x2_Eager1.x1] = FullRO2.RO.m.[CR_ROM_x2_Eager1.x2]) 
+        ((q1 * q2)%r * p_max dout) 
+        1%r 
+        1%r 
+        (p_max dout) => //.
++ call (:     true 
+          ==>
+             (CR_ROM_x2_Eager1.x1 \in FullRO1.RO.m) 
+          /\ (CR_ROM_x2_Eager1.x2 \in FullRO2.RO.m) 
+          /\ FullRO1.RO.m.[CR_ROM_x2_Eager1.x1] = FullRO2.RO.m.[CR_ROM_x2_Eager1.x2]) => //.
+  bypr => &m0 _.  
+  have ->:
+    Pr[CR_ROM_x2_Eager1.advcr() @ &m0 : 
+          (CR_ROM_x2_Eager1.x1 \in FullRO1.RO.m) 
+       /\ (CR_ROM_x2_Eager1.x2 \in FullRO2.RO.m) 
+       /\ FullRO1.RO.m.[CR_ROM_x2_Eager1.x1] = FullRO2.RO.m.[CR_ROM_x2_Eager1.x2]]
+    =
+    Pr[CR_ROM_x2_Eager1.advcr() @ &m0 : 
+          fsize FullRO2.RO.m <= q2
+       /\ (CR_ROM_x2_Eager1.x1 \in FullRO1.RO.m) 
+       /\ (CR_ROM_x2_Eager1.x2 \in FullRO2.RO.m) 
+       /\ FullRO1.RO.m.[CR_ROM_x2_Eager1.x1] = FullRO2.RO.m.[CR_ROM_x2_Eager1.x2]].
+  + byequiv (:     ={glob A} 
+               ==> 
+                   ={CR_ROM_x2_Eager1.x1, CR_ROM_x2_Eager1.x2, FullRO1.RO.m, FullRO2.RO.m} 
+                /\ fsize FullRO2.RO.m{2} <= q2) => //.
+    proc.    
+    call (:      ={glob A, glob RO1_Eager, glob FullRO2.RO} 
+              /\ FullRO2.RO.m{2} = empty
+            ==>
+                 ={res, glob RO1_Eager, glob FullRO2.RO}
+              /\ fsize FullRO2.RO.m{2} <= q2).
+    + conseq (:     ={glob A, glob RO1_Eager, glob FullRO2.RO} 
+                ==> 
+                    ={res, glob RO1_Eager, glob FullRO2.RO}) 
+             _ 
+             A_find_qs2_RO1Eager => //; 1: smt(fsize_empty).
+      + by proc (={glob RO1_Eager, glob FullRO2.RO}) => //; proc; auto.
+    inline init.    
+    wp; while (={RO1_Eager.mi}); 1: by auto.
+    by wp; skip.
+  by apply (Bnd_CRROMx2Eager1_AdvCR &m0).  
+if => //; swap 1 1; if => //; swap 1 1. 
++ by rnd; rnd; skip => />; smt(mu_eq pmax_upper_bound).
++ wp; rnd; skip => /> &2 ncoll x1nin x2in. 
+  by rewrite (mu_eq _ _ (pred1 (oget FullRO2.RO.m{2}.[CR_ROM_x2_Eager1.x2{2}]))); smt(pmax_upper_bound).
++ rnd; wp; skip => /> &2 ncoll x1in x2nin. 
+  by rewrite (mu_eq _ _ (pred1 (oget FullRO1.RO.m{2}.[CR_ROM_x2_Eager1.x1{2}]))); smt(pmax_upper_bound).
+wp; conseq (: _ ==> false); 1: smt().
+by hoare; 1: smt(pmax_ge0).
+qed.
 
 end section.
 
 
-
 (* 
-  One Output, One Function version (of CR-ROM-x2):
+  One output, Two functions version (of CR-ROM-x2):
   Adversary asked to provide single output x such that 
   RO1(x) collides with RO2(f a x) for some fixed, known f and a 
 *) 
-abstract theory OOOF.
+abstract theory OT.
+(*
+  Here, we assume that the input type to the first oracle, in_t1,
+  is finite. Surely, this seems like a reasonable assumption. 
+  
+  This significantly simplifies the proof (or at least makes it more
+  natural) while not losing much genericity. (Surely, the finiteness of the
+  number of possible input elements seems like a reasonable assumption.)
+*)
+require import FinType.
+clone import FinType as FinIn1 with 
+  type t <= in_t1.
+  
 (* Additional auxiliary input to function mapping between random oracle inputs *)
 type aux_t.
 
-(* Function mapping between random oracle inputs*)
-op f : aux_t -> in_t1 -> in_t2. 
-
-
-(* Security *)
-(* Collision resistance between two random oracles (CR-ROM-x2) *)
-(** Adversary class for CR-ROM-x2 **)
-module type Adv_CRROMx2_OOOF (RO1 : RandomOracle1) (RO2 : RandomOracle2) = { 
-  proc find(a : aux_t) : in_t1
-}.
-
-(** CR-ROM-x2 security game **)
-module CR_ROM_x2_OOOF (RO1 : RandomOracle1i) (RO2 : RandomOracle2i) (A : Adv_CRROMx2_OOOF) = {
-  proc main(a : aux_t) : bool = {
-    var x : in_t1;
-    var y1, y2 : out_t;
-    
-    RO1.init();
-    RO2.init();
-        
-    x <@ A(RO1, RO2).find(a);
-    
-    y1 <@ RO1.get(x);
-    y2 <@ RO2.get(f a x);
-    
-    return y1 = y2; 
-  }
-}.
-
-end OOOF.
-
-
-(* 
-  One Output, Two Functions version (of CR-ROM-x2):
-  Adversary asked to provide single output x such that 
-  RO1(x) collides with RO2(f a x) for some fixed, known f and a 
-*) 
-abstract theory OOTF.
 (* Type of output provided by adversary, mapped to inputs of random oracles  *)
 type s_t.
-
-(* Additional auxiliary input to function mapping between random oracle inputs *)
-type aux_t.
 
 (* Function mapping abetween random oracle inputs *)
 op f : aux_t -> s_t -> in_t1. 
 op g : aux_t -> s_t -> in_t2.
 
+
 (* Security *)
-(* Collision resistance between two random oracles (CR-ROM-x2) *)
-(** Adversary class for CR-ROM-x2 **)
-module type Adv_CRROMx2_OOTF (RO1 : RandomOracle1) (RO2 : RandomOracle2) = {
+(* Collision resistance between two random oracles (CR-ROM-x2), OT version *)
+(** Adversary class for CR-ROM-x2-OT **)
+module type Adv_CRROMx2_OT (RO1 : RandomOracle1) (RO2 : RandomOracle2) = {
   proc find(a : aux_t) : s_t
 }.
 
-(** CR-ROM-x2 security game **)
-module CR_ROM_x2_SOSF (RO1 : RandomOracle1i) (RO2 : RandomOracle2i) (A : Adv_CRROMx2_OOTF) = {
+(** CR-ROM-x2-OT game **)
+module CR_ROM_x2_OT (RO1 : RandomOracle1i) (RO2 : RandomOracle2i) (A : Adv_CRROMx2_OT) = {
   proc main(a : aux_t) : bool = {
     var x : s_t;
     var y1, y2 : out_t;
@@ -760,5 +832,473 @@ module CR_ROM_x2_SOSF (RO1 : RandomOracle1i) (RO2 : RandomOracle2i) (A : Adv_CRR
   }
 }.
 
-end OOTF.
 
+section.
+(* 
+  By assumption, one of the functions f/g is injective w.r.t its 
+  final input (i.e., fixing the auxiliary information, the function is 
+  injective for any input of in_t1/in_t2). 
+  Wlog, take g to be injective.
+*)
+declare axiom inj_g (a : aux_t) : injective (g a).
+
+
+(* Declare arbitrary adversary against CR-ROM-x2-OT *)
+declare module A <: Adv_CRROMx2_OT { -RO1_Default, -RO2_Default, -Counting_RO1, -Counting_RO2 }.
+
+(* By assumption, the adversary's finding procedure terminates (given that its oracles terminate) *)
+declare axiom A_find_ll (RO1 <: RandomOracle1{-A}) (RO2 <: RandomOracle2{-A}) :
+  islossless RO1.get => islossless RO2.get => islossless A(RO1, RO2).find.
+
+(* 
+  By assumption, the number of adversary queries (to the second oracle) is bounded 
+  (by some non-negative constant)
+*)
+declare op q2 : { int | 0 <= q2 } as ge0_q2.
+declare axiom A_find_qs2 (RO1 <: RandomOracle1{-A}) (RO2 <: RandomOracle2{-A}) (n : int) :
+  hoare[A(RO1, Counting_RO2(RO2)).find : Counting_RO2.q = n ==> Counting_RO2.q <= n + q2].
+
+
+(* 
+  Clone and import relevant ROM-related results 
+  for first (type of) random oracle
+*)
+local clone FullRO as FullRO1 with
+  type in_t <- in_t1,
+  type out_t <- out_t,
+  
+  op dout <- fun _ => dout,
+  
+  type d_in_t <- aux_t,
+  type d_out_t <- bool
+  
+  proof *.
+
+local clone FullRO1.FinEager as FinEagerRO1 with
+  theory FinFrom <- FinIn1.
+
+(* 
+  Clone and import relevant ROM-related results 
+  for second (type of) random oracle
+*)  
+local clone FullRO as FullRO2 with
+  type in_t <- in_t2,
+  type out_t <- out_t,
+  
+  op dout <- fun _ => dout,
+
+  type d_in_t <- unit,
+  type d_out_t <- bool
+  
+  proof *.
+
+(* 
+  Auxiliary intermediate variant of CR-ROM-x2-OT that
+  acts as the distinguisher between the lazy and eager
+  oracles (of the first type).
+  Uses a separate procedure to have the correct form
+  for the results from PROM.    
+*)
+local module CR_ROM_x2_OT_I (RO1 : FullRO1.RO) = {
+  proc distinguish(a) = {
+    var x : s_t;
+    var y1 : out_t;
+    var y2 : out_t;
+    
+    x <@ A(RO1, FullRO2.LRO).find(a);
+    y1 <@ RO1.get(f a x);
+    y2 <@ FullRO2.LRO.get(g a x);
+    
+    return y1 = y2;
+  }
+   
+  proc main(a : aux_t) = {        
+    var b : bool;
+    
+    RO1.init();
+    FullRO2.LRO.init();
+    
+    b <@ distinguish(a);
+    
+    return b;
+  }  
+}.
+
+
+(* 
+  Step (1):
+  Show equivalence between original game and the above auxiliary intermediate
+  variant (essentially replacing the default random oracles by their more advanced 
+  (lazy) variants from the PROM theory).
+*)
+local equiv Eqv_CRROMx2OT_I :
+  CR_ROM_x2_OT(RO1_Default, RO2_Default, A).main ~ CR_ROM_x2_OT_I(FullRO1.LRO).main :
+    ={glob A, arg} ==> ={res}.
+proof. by proc; inline distinguish; wp; sim. qed. 
+
+
+(*
+  Step (2):
+  Apply the results from PROM to show move from lazy sampling to eagerly sampling
+  (entirely) for the first (type of) random oracle.
+*)
+local equiv Eqv_CRROMx2OTI_Dist_LRO_FinRO : 
+   FullRO1.MainD(CR_ROM_x2_OT_I, FullRO1.LRO).distinguish ~ FullRO1.MainD(CR_ROM_x2_OT_I, FinEagerRO1.FinRO).distinguish : 
+     ={glob CR_ROM_x2_OT_I, arg} ==> ={res}. 
+proof.
+transitivity FullRO1.MainD(CR_ROM_x2_OT_I, FullRO1.RO).distinguish
+             (={glob CR_ROM_x2_OT_I, arg} ==> ={res, glob CR_ROM_x2_OT_I})
+             (={glob CR_ROM_x2_OT_I, arg} ==> ={res, glob CR_ROM_x2_OT_I}) => [ /# | // | |].
++ symmetry; conseq (FullRO1.FullEager.RO_LRO CR_ROM_x2_OT_I _) => //.
+  by move => ?; rewrite dout_ll. 
+apply (FinEagerRO1.RO_FinRO_D _ CR_ROM_x2_OT_I) => //.
+by move => ?; rewrite dout_ll. 
+qed.
+
+local equiv Eqv_CRROMx2OTI_Main_LRO_FinRO :
+   CR_ROM_x2_OT_I(FullRO1.LRO).main ~ CR_ROM_x2_OT_I(FinEagerRO1.FinRO).main :
+     ={glob A, arg} ==> ={res}. 
+proof.
+proc. 
+swap{1} 1 1; swap{2} 1 1.
+seq 1 1 : (={glob CR_ROM_x2_OT_I, a}); 1: by inline; wp. 
+transitivity{1} { b <@ FullRO1.MainD(CR_ROM_x2_OT_I, FullRO1.LRO).distinguish(a); } 
+                (={glob CR_ROM_x2_OT_I, a} ==> ={b})
+                (={glob CR_ROM_x2_OT_I, a} ==> ={b}) => [/# | // | |].
++ by inline distinguish; sim.
+rewrite equiv [{1} 1 Eqv_CRROMx2OTI_Dist_LRO_FinRO].
+by inline distinguish; sim.
+qed.
+
+
+(*
+  Auxiliary version of CR-ROM-x2-OT that employs the fully 
+  eagerly sampled first oracle (i.e., FinEagerRO1.FinRO). Splits up
+  execution in separate procedures, as well as moves some local variables
+  to the module level, to massage it into the right form for using the FEL   
+*)
+local module CR_ROM_x2_OT_Eager1 = {
+  var x : s_t
+  
+  proc advcr(a : aux_t) = {
+    FinEagerRO1.FinRO.init();
+    FullRO2.LRO.init();
+
+    x <@ A(FinEagerRO1.FinRO, FullRO2.LRO).find(a);
+  }
+   
+  proc main(a : aux_t) = {
+    var y1 : out_t;
+    var y2 : out_t;
+    
+    advcr(a);
+    
+    y1 <- oget FullRO1.RO.m.[f a x];
+    
+    if (g a x \notin FullRO2.RO.m) {
+      y2 <$ dout;
+    } else {
+      y2 <- oget FullRO2.RO.m.[g a x];
+    }
+    
+    return y1 = y2;
+  }
+}.
+
+
+(* 
+  Step (3):
+  Show equivalence between (1) auxiliary CR-ROM-x2-OT-I given
+  a fully eagerly first oracle and (2) CR-ROM-x2-OT-Eager1
+*)
+local equiv Eqv_CRROMx2OTI_Eager1 :
+  CR_ROM_x2_OT_I(FinEagerRO1.FinRO).main ~ CR_ROM_x2_OT_Eager1.main :
+     ={glob A, arg} ==> ={res}. 
+proof.
+proc.
+inline advcr distinguish get.
+seq 4 4 : (   ={FullRO1.RO.m, FullRO2.RO.m, a, a0} 
+           /\ a{1} = a0{1} 
+           /\ x{1} = CR_ROM_x2_OT_Eager1.x{2}). 
++ call (: ={FullRO1.RO.m, FullRO2.RO.m}); 1,2: by sim. 
+  inline init sample get; wp.
+  by while (={FullRO1.RO.m, l}); auto. 
+case (g a{1} x{1} \notin FullRO2.RO.m{1}).
++ rcondt{1} ^if; 1: by auto.
+  rcondt{2} ^if; 1: by auto.
+  wp; rnd; wp; skip => />; smt(get_set_sameE). 
+rcondf{1} ^if; 1: by auto.
+rcondf{2} ^if; 1: by auto.
+by wp; rnd{1}; wp; skip.
+qed.
+
+
+(*
+  Step (4):
+  Show the bound on a relevant collision occuring by queries of the adversary
+  (i.e., the final potential samplings after the adversary has returned are not
+  taken into account here).
+*)
+local lemma Bnd_CRROMx2Eager1V_CR_RS &m (a : aux_t) :
+  Pr[CR_ROM_x2_OT_Eager1.advcr(a) @ &m : 
+         fsize FullRO2.RO.m <= q2
+      /\ g a CR_ROM_x2_OT_Eager1.x \in FullRO2.RO.m 
+      /\ FullRO1.RO.m.[f a CR_ROM_x2_OT_Eager1.x] = FullRO2.RO.m.[g a CR_ROM_x2_OT_Eager1.x]]
+  <=
+  q2%r * p_max dout.
+proof.
+fel 2
+    (fsize FullRO2.RO.m)
+    (fun _ => p_max dout)
+    q2
+    (exists (x : s_t),
+           g a x \in FullRO2.RO.m
+        /\ FullRO1.RO.m.[f a x] = FullRO2.RO.m.[g a x])
+    [ FinEagerRO1.FinRO.get : false; FullRO2.LRO.get : (arg \notin FullRO2.RO.m) ] 
+    (dom FullRO1.RO.m = mem enum) => //.
++ by rewrite StdBigop.Bigreal.BRA.sumri_const 1:ge0_q2 RField.intmulr /#.
++ move => &m0 [#] leq2_fsz gaxin coll eqdm.
+  split; 2: smt().
+  by exists CR_ROM_x2_OT_Eager1.x{m0}.
++ inline init sample get.
+  wp.
+  while (   (forall x, ! (x \in l) <=> x \in FullRO1.RO.m)   
+         /\ l = drop (card - size l) enum).
+  + by auto => />; smt(mem_set uniq_drop enum_uniq behead_drop).
+  wp; skip => />.
+  by split; smt(mem_empty fsize_empty enumP).
++ proc.
+  rcondt ^if; 1: by rnd. 
+  wp; rnd; skip => /> &m0 _ ltq2 nexis eqdm. 
+  case (! (exists x1, g a x1 = x{m0})) => [nex | [x1 eqgax]].
+  + rewrite (mu_eq dout _ pred0) 2:mu0 2:pmax_ge0 => y //. 
+    rewrite /pred0 neqF negb_exists => x' /=. 
+    by rewrite negb_and mem_set negb_or get_setE (: g a x' <> x{m0}) /#.
+  rewrite -eqgax (mu_eq dout _ (pred1 (oget FullRO1.RO.m{m0}.[f a x1]))); 2: smt(pmax_upper_bound).
+  move => y /=; rewrite eq_iff; split; 1: smt(get_setE inj_g).
+  move => @/pred1 ->; exists x1. 
+  rewrite mem_set get_set_sameE -some_oget 2://.
+  move: eqdm; rewrite -domE fun_ext => /(_ (f a x1)). 
+  by rewrite enumP => ->.
++ move => c.
+  proc. 
+  by wp; rnd; skip => />; smt(fsize_set).
+move=> b c.
+proc.  
+by wp; rnd; skip => />; smt(fsize_set).
+qed.
+
+
+(*
+  Step (4.5):
+  Translate the assumption regarding the adversary's (second) oracle 
+  queries to a concrete statement usable in the current stage 
+  of the proof.
+*)
+local lemma A_find_qs2_RO1Eager :
+  hoare[A(FinEagerRO1.FinRO, FullRO2.LRO).find : fsize FullRO2.RO.m = 0 ==> fsize FullRO2.RO.m <= q2].
+proof.
+have eqv_fszq :
+  equiv[ A(FinEagerRO1.FinRO, FullRO2.LRO).find ~ A(FinEagerRO1.FinRO, Counting_RO2(FullRO2.LRO)).find : 
+          ={glob A, glob FinEagerRO1.FinRO, glob FullRO2.LRO, arg} /\ fsize FullRO2.RO.m{2} <= Counting_RO2.q{2} 
+            ==> 
+          ={res, glob FullRO2.RO} /\ fsize FullRO2.RO.m{2} <= Counting_RO2.q{2} ]. 
++ proc (={glob FinEagerRO1.FinRO, glob FullRO2.LRO} /\ fsize FullRO2.RO.m{2} <= Counting_RO2.q{2}) => //.
+  + proc; inline get. 
+    by auto => />; smt(fsize_set).
+  by proc; wp.
+conseq eqv_fszq (: Counting_RO2.q = 0 ==> Counting_RO2.q <= q2); 1,2: by smt(). 
+by apply (A_find_qs2 (FinEagerRO1.FinRO) (FullRO2.LRO)).
+qed. 
+
+
+(* 
+  Step (5) (Final):
+  Show bound on CR-ROM-x2-OT by combining previously obtained results.
+*)
+(**
+  Bounds success probability of any adversary playing in CR-ROM-x2-OT
+  by `(q2 + 1) * p_max dout`. Here, q2 is the number of
+  queries to the first and second random oracle, respecively, and 
+  `p_max dout` is the maximum probability assigned to a single 
+  value by distribution `dout` (indeed, if dout is the usual uniform 
+  distribution, this is simply 1 / |out_t|).
+**)
+lemma Bnd_CRROMx2_OT &m (a' : aux_t) :
+  Pr[CR_ROM_x2_OT(RO1_Default, RO2_Default, A).main(a') @ &m : res] 
+  <=
+  (q2 + 1)%r * p_max dout.
+proof.
+have ->: 
+  Pr[CR_ROM_x2_OT(RO1_Default, RO2_Default, A).main(a') @ &m : res]
+  =
+  Pr[CR_ROM_x2_OT_Eager1.main(a') @ &m : res].
++ byequiv (: ={glob A, arg} ==> _) => //.
+  transitivity CR_ROM_x2_OT_I(FullRO1.LRO).main
+               (={glob A, arg} ==> ={res})
+               (={glob A, arg} ==> ={res}) => //; 1: smt().
+  + by apply Eqv_CRROMx2OT_I.
+  transitivity CR_ROM_x2_OT_I(FinEagerRO1.FinRO).main
+               (={glob A, arg} ==> ={res})
+               (={glob A, arg} ==> ={res}) => //; 1: smt().
+  + by apply Eqv_CRROMx2OTI_Main_LRO_FinRO.
+  by apply Eqv_CRROMx2OTI_Eager1.
+rewrite fromintD RField.mulrDl /=.
+byphoare (: arg = a' ==> _) => //.
+proc.
+seq 1 : (   g a CR_ROM_x2_OT_Eager1.x \in FullRO2.RO.m 
+         /\ FullRO1.RO.m.[f a CR_ROM_x2_OT_Eager1.x] = FullRO2.RO.m.[g a CR_ROM_x2_OT_Eager1.x])
+        (q2%r * p_max dout) 
+        1%r 
+        1%r 
+        (p_max dout) 
+        (forall x, x \in FullRO1.RO.m /\ a = a') => //.
++ inline advcr init sample get.        
+  call (: true) => //. 
+  wp.
+  while (   (forall x, ! (x \in l) <=> x \in FullRO1.RO.m)   
+         /\ l = drop (card - size l) enum).
+  + by auto => /> &m0; smt(mem_set uniq_drop enum_uniq behead_drop).
+  by wp; skip => />; smt(mem_empty fsize_empty enumP).
++ call (:     arg = a'
+          ==>
+            g a' CR_ROM_x2_OT_Eager1.x \in FullRO2.RO.m 
+         /\ FullRO1.RO.m.[f a' CR_ROM_x2_OT_Eager1.x] = FullRO2.RO.m.[g a' CR_ROM_x2_OT_Eager1.x]) => //.
+  bypr => &m0 ->.
+  have ->:
+    Pr[CR_ROM_x2_OT_Eager1.advcr(a') @ &m0 :
+          g a' CR_ROM_x2_OT_Eager1.x \in FullRO2.RO.m 
+       /\ FullRO1.RO.m.[f a' CR_ROM_x2_OT_Eager1.x] = FullRO2.RO.m.[g a' CR_ROM_x2_OT_Eager1.x]]
+    = 
+    Pr[CR_ROM_x2_OT_Eager1.advcr(a') @ &m0 :
+          fsize FullRO2.RO.m <= q2 
+       /\ g a' CR_ROM_x2_OT_Eager1.x \in FullRO2.RO.m 
+       /\ FullRO1.RO.m.[f a' CR_ROM_x2_OT_Eager1.x] = FullRO2.RO.m.[g a' CR_ROM_x2_OT_Eager1.x]].
+  + byequiv=> //.
+    proc.
+    call (:     ={glob A, glob FullRO1.RO, glob FullRO2.RO, arg} /\ FullRO2.RO.m{2} = empty
+            ==>
+                fsize FullRO2.RO.m{2} <= q2 /\ ={res, glob FullRO1.RO, glob FullRO2.RO}).
+    + conseq (: ={glob A, glob FullRO1.RO, glob FullRO2.RO, arg} ==> ={res, glob FullRO1.RO, glob FullRO2.RO}) 
+             _ 
+             A_find_qs2_RO1Eager => //; 1: smt(fsize_empty). 
+      by proc (={glob FullRO1.RO, glob FullRO2.RO}) => //; proc; auto. 
+    inline init sample get. 
+    by wp; while (={l, FullRO1.RO.m}); auto. 
+  by apply (Bnd_CRROMx2Eager1V_CR_RS &m0).  
+sp 1; if => //. 
++ rnd; skip => /> &m0 axin nand ganin. 
+  rewrite (mu_eq _ _ (pred1 (oget FullRO1.RO.m{m0}.[f a' CR_ROM_x2_OT_Eager1.x{m0}]))); smt(pmax_upper_bound).
+wp; conseq (: _ ==> false); 1: smt(). 
+by hoare; 1: smt(pmax_ge0).
+qed.
+
+end section.
+
+end OT.
+
+(* 
+  One output, One function version (of CR-ROM-x2):
+  Adversary asked to provide single output x such that 
+  RO1(f a x) collides with RO2(x) for some fixed, known g and a.
+  Note that this is a special case of the OT version where we take 
+  f to be the identity function (which is injective).   
+*) 
+abstract theory OO.
+(*
+  Again, we assume that the input type to the first oracle, in_t1,
+  is finite.
+*)
+require import FinType.
+clone import FinType as FinIn1 with 
+  type t <= in_t1.
+
+(* Additional auxiliary input to function mapping between random oracle inputs *)
+type aux_t.
+
+(* Function mapping between random oracle inputs*)
+op f : aux_t -> in_t2 -> in_t1. 
+
+
+(* Security *)
+(* Collision resistance between two random oracles (CR-ROM-x2), OO version *)
+(** Adversary class for CR-ROM-x2-OO **)
+module type Adv_CRROMx2_OO (RO1 : RandomOracle1) (RO2 : RandomOracle2) = { 
+  proc find(a : aux_t) : in_t2
+}.
+
+(** CR-ROM-x2-OO security game **)
+module CR_ROM_x2_OO (RO1 : RandomOracle1i) (RO2 : RandomOracle2i) (A : Adv_CRROMx2_OO) = {
+  proc main(a : aux_t) : bool = {
+    var x : in_t2;
+    var y1, y2 : out_t;
+    
+    RO1.init();
+    RO2.init();
+        
+    x <@ A(RO1, RO2).find(a);
+    
+    y1 <@ RO1.get(f a x);
+    y2 <@ RO2.get(x);
+    
+    return y1 = y2; 
+  }
+}.
+
+
+
+section.
+(* Clone and import results from OT theory *) 
+local clone import OT with 
+  theory FinIn1 <- FinIn1,
+  
+  type aux_t <- aux_t,
+  type s_t <- in_t2,
+    op f <- f,
+    op g <- fun (a : aux_t) (x : in_t2) => x 
+    
+  proof *.
+
+(* Declare arbitrary adversary against CR-ROM-x2-OO *)
+declare module A <: Adv_CRROMx2_OO { -RO1_Default, -RO2_Default, -Counting_RO1, -Counting_RO2 }.
+
+(* By assumption, the adversary's finding procedure terminates (given that its oracles terminate) *)
+declare axiom A_find_ll (RO1 <: RandomOracle1{-A}) (RO2 <: RandomOracle2{-A}) :
+  islossless RO1.get => islossless RO2.get => islossless A(RO1, RO2).find.
+
+(* 
+  By assumption, the number of adversary queries (to the second oracle) is bounded 
+  (by some non-negative constant)
+*)
+declare op q2 : { int | 0 <= q2 } as ge0_q2.
+declare axiom A_find_qs2 (RO1 <: RandomOracle1{-A}) (RO2 <: RandomOracle2{-A}) (n : int) :
+  hoare[A(RO1, Counting_RO2(RO2)).find : Counting_RO2.q = n ==> Counting_RO2.q <= n + q2].
+
+(* 
+  Step (First and final):
+  Show bound on CR-ROM-x2-OO by reusing result from OT variant.
+*)
+(**
+  Bounds success probability of any adversary playing in CR-ROM-x2-OO
+  by `(q2 + 1) * p_max dout`. Here, q2 is the number of
+  queries to the first and second random oracle, respecively, and 
+  `p_max dout` is the maximum probability assigned to a single 
+  value by distribution `dout` (indeed, if dout is the usual uniform 
+  distribution, this is simply 1 / |out_t|).
+**)
+lemma Bnd_CRROMx2_OO &m (a' : aux_t) :
+  Pr[CR_ROM_x2_OO(RO1_Default, RO2_Default, A).main(a') @ &m : res] 
+  <=
+  (q2 + 1)%r * p_max dout.
+proof.
+have ->:
+  Pr[CR_ROM_x2_OO(RO1_Default, RO2_Default, A).main(a') @ &m : res]
+  =
+  Pr[CR_ROM_x2_OT(RO1_Default, RO2_Default, A).main(a') @ &m : res]. 
++ by byequiv=> //; sim. 
+by apply (Bnd_CRROMx2_OT _ A  A_find_ll q2 ge0_q2 A_find_qs2 &m a') => /#. 
+qed.
+
+end section.
+
+end OO.
