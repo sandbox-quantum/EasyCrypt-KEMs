@@ -1137,7 +1137,7 @@ qed.
 (*
   Split get procedure of G_RO_SSample into
   two get procedures samplings (each sampling one part of the pair)
-*)
+  
 local module G_RO_SGet = {
   import var ROM_G.RO
   var mk : (ptxt_t * rand_t, key_t) fmap
@@ -1167,7 +1167,7 @@ local module G_RO_SGet = {
   
   proc get = getk
 }.
-
+*)
 
 
 (* 
@@ -1175,7 +1175,7 @@ local module G_RO_SGet = {
   for ML-KEM in ROM (with G and J modeled as a random oracle)
   with (non-RO) concrete procedures inlined, several variables 
   moved to the module level, and extraneous variables removed.
-*)
+
 local module LEAK_BINDKPK_MLKEM_ROM_JG = {
   var pk_pke0, pk_pke1 : pk_t_pke
   var sk_pke0, sk_pke1 : sk_t_pke
@@ -1217,7 +1217,7 @@ local module LEAK_BINDKPK_MLKEM_ROM_JG = {
     return is_bindbreak K_Binds_PK (oget k0) (oget k1) pk0 pk1 c0 c1;
   }
 }.
-
+*)
 
 
 end section MLKEM_LEAKBINDKPK_ROMx2.
