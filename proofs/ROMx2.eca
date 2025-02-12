@@ -1,4 +1,5 @@
 require import AllCore Distr List FMap PROM.
+require (*--*) ROM.
 
 (* Auxiliary properties *) 
 lemma size_behead (s : 'a list) : 
