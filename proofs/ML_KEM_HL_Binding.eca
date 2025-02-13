@@ -639,29 +639,66 @@ qed.
 local lemma Bnd_LEAKBINDROMJG_KPK_CD &m :
   Pr[LEAK_BINDKPK_MLKEM_ROM_JG.main(K_Binds_PK) @ &m : res]
   <=
-  Pr[LEAK_BINDKPK_MLKEM_ROM_JG.main(K_Binds_PK) @ &m :
-         LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0 <> LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1
-      /\ LEAK_BINDKPK_MLKEM_ROM_JG.k0' = LEAK_BINDKPK_MLKEM_ROM_JG.k1' ]
+  p_max drand
   +
-  Pr[LEAK_BINDKPK_MLKEM_ROM_JG.main(K_Binds_PK) @ &m : 
-      LEAK_BINDKPK_MLKEM_ROM_JG.k0' = LEAK_BINDKPK_MLKEM_ROM_JG.k1_ ]
+  p_max (dmap dkg (fun (kp : pk_t_pke * sk_t_pke) => H kp.`1))
   +
   Pr[LEAK_BINDKPK_MLKEM_ROM_JG.main(K_Binds_PK) @ &m :
-      LEAK_BINDKPK_MLKEM_ROM_JG.k0_ = LEAK_BINDKPK_MLKEM_ROM_JG.k1' ]  
+         H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0 <> H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1
+      /\ LEAK_BINDKPK_MLKEM_ROM_JG.k0' = LEAK_BINDKPK_MLKEM_ROM_JG.k1']
   +
   Pr[LEAK_BINDKPK_MLKEM_ROM_JG.main(K_Binds_PK) @ &m : 
-      LEAK_BINDKPK_MLKEM_ROM_JG.k0_ = LEAK_BINDKPK_MLKEM_ROM_JG.k1_ ].
+         LEAK_BINDKPK_MLKEM_ROM_JG.z0 <> LEAK_BINDKPK_MLKEM_ROM_JG.z1
+      /\ LEAK_BINDKPK_MLKEM_ROM_JG.k0' = LEAK_BINDKPK_MLKEM_ROM_JG.k1_]
+  +
+  Pr[LEAK_BINDKPK_MLKEM_ROM_JG.main(K_Binds_PK) @ &m :
+         H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0 <> H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1
+      /\ LEAK_BINDKPK_MLKEM_ROM_JG.k0_ = LEAK_BINDKPK_MLKEM_ROM_JG.k1']  
+  +
+  Pr[LEAK_BINDKPK_MLKEM_ROM_JG.main(K_Binds_PK) @ &m : 
+         LEAK_BINDKPK_MLKEM_ROM_JG.z0 <> LEAK_BINDKPK_MLKEM_ROM_JG.z1
+      /\ LEAK_BINDKPK_MLKEM_ROM_JG.k0_ = LEAK_BINDKPK_MLKEM_ROM_JG.k1_].
 proof.
-rewrite -?RField.addrA.
-rewrite Pr[mu_split (   LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0 <> LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1 
+rewrite -?RField.addrA Pr[mu_split LEAK_BINDKPK_MLKEM_ROM_JG.z0 = LEAK_BINDKPK_MLKEM_ROM_JG.z1] StdOrder.RealOrder.ler_add.
++ byphoare => //.
+  proc.
+  swap 3 -2; swap 7 -5.
+  seq 2 : (LEAK_BINDKPK_MLKEM_ROM_JG.z0 = LEAK_BINDKPK_MLKEM_ROM_JG.z1)
+          (p_max drand)
+          1%r
+          _
+          0%r => //.
+  + by rnd; rnd; skip => />; smt(pmax_upper_bound).
+  by hoare; conseq (: _ ==> true) => // /#.
+rewrite Pr[mu_split H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0 = H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1] StdOrder.RealOrder.ler_add.
++ byphoare => //. 
+  proc.
+  swap 4 -3; swap 8 -6.
+  seq 2 : (H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0 = H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1)
+          (p_max (dmap dkg (fun (kp : pk_t_pke * sk_t_pke) => H kp.`1)))
+          1%r
+          _
+          0%r => //.
+  + rnd (fun (kp : pk_t_pke * sk_t_pke) => H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0 = H kp.`1).
+    rnd; skip => /> kp kpin.
+    pose fnc := (fun (kp : _ * _) => _ = Top.H kp.`1). 
+    rewrite (: fnc = (pred1 (H kp.`1) \o (H \o fst))) 1:/#. 
+    by rewrite -dmapE /(\o) /=; smt(pmax_upper_bound).
+  by hoare; conseq (: _ ==> true) => // /#.
+rewrite Pr[mu_split (   H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0 <> H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1
                      /\ LEAK_BINDKPK_MLKEM_ROM_JG.k0' = LEAK_BINDKPK_MLKEM_ROM_JG.k1')] StdOrder.RealOrder.ler_add.
 + by rewrite Pr[mu_sub].
-rewrite Pr[mu_split (LEAK_BINDKPK_MLKEM_ROM_JG.k0' = LEAK_BINDKPK_MLKEM_ROM_JG.k1_)] StdOrder.RealOrder.ler_add.
+rewrite Pr[mu_split (   LEAK_BINDKPK_MLKEM_ROM_JG.z0 <> LEAK_BINDKPK_MLKEM_ROM_JG.z1
+                     /\ LEAK_BINDKPK_MLKEM_ROM_JG.k0' = LEAK_BINDKPK_MLKEM_ROM_JG.k1_)] StdOrder.RealOrder.ler_add.
 + by rewrite Pr[mu_sub].
-rewrite Pr[mu_split (LEAK_BINDKPK_MLKEM_ROM_JG.k0_ = LEAK_BINDKPK_MLKEM_ROM_JG.k1')] StdOrder.RealOrder.ler_add.
+rewrite Pr[mu_split (   H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0 <> H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1
+                     /\ LEAK_BINDKPK_MLKEM_ROM_JG.k0_ = LEAK_BINDKPK_MLKEM_ROM_JG.k1')] StdOrder.RealOrder.ler_add.
 + by rewrite Pr[mu_sub]. 
-rewrite Pr[mu_split (LEAK_BINDKPK_MLKEM_ROM_JG.k0_ = LEAK_BINDKPK_MLKEM_ROM_JG.k1_)].
-rewrite -(RField.addr0 Pr[LEAK_BINDKPK_MLKEM_ROM_JG.main(K_Binds_PK) @ &m : LEAK_BINDKPK_MLKEM_ROM_JG.k0_ = LEAK_BINDKPK_MLKEM_ROM_JG.k1_]) StdOrder.RealOrder.ler_add.  
+rewrite Pr[mu_split (   LEAK_BINDKPK_MLKEM_ROM_JG.z0 <> LEAK_BINDKPK_MLKEM_ROM_JG.z1
+                     /\ LEAK_BINDKPK_MLKEM_ROM_JG.k0_ = LEAK_BINDKPK_MLKEM_ROM_JG.k1_)].
+rewrite -(RField.addr0 Pr[LEAK_BINDKPK_MLKEM_ROM_JG.main(K_Binds_PK) @ &m : 
+              LEAK_BINDKPK_MLKEM_ROM_JG.z0 <> LEAK_BINDKPK_MLKEM_ROM_JG.z1
+           /\ LEAK_BINDKPK_MLKEM_ROM_JG.k0_ = LEAK_BINDKPK_MLKEM_ROM_JG.k1_]) StdOrder.RealOrder.ler_add.
 + by rewrite Pr[mu_sub].
 byphoare => //; hoare.
 proc. 
@@ -766,28 +803,11 @@ local module (R_CRROMx2GG_LEAKBINDKCT : ROM_GkGk.Adv_CRROMx2)
 
 local lemma Bnd_GGcoll_CRROMx2 &m :
   Pr[LEAK_BINDKPK_MLKEM_ROM_JG.main(K_Binds_PK) @ &m :
-         LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0 <> LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1
-      /\ LEAK_BINDKPK_MLKEM_ROM_JG.k0' = LEAK_BINDKPK_MLKEM_ROM_JG.k1' ]
+         H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0 <> H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1
+      /\ LEAK_BINDKPK_MLKEM_ROM_JG.k0' = LEAK_BINDKPK_MLKEM_ROM_JG.k1']
   <=
-  p_max (dmap dkg (fun (kp : pk_t_pke * sk_t_pke) => H kp.`1))
-  +
   Pr[ROM_GkGk.CR_ROM_x2(ROM_GkGk.RO1_Default, ROM_GkGk.RO2_Default, R_CRROMx2GG_LEAKBINDKCT).main() @ &m : res].
 proof.
-rewrite Pr[mu_split H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0 = H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1] StdOrder.RealOrder.ler_add.
-+ byphoare => //. 
-  proc.
-  swap 4 -3; swap 8 -6.
-  seq 2 : (H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0 = H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1)
-          (p_max (dmap dkg (fun (kp : pk_t_pke * sk_t_pke) => H kp.`1)))
-          1%r
-          _
-          0%r => //.
-  + rnd (fun (kp : pk_t_pke * sk_t_pke) => H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0 = H kp.`1).
-    rnd; skip => /> kp kpin.
-    pose fnc := (fun (kp : _ * _) => _ = Top.H kp.`1). 
-    rewrite (: fnc = (pred1 (H kp.`1) \o (H \o fst))) 1:/#. 
-    by rewrite -dmapE /(\o) /=; smt(pmax_upper_bound).
-  by hoare; conseq (: _ ==> true) => // /#.
 byequiv => //.
 proc.
 swap{1} [14..15] 2.
@@ -919,6 +939,7 @@ qed.
 
 
 (* Case 2: k0' = k1_ (i.e., first part of G collides with J) *)
+(*
 local clone ROMx2 as ROM_GkJ with
   type in_t1 <- ptxt_t,
   type in_t2 <- ctxt_t,
@@ -1030,13 +1051,108 @@ local module (R_CRROMx2GJ_LEAKBINDKCT : ROM_GkJ.Adv_CRROMx2)
 
 local lemma Bnd_GJcoll_CRROMx2 &m :
   Pr[LEAK_BINDKPK_MLKEM_ROM_JG.main(K_Binds_PK) @ &m :
-       LEAK_BINDKPK_MLKEM_ROM_JG.k0' = LEAK_BINDKPK_MLKEM_ROM_JG.k1_ ]
+       LEAK_BINDKPK_MLKEM_ROM_JG.k0' = LEAK_BINDKPK_MLKEM_ROM_JG.k1_]
   <=
   Pr[ROM_GkJ.CR_ROM_x2(ROM_GkJ.RO1_Default, ROM_GkJ.RO2_Default, R_CRROMx2GJ_LEAKBINDKCT).main() @ &m : res].
 proof.
+
 admit.
 qed.
+*)
 
+
+local clone ROMx2 as ROM_GkJ with
+  type in_t1 <- ptxt_t * rand_t,
+  type in_t2 <- rand_t * ctxt_t,
+  type out_t <- key_t,
+  
+    op dout <- dkey
+    
+  proof *.
+  realize dout_ll by exact: dkey_ll.
+
+
+local module GW1 (RO1 : ROM_GkJ.RandomOracle1) : RandomOracle = {
+  import var ROM_G.RO
+  include G_RO [-get]
+  
+  proc get(ph : ptxt_t * rand_t) : key_t * rand_t = { 
+    var k : key_t;
+    var r : rand_t;
+    
+    r <$ drand;
+    k <@ RO1.get(ph);
+    if (ph \notin m) {
+      m.[ph] <- (k, r); 
+    }
+
+    return oget m.[ph];
+  }
+}.
+
+local module (R_CRROMx2GJ_LEAKBINDKCT : ROM_GkJ.Adv_CRROMx2) 
+             (RO1 : ROM_GkJ.RandomOracle1) (RO2 : ROM_GkJ.RandomOracle2) = {
+  import var LEAK_BINDKPK_MLKEM_ROM_JG
+  
+  proc find() : (ptxt_t * rand_t) * (rand_t * ctxt_t) = {
+    var pk0, pk1 : pk_t;
+    var sk0, sk1 : sk_t;  
+
+    GW1(RO1).init();
+            
+    z0 <$ drand;
+    (pk_pke0, sk_pke0) <$ dkg;
+    pk0 <- pk_pke0;
+    sk0 <- (sk_pke0, pk0, H pk0, z0);
+    
+    z1 <$ drand;
+    (pk_pke1, sk_pke1) <$ dkg;
+    pk1 <- pk_pke1;
+    sk1 <- (sk_pke1, pk1, H pk1, z1);
+        
+    (c0, c1) <@ A(RO2, GW1(RO1)).find(K_Binds_PK, pk0, sk0, pk1, sk1);
+    
+    p0' <- dec sk_pke0 c0;
+    
+    (* 
+      Need to query J here to ensure the RO map is identical between the games 
+      when the querying it for (z1, c1) in the end. (Since we didn't split 
+      exclude (z0, c0) = (z1, c1) here, this case would prevent the reduction from winning
+      as the query for (z0, c0) overwrites that for (z1, c1).
+      So, mimic this here :).   
+    RO2.get((z0, c1));
+    *)
+    
+    return ((p0', H pk0), (z1, c1));
+  }
+}.
+
+
+local lemma Bnd_GJcoll_CRROMx2 &m :
+  Pr[LEAK_BINDKPK_MLKEM_ROM_JG.main(K_Binds_PK) @ &m :
+         LEAK_BINDKPK_MLKEM_ROM_JG.z0 <> LEAK_BINDKPK_MLKEM_ROM_JG.z1
+      /\ LEAK_BINDKPK_MLKEM_ROM_JG.k0' = LEAK_BINDKPK_MLKEM_ROM_JG.k1_]
+  <=
+  Pr[ROM_GkJ.CR_ROM_x2(ROM_GkJ.RO1_Default, ROM_GkJ.RO2_Default, R_CRROMx2GJ_LEAKBINDKCT).main() @ &m : res].
+proof.
+byequiv => //.
+proc.
+inline{2} 3.
+seq 11 12 : (   ={pk0}
+             /\ LEAK_BINDKPK_MLKEM_ROM_JG.z0{1} <> LEAK_BINDKPK_MLKEM_ROM_JG.z1{1}
+             /\ ={LEAK_BINDKPK_MLKEM_ROM_JG.sk_pke0, LEAK_BINDKPK_MLKEM_ROM_JG.z0, LEAK_BINDKPK_MLKEM_ROM_JG.z1}
+             /\ ={LEAK_BINDKPK_MLKEM_ROM_JG.c0, LEAK_BINDKPK_MLKEM_ROM_JG.c1}
+             /\ ROM_J.RO.m{1} = ROM_GkJ.RO2_Default.m{2}
+             /\ dom ROM_G.RO.m{1} = dom ROM_GkJ.RO1_Default.m{2}
+             /\ (forall (ph : ptxt_t * rand_t), ph \in ROM_G.RO.m{1} =>
+                    (oget ROM_G.RO.m{1}.[ph]).`1 = oget ROM_GkJ.RO1_Default.m{2}.[ph])).
++ admit.
+swap{1} 7 -3; swap{1} 2 1.
+seq 4 4 : #post; 2: by inline; auto.
+inline get.
+wp; rnd; wp; rnd{1}; rnd. 
+by wp; rnd{1}; wp; skip => />; smt(@FMap).
+qed.
 
 
 (* Case 3: k0_ = k1' (i.e., J collides with first part of G) *)
@@ -1150,7 +1266,8 @@ local module (R_CRROMx2JG_LEAKBINDKCT : ROM_JGk.Adv_CRROMx2)
 
 local lemma Bnd_JGcoll_CRROMx2 &m :
   Pr[LEAK_BINDKPK_MLKEM_ROM_JG.main(K_Binds_PK) @ &m :
-       LEAK_BINDKPK_MLKEM_ROM_JG.k0_ = LEAK_BINDKPK_MLKEM_ROM_JG.k1' ]
+           H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0 <> H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1
+        /\ LEAK_BINDKPK_MLKEM_ROM_JG.k0_ = LEAK_BINDKPK_MLKEM_ROM_JG.k1' ]
   <=
   Pr[ROM_JGk.CR_ROM_x2(ROM_JGk.RO1_Default, ROM_JGk.RO2_Default, R_CRROMx2JG_LEAKBINDKCT).main() @ &m : res].
 proof.
@@ -1241,7 +1358,8 @@ local module (R_CRROMx2JJ_LEAKBINDKCT : ROM_JJ.Adv_CRROMx2)
 
 local lemma Bnd_JJcoll_CRROMx2 &m :
   Pr[LEAK_BINDKPK_MLKEM_ROM_JG.main(K_Binds_PK) @ &m :
-         LEAK_BINDKPK_MLKEM_ROM_JG.k0' = LEAK_BINDKPK_MLKEM_ROM_JG.k1' ]
+         LEAK_BINDKPK_MLKEM_ROM_JG.z0 <> LEAK_BINDKPK_MLKEM_ROM_JG.z1
+      /\ LEAK_BINDKPK_MLKEM_ROM_JG.k0' = LEAK_BINDKPK_MLKEM_ROM_JG.k1']
   <=
   p_max drand
   +
