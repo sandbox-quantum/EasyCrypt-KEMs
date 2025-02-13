@@ -489,7 +489,9 @@ section MLKEM_LEAKBINDKPK_ROMx2.
 
 declare module A <: Adv_LEAKBIND_ROMx2 {-G_RO, -J_RO}.
 
-
+(* By assumption, the adversary's finding procedure terminates (given that its oracles terminate) *)
+declare axiom A_find_ll (RO1 <: RandomOracle{-A}) (RO2 <: RandomOracle2{-A}) :
+  islossless RO1.get => islossless RO2.get => islossless A(RO2, RO1).find.
 
 (*
   Split sampling (of pairs) in G_RO
@@ -786,7 +788,133 @@ rewrite Pr[mu_split H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0 = H LEAK_BINDKPK_MLKEM_R
     rewrite (: fnc = (pred1 (H kp.`1) \o (H \o fst))) 1:/#. 
     by rewrite -dmapE /(\o) /=; smt(pmax_upper_bound).
   by hoare; conseq (: _ ==> true) => // /#.
-by admit.
+byequiv => //.
+proc.
+swap{1} [14..15] 2.
+seq 15 11 : #post; 2: by inline; auto. 
+inline{2} 3.
+swap{1} 4 -3; swap{1} 8 -6. 
+swap{2} 5 -4; swap{2} 9 -7.
+seq 2 2 : (   #pre 
+           /\ ={LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0, LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1}
+           /\ ={LEAK_BINDKPK_MLKEM_ROM_JG.sk_pke0, LEAK_BINDKPK_MLKEM_ROM_JG.sk_pke1}). 
++ by rnd; rnd.
+case (H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0{1} = H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1{1}).
++ conseq (: _ ==> true) => //.
+  inline.
+  swap{1} 13 -1; swap{1} 19 -6.
+  auto. 
+  call{1} (A_find_ll G_RO_SSample J_RO).
+  + by proc; auto => />; smt(dkey_ll drand_ll).
+  + by proc; auto => />; smt(dkey_ll).
+  call{2} (A_find_ll (GW12(ROM_GkGk.RO1_Default, ROM_GkGk.RO2_Default)) J_RO).
+  + proc; inline.
+    if => //.
+    + seq 1 : true 1%r 1%r 0%r 0%r => //.
+      + by rnd; skip; smt(drand_ll).
+      + by if; auto => />; smt(dkey_ll).
+      if => //.
+      + seq 1 : true 1%r 1%r 0%r 0%r => //.
+        + by rnd; skip; smt(drand_ll).
+        + by if; auto => />; smt(dkey_ll).
+        by auto => />; smt(dkey_ll drand_ll).
+  + by proc; auto => />; smt(dkey_ll).
+  by auto.
+inline get.
+seq 9 11 : (   ={LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0, LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1}
+             /\ ={LEAK_BINDKPK_MLKEM_ROM_JG.sk_pke0, LEAK_BINDKPK_MLKEM_ROM_JG.sk_pke1}
+             /\ H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0{1} <> H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1{1}
+             /\ ={LEAK_BINDKPK_MLKEM_ROM_JG.c0, LEAK_BINDKPK_MLKEM_ROM_JG.c1}
+             /\ pk0{1} = LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0{1}
+             /\ pk1{1} = LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1{1}
+             /\ (forall (p : ptxt_t),
+                   (p, H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0{1}) \in ROM_G.RO.m{1} 
+                   <=> 
+                   p \in ROM_GkGk.RO1_Default.m{2})
+             /\ (forall (p : ptxt_t), p \in ROM_GkGk.RO1_Default.m{2} => 
+                   (oget ROM_G.RO.m{1}.[(p, H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0{1})]).`1
+                   =
+                   oget ROM_GkGk.RO1_Default.m{2}.[p])
+             /\ (forall (p : ptxt_t),
+                   (p, H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1{1}) \in ROM_G.RO.m{1} 
+                   <=> 
+                   p \in ROM_GkGk.RO2_Default.m{2})
+             /\ (forall (p : ptxt_t), p \in ROM_GkGk.RO2_Default.m{2} =>
+                    (oget ROM_G.RO.m{1}.[(p, H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1{1})]).`1
+                    =
+                    oget ROM_GkGk.RO2_Default.m{2}.[p])). 
++ call (:   ={ROM_J.RO.m}
+         /\ H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0{1} <> H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1{1}
+         /\ GW12.h0{2} = H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0{1}
+         /\ GW12.h1{2} = H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1{1}
+         /\ dom GW12.m1{2} = dom ROM_GkGk.RO1_Default.m{2}
+         /\ dom GW12.m2{2} = dom ROM_GkGk.RO2_Default.m{2}
+         /\ (forall (p : ptxt_t), p \in GW12.m1{2} => 
+               (oget GW12.m1{2}.[p]).`1 = oget ROM_GkGk.RO1_Default.m{2}.[p])
+         /\ (forall (p : ptxt_t), p \in GW12.m2{2} => 
+               (oget GW12.m2{2}.[p]).`1 = oget ROM_GkGk.RO2_Default.m{2}.[p])
+         /\ (forall (p : ptxt_t),
+                (p, H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0{1}) \in ROM_G.RO.m{1} 
+                <=> 
+                p \in ROM_GkGk.RO1_Default.m{2})
+          /\ (forall (p : ptxt_t), p \in GW12.m1{2} => 
+                oget ROM_G.RO.m{1}.[(p, H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0{1})]
+                =
+                oget GW12.m1{2}.[p])
+          /\ (forall (p : ptxt_t),
+                (p, H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1{1}) \in ROM_G.RO.m{1} 
+                <=> 
+                p \in ROM_GkGk.RO2_Default.m{2})
+          /\ (forall (p : ptxt_t), p \in GW12.m2{2} => 
+                 oget ROM_G.RO.m{1}.[(p, H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1{1})]
+                 =
+                 oget GW12.m2{2}.[p])
+          /\ (forall (p : ptxt_t) (h : rand_t), (p, h) \in GW12.mr{2} =>
+                h <> H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0{1} /\ h <> H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1{1})
+          /\ (forall (p : ptxt_t) (h : rand_t), 
+                h <> H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0{1} /\ h <> H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1{1} => 
+                  ((p, h) \in ROM_G.RO.m{1} <=> (p, h) \in GW12.mr{2}))
+          /\ (forall (p : ptxt_t) (h : rand_t), (p, h) \in GW12.mr{2} =>
+                 oget ROM_G.RO.m{1}.[(p, h)] = oget GW12.mr{2}.[(p, h)])
+          /\ (forall (p : ptxt_t) (h : rand_t), (p, h) \in GW12.mr{2} =>
+                 oget ROM_G.RO.m{1}.[(p, h)] = oget GW12.mr{2}.[(p, h)])).
+  + proc.
+    case (ph{2}.`2 = GW12.h0{2}).
+    + rcondt{2} ^if; 1: by auto. 
+      case (ph{2}.`1 \notin GW12.m1{2}).
+      + rcondt{1} ^if; 1: by auto => /> /#. 
+        inline get.
+        rcondt{2} ^if; 1: by auto.
+        rcondt{2} ^if; 1: by auto => /> /#. 
+        by swap{1} 1 1; wp; rnd; wp; rnd; skip => />; smt(@FMap).
+      rcondf{2} ^if; 1: by auto. 
+      case (ph{2}.`2 = GW12.h1{2}).
+      + rcondt{1} ^if; 1: by auto => /> /#. 
+        by wp; rnd; rnd{1}; skip => />; smt(@FMap).
+      rcondf{1} ^if; 1: by auto => /> /#.
+      by wp; rnd; rnd{1}; skip => />; smt(@FMap).
+    rcondf{2} ^if; 1: by auto.
+    case (ph{2}.`2 = GW12.h1{2}).
+    + rcondt{2} ^if; 1: by auto.
+      case (ph{2}.`1 \notin GW12.m2{2}).
+      + rcondt{1} ^if; 1: by auto => /> /#. 
+        inline get.
+        rcondt{2} ^if; 1: by auto.
+        rcondt{2} ^if; 1: by auto => /> /#.
+        by swap{1} 1 1; wp; rnd; wp; rnd; skip => />; smt(@FMap).
+      rcondf{2} ^if; 1: by auto.
+      rcondf{1} ^if; 1: by auto => /> /#.
+      by wp; rnd; rnd{1}; skip => />; smt(@FMap).
+    rcondf{2} ^if; 1: by auto.
+    by wp; rnd; rnd; skip => />; smt(@FMap).
+  + by proc; auto. 
+  inline init.
+  auto => />. 
+  progress; 2..:smt(mem_empty).
+  by auto => />; smt(mem_empty).   
+wp; rnd{1}; rnd.  
+wp; rnd{1}; rnd.
+by wp; skip => />; smt(@FMap). 
 qed.
 
 
