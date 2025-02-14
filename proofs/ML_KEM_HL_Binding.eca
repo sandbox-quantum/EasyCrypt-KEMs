@@ -482,8 +482,6 @@ module G_RO = ROM_G.LRO.
 module J_RO = ROM_J.LRO. 
 
 
-(* Reductions *)
-
 
 section MLKEM_LEAKBINDKPK_ROMx2.
 
@@ -895,172 +893,42 @@ seq 9 11 : (   ={LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0, LEAK_BINDKPK_MLKEM_ROM_JG.pk
                 h <> H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0{1} /\ h <> H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1{1} => 
                   ((p, h) \in ROM_G.RO.m{1} <=> (p, h) \in GW12.mr{2}))
           /\ (forall (p : ptxt_t) (h : rand_t), (p, h) \in GW12.mr{2} =>
-                 oget ROM_G.RO.m{1}.[(p, h)] = oget GW12.mr{2}.[(p, h)])
-          /\ (forall (p : ptxt_t) (h : rand_t), (p, h) \in GW12.mr{2} =>
                  oget ROM_G.RO.m{1}.[(p, h)] = oget GW12.mr{2}.[(p, h)])).
   + proc.
-    case (ph{2}.`2 = GW12.h0{2}).
-    + rcondt{2} ^if; 1: by auto. 
-      case (ph{2}.`1 \notin GW12.m1{2}).
+    if{2}.
+    + case (ph{2}.`1 \notin GW12.m1{2}).
       + rcondt{1} ^if; 1: by auto => /> /#. 
         inline get.
         rcondt{2} ^if; 1: by auto.
         rcondt{2} ^if; 1: by auto => /> /#. 
-        by swap{1} 1 1; wp; rnd; wp; rnd; skip => />; smt(@FMap).
+        swap{1} 1 1; wp; rnd; wp; rnd; skip => />; smt(get_setE domE).                
       rcondf{2} ^if; 1: by auto. 
       case (ph{2}.`2 = GW12.h1{2}).
       + rcondt{1} ^if; 1: by auto => /> /#. 
-        by wp; rnd; rnd{1}; skip => />; smt(@FMap).
+        by wp; rnd; rnd{1}; skip => />; smt(get_setE).
       rcondf{1} ^if; 1: by auto => /> /#.
-      by wp; rnd; rnd{1}; skip => />; smt(@FMap).
-    rcondf{2} ^if; 1: by auto.
-    case (ph{2}.`2 = GW12.h1{2}).
-    + rcondt{2} ^if; 1: by auto.
-      case (ph{2}.`1 \notin GW12.m2{2}).
+      by wp; rnd; rnd{1}; skip => />; smt(get_setE).
+    if{2}.
+    + case (ph{2}.`1 \notin GW12.m2{2}).
       + rcondt{1} ^if; 1: by auto => /> /#. 
         inline get.
         rcondt{2} ^if; 1: by auto.
         rcondt{2} ^if; 1: by auto => /> /#.
-        by swap{1} 1 1; wp; rnd; wp; rnd; skip => />; smt(@FMap).
+        by swap{1} 1 1; wp; rnd; wp; rnd; skip => />; smt(get_setE domE).
       rcondf{2} ^if; 1: by auto.
       rcondf{1} ^if; 1: by auto => /> /#.
-      by wp; rnd; rnd{1}; skip => />; smt(@FMap).
-    rcondf{2} ^if; 1: by auto.
-    by wp; rnd; rnd; skip => />; smt(@FMap).
+      by wp; rnd; rnd{1}; skip => />; smt(get_setE).
+    by wp; rnd; rnd; skip => />; smt(get_setE).
   + by proc; auto. 
   inline init.
-  auto => />. 
-  progress; 2..:smt(mem_empty).
   by auto => />; smt(mem_empty).   
 wp; rnd{1}; rnd.  
 wp; rnd{1}; rnd.
-by wp; skip => />; smt(@FMap). 
+by wp; skip => />; smt(get_setE).
 qed.
 
 
 (* Case 2: k0' = k1_ (i.e., first part of G collides with J) *)
-(*
-local clone ROMx2 as ROM_GkJ with
-  type in_t1 <- ptxt_t,
-  type in_t2 <- ctxt_t,
-  type out_t <- key_t,
-  
-    op dout <- dkey
-    
-  proof *.
-  realize dout_ll by exact: dkey_ll.
-
-
-local module GW1 (RO1 : ROM_GkJ.RandomOracle1) : RandomOracle = {
-  var h0 : rand_t 
-  var m1 : (ptxt_t, key_t * rand_t) fmap
-  var mr : (ptxt_t * rand_t, key_t * rand_t) fmap
-  
-  proc init(h0_init : rand_t) : unit = {
-    h0 <- h0_init;
-    m1 <- empty;
-    mr <- empty;
-  }
-  
-  proc get(ph : ptxt_t * rand_t) : key_t * rand_t = { 
-    var k : key_t;
-    var r : rand_t;
-    
-    if (ph.`2 = h0) { 
-      r <$ drand;
-      if (ph.`1 \notin m1) {
-        k <@ RO1.get(ph.`1);
-        m1.[ph.`1] <- (k, r); 
-      }
-      (k, r) <- oget m1.[ph.`1];  
-    } else { (* ph.`2 <> h0 *)
-      k <$ dkey;
-      r <$ drand;
-      if (ph \notin mr) {
-        mr.[ph] <- (k, r);
-      }
-      (k, r) <- oget mr.[ph];
-    }
-    
-    return (k, r);
-  }
-}.
-
-local module JW2 (RO2 : ROM_GkJ.RandomOracle2) : RandomOracle2 = {
-  var z1 : rand_t 
-  var m1 : (ctxt_t, key_t) fmap
-  var mr : (rand_t * ctxt_t, key_t) fmap
-  
-  proc init(z1_init : rand_t) : unit = {
-    z1 <- z1_init;
-    m1 <- empty;
-    mr <- empty;
-  }
-  
-  proc get(zc : rand_t * ctxt_t) : key_t = { 
-    var k : key_t;
-    var r : rand_t;
-    
-    if (zc.`1 = z1) { 
-      if (zc.`2 \notin m1) {
-        k <@ RO2.get(zc.`2);
-        m1.[zc.`2] <- k; 
-      }
-      k <- oget m1.[zc.`2];  
-    } else { (* zc.`1 <> z1 *)
-      k <$ dkey;
-      if (zc \notin mr) {
-        mr.[zc] <- k;
-      }
-      k <- oget mr.[zc];
-    }
-    
-    return k;
-  }
-}.
-
-  
-local module (R_CRROMx2GJ_LEAKBINDKCT : ROM_GkJ.Adv_CRROMx2) 
-             (RO1 : ROM_GkJ.RandomOracle1) (RO2 : ROM_GkJ.RandomOracle2) = {
-  import var LEAK_BINDKPK_MLKEM_ROM_JG
-  
-  proc find() : ptxt_t * ctxt_t = {
-    var pk0, pk1 : pk_t;
-    var sk0, sk1 : sk_t;  
-    
-    z0 <$ drand;
-    (pk_pke0, sk_pke0) <$ dkg;
-    pk0 <- pk_pke0;
-    sk0 <- (sk_pke0, pk0, H pk0, z0);
-    
-    z1 <$ drand;
-    (pk_pke1, sk_pke1) <$ dkg;
-    pk1 <- pk_pke1;
-    sk1 <- (sk_pke1, pk1, H pk1, z1);
-    
-    GW1(RO1).init(H pk0);
-    JW2(RO2).init(z1);
-    
-    (c0, c1) <@ A(JW2(RO2), GW1(RO1)).find(K_Binds_PK, pk0, sk0, pk1, sk1);
-    
-    p0' <- dec sk_pke0 c0;
-    
-    return (p0', c1);
-  }
-}.
-
-local lemma Bnd_GJcoll_CRROMx2 &m :
-  Pr[LEAK_BINDKPK_MLKEM_ROM_JG.main(K_Binds_PK) @ &m :
-       LEAK_BINDKPK_MLKEM_ROM_JG.k0' = LEAK_BINDKPK_MLKEM_ROM_JG.k1_]
-  <=
-  Pr[ROM_GkJ.CR_ROM_x2(ROM_GkJ.RO1_Default, ROM_GkJ.RO2_Default, R_CRROMx2GJ_LEAKBINDKCT).main() @ &m : res].
-proof.
-
-admit.
-qed.
-*)
-
-
 local clone ROMx2 as ROM_GkJ with
   type in_t1 <- ptxt_t * rand_t,
   type in_t2 <- rand_t * ctxt_t,
@@ -1114,15 +982,6 @@ local module (R_CRROMx2GJ_LEAKBINDKCT : ROM_GkJ.Adv_CRROMx2)
     
     p0' <- dec sk_pke0 c0;
     
-    (* 
-      Need to query J here to ensure the RO map is identical between the games 
-      when the querying it for (z1, c1) in the end. (Since we didn't split 
-      exclude (z0, c0) = (z1, c1) here, this case would prevent the reduction from winning
-      as the query for (z0, c0) overwrites that for (z1, c1).
-      So, mimic this here :).   
-    RO2.get((z0, c1));
-    *)
-    
     return ((p0', H pk0), (z1, c1));
   }
 }.
@@ -1138,27 +997,55 @@ proof.
 byequiv => //.
 proc.
 inline{2} 3.
-seq 11 12 : (   ={pk0}
-             /\ LEAK_BINDKPK_MLKEM_ROM_JG.z0{1} <> LEAK_BINDKPK_MLKEM_ROM_JG.z1{1}
-             /\ ={LEAK_BINDKPK_MLKEM_ROM_JG.sk_pke0, LEAK_BINDKPK_MLKEM_ROM_JG.z0, LEAK_BINDKPK_MLKEM_ROM_JG.z1}
-             /\ ={LEAK_BINDKPK_MLKEM_ROM_JG.c0, LEAK_BINDKPK_MLKEM_ROM_JG.c1}
-             /\ ROM_J.RO.m{1} = ROM_GkJ.RO2_Default.m{2}
-             /\ dom ROM_G.RO.m{1} = dom ROM_GkJ.RO1_Default.m{2}
-             /\ (forall (ph : ptxt_t * rand_t), ph \in ROM_G.RO.m{1} =>
-                    (oget ROM_G.RO.m{1}.[ph]).`1 = oget ROM_GkJ.RO1_Default.m{2}.[ph])).
-+ admit.
+swap{1} 3 -2; swap{2} 4 -3.
+swap{1} 7 -5; swap{2} 8 -6.
+seq 2 2 : (#pre /\ ={LEAK_BINDKPK_MLKEM_ROM_JG.z0, LEAK_BINDKPK_MLKEM_ROM_JG.z1}); 1: by auto.
+case (LEAK_BINDKPK_MLKEM_ROM_JG.z0{1} = LEAK_BINDKPK_MLKEM_ROM_JG.z1{1}).
++ conseq (: _ ==> true) => //.
+  inline.
+  do 2! (wp; rnd{1}; rnd{2}).
+  rnd{1}.
+  do 3! (wp; rnd{1}). 
+  wp. 
+  call{1} (A_find_ll G_RO_SSample J_RO).
+  + by proc; auto => />; smt(dkey_ll drand_ll).
+  + by proc; auto => />; smt(dkey_ll).
+  call{2} (A_find_ll (GW1(ROM_GkJ.RO1_Default)) (ROM_GkJ.RO2_Default)).
+  + proc; inline.
+    by auto; smt(dkey_ll drand_ll).
+  + by proc; auto => />; smt(dkey_ll).
+  by auto.
+seq 9 10 : (   ={pk0}
+            /\ LEAK_BINDKPK_MLKEM_ROM_JG.z0{1} <> LEAK_BINDKPK_MLKEM_ROM_JG.z1{1}
+            /\ ={LEAK_BINDKPK_MLKEM_ROM_JG.sk_pke0, LEAK_BINDKPK_MLKEM_ROM_JG.z0, LEAK_BINDKPK_MLKEM_ROM_JG.z1}
+            /\ ={LEAK_BINDKPK_MLKEM_ROM_JG.c0, LEAK_BINDKPK_MLKEM_ROM_JG.c1}
+            /\ ROM_J.RO.m{1} = ROM_GkJ.RO2_Default.m{2}
+            /\ dom ROM_G.RO.m{1} = dom ROM_GkJ.RO1_Default.m{2}
+            /\ (forall (ph : ptxt_t * rand_t), ph \in ROM_G.RO.m{1} =>
+                   (oget ROM_G.RO.m{1}.[ph]).`1 = oget ROM_GkJ.RO1_Default.m{2}.[ph])).
+call (:   ={ROM_G.RO.m}
+       /\ ROM_J.RO.m{1} = ROM_GkJ.RO2_Default.m{2}
+       /\ dom ROM_G.RO.m{1} = dom ROM_GkJ.RO1_Default.m{2}
+       /\ (forall (ph : ptxt_t * rand_t), ph \in ROM_G.RO.m{1} =>
+              (oget ROM_G.RO.m{1}.[ph]).`1 = oget ROM_GkJ.RO1_Default.m{2}.[ph])).
++ proc.
+  inline{2} get.
+  swap{1} 1 1.
+  by auto => />; smt(get_setE).
++ by proc; auto.
++ by inline init; auto => />; smt(mem_empty). 
 swap{1} 7 -3; swap{1} 2 1.
 seq 4 4 : #post; 2: by inline; auto.
 inline get.
 wp; rnd; wp; rnd{1}; rnd. 
-by wp; rnd{1}; wp; skip => />; smt(@FMap).
+by wp; rnd{1}; wp; skip => />; smt(get_setE).
 qed.
 
 
 (* Case 3: k0_ = k1' (i.e., J collides with first part of G) *)
 local clone ROMx2 as ROM_JGk with
-  type in_t1 <- ctxt_t,
-  type in_t2 <- ptxt_t,
+  type in_t1 <- rand_t * ctxt_t,
+  type in_t2 <- ptxt_t * rand_t,
   type out_t <- key_t,
   
     op dout <- dkey
@@ -1166,83 +1053,34 @@ local clone ROMx2 as ROM_JGk with
   proof *.
   realize dout_ll by exact: dkey_ll.
 
-local module JW1 (RO1 : ROM_JGk.RandomOracle1) : RandomOracle2 = {
-  var z0 : rand_t 
-  var m1 : (ctxt_t, key_t) fmap
-  var mr : (rand_t * ctxt_t, key_t) fmap
-  
-  proc init(z0_init : rand_t) : unit = {
-    z0 <- z0_init;
-    m1 <- empty;
-    mr <- empty;
-  }
-  
-  proc get(zc : rand_t * ctxt_t) : key_t = { 
-    var k : key_t;
-    var r : rand_t;
-    
-    if (zc.`1 = z0) { 
-      if (zc.`2 \notin m1) {
-        k <@ RO1.get(zc.`2);
-        m1.[zc.`2] <- k; 
-      }
-      k <- oget m1.[zc.`2];  
-    } else { (* zc.`1 <> z1 *)
-      k <$ dkey;
-      if (zc \notin mr) {
-        mr.[zc] <- k;
-      }
-      k <- oget mr.[zc];
-    }
-    
-    return k;
-  }
-}.
-
 local module GW2 (RO2 : ROM_JGk.RandomOracle2) : RandomOracle = {
-  var h1 : rand_t 
-  var m2 : (ptxt_t, key_t * rand_t) fmap
-  var mr : (ptxt_t * rand_t, key_t * rand_t) fmap
-  
-  proc init(h1_init : rand_t) : unit = {
-    h1 <- h1_init;
-    m2 <- empty;
-    mr <- empty;
-  }
+  import var ROM_G.RO
+  include G_RO [-get]
   
   proc get(ph : ptxt_t * rand_t) : key_t * rand_t = { 
     var k : key_t;
     var r : rand_t;
     
-    if (ph.`2 = h1) { 
-      r <$ drand;
-      if (ph.`1 \notin m2) {
-        k <@ RO2.get(ph.`1);
-        m2.[ph.`1] <- (k, r); 
-      }
-      (k, r) <- oget m2.[ph.`1];  
-    } else { (* ph.`2 <> h0 *)
-      k <$ dkey;
-      r <$ drand;
-      if (ph \notin mr) {
-        mr.[ph] <- (k, r);
-      }
-      (k, r) <- oget mr.[ph];
+    r <$ drand;
+    k <@ RO2.get(ph);
+    if (ph \notin m) {
+      m.[ph] <- (k, r); 
     }
-    
-    return (k, r);
+
+    return oget m.[ph];
   }
 }.
 
-  
 local module (R_CRROMx2JG_LEAKBINDKCT : ROM_JGk.Adv_CRROMx2) 
              (RO1 : ROM_JGk.RandomOracle1) (RO2 : ROM_JGk.RandomOracle2) = {
   import var LEAK_BINDKPK_MLKEM_ROM_JG
   
-  proc find() : ctxt_t * ptxt_t = {
+  proc find() : (rand_t * ctxt_t) * (ptxt_t * rand_t) = {
     var pk0, pk1 : pk_t;
     var sk0, sk1 : sk_t;  
-    
+
+    GW2(RO2).init();
+            
     z0 <$ drand;
     (pk_pke0, sk_pke0) <$ dkg;
     pk0 <- pk_pke0;
@@ -1252,26 +1090,72 @@ local module (R_CRROMx2JG_LEAKBINDKCT : ROM_JGk.Adv_CRROMx2)
     (pk_pke1, sk_pke1) <$ dkg;
     pk1 <- pk_pke1;
     sk1 <- (sk_pke1, pk1, H pk1, z1);
-    
-    JW1(RO1).init(z0);
-    GW2(RO2).init(H pk1);
-    
-    (c0, c1) <@ A(JW1(RO1), GW2(RO2)).find(K_Binds_PK, pk0, sk0, pk1, sk1);
+        
+    (c0, c1) <@ A(RO1, GW2(RO2)).find(K_Binds_PK, pk0, sk0, pk1, sk1);
     
     p1' <- dec sk_pke1 c1;
     
-    return (c0, p1');
+    return ((z0, c0), (p1', H pk1));
   }
 }.
 
+
 local lemma Bnd_JGcoll_CRROMx2 &m :
   Pr[LEAK_BINDKPK_MLKEM_ROM_JG.main(K_Binds_PK) @ &m :
-           H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0 <> H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1
-        /\ LEAK_BINDKPK_MLKEM_ROM_JG.k0_ = LEAK_BINDKPK_MLKEM_ROM_JG.k1' ]
+         H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0 <> H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1
+      /\ LEAK_BINDKPK_MLKEM_ROM_JG.k0_ = LEAK_BINDKPK_MLKEM_ROM_JG.k1']
   <=
   Pr[ROM_JGk.CR_ROM_x2(ROM_JGk.RO1_Default, ROM_JGk.RO2_Default, R_CRROMx2JG_LEAKBINDKCT).main() @ &m : res].
 proof.
-admit.
+byequiv => //.
+proc.
+inline{2} 3.
+swap{1} 4 -3; swap{2} 5 -4.
+swap{1} 8 -6; swap{2} 9 -7.
+seq 2 2 : (   #pre 
+           /\ ={LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0, LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1}
+           /\ ={LEAK_BINDKPK_MLKEM_ROM_JG.sk_pke0, LEAK_BINDKPK_MLKEM_ROM_JG.sk_pke1}); 1: by auto.
+case (H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0{1} = H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1{1}).
++ conseq (: _ ==> true) => //.
+  inline.
+  do 2! (wp; rnd{1}; rnd{2}).
+  rnd{1}.
+  do 3! (wp; rnd{1}). 
+  wp. 
+  call{1} (A_find_ll G_RO_SSample J_RO).
+  + by proc; auto => />; smt(dkey_ll drand_ll).
+  + by proc; auto => />; smt(dkey_ll).
+  call{2} (A_find_ll (GW2(ROM_JGk.RO2_Default)) (ROM_JGk.RO1_Default)).
+  + proc; inline.
+    by auto; smt(dkey_ll drand_ll).
+  + by proc; auto => />; smt(dkey_ll).
+  by auto.
+seq 9 10 : (   ={pk0, pk1}
+            /\ pk0{1} = LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0{1}
+            /\ pk1{1} = LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1{1}
+            /\ H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke0{1} <> H LEAK_BINDKPK_MLKEM_ROM_JG.pk_pke1{1}
+            /\ ={LEAK_BINDKPK_MLKEM_ROM_JG.sk_pke1, LEAK_BINDKPK_MLKEM_ROM_JG.z0}
+            /\ ={LEAK_BINDKPK_MLKEM_ROM_JG.c0, LEAK_BINDKPK_MLKEM_ROM_JG.c1}
+            /\ ROM_J.RO.m{1} = ROM_JGk.RO1_Default.m{2}
+            /\ dom ROM_G.RO.m{1} = dom ROM_JGk.RO2_Default.m{2}
+            /\ (forall (ph : ptxt_t * rand_t), ph \in ROM_G.RO.m{1} =>
+                   (oget ROM_G.RO.m{1}.[ph]).`1 = oget ROM_JGk.RO2_Default.m{2}.[ph])).
+call (:   ={ROM_G.RO.m}
+       /\ ROM_J.RO.m{1} = ROM_JGk.RO1_Default.m{2}
+       /\ dom ROM_G.RO.m{1} = dom ROM_JGk.RO2_Default.m{2}
+       /\ (forall (ph : ptxt_t * rand_t), ph \in ROM_G.RO.m{1} =>
+             (oget ROM_G.RO.m{1}.[ph]).`1 = oget ROM_JGk.RO2_Default.m{2}.[ph])).             
++ proc.
+  inline{2} get.
+  swap{1} 1 1.
+  auto => />; smt(get_setE).
++ by proc; auto.
++ by inline init; auto => />; smt(mem_empty). 
+swap{1} 4 3.
+seq 5 4 : #post; 2: by inline; auto.
+inline get.
+wp; rnd{1}; rnd; wp; rnd.
+by wp; rnd{1}; rnd{1}; wp; skip => /> &1 &2 *; smt(get_setE).
 qed.
 
 
@@ -1289,14 +1173,11 @@ local clone ROMx2 as ROM_JJ with
 
 local module JW12 (RO1 : ROM_JJ.RandomOracle1) (RO2 : ROM_JJ.RandomOracle2) : RandomOracle2 = {
   var z0, z1 : rand_t 
-  var m1, m2 : (ctxt_t, key_t) fmap
   var mr : (rand_t * ctxt_t, key_t) fmap
   
   proc init(z0_init : rand_t, z1_init : rand_t) : unit = {
     z0 <- z0_init;
     z1 <- z1_init;
-    m1 <- empty;
-    m2 <- empty;
     mr <- empty;
   }
   
@@ -1304,18 +1185,10 @@ local module JW12 (RO1 : ROM_JJ.RandomOracle1) (RO2 : ROM_JJ.RandomOracle2) : Ra
     var k : key_t;
     
     if (rc.`1 = z0) { 
-      if (rc.`2 \notin m1) {
-        k <@ RO1.get(rc.`2);
-        m1.[rc.`2] <- k; 
-      }
-      k <- oget m1.[rc.`2];  
+      k <@ RO1.get(rc.`2);
     } elif (rc.`1 = z1) {
-      if (rc.`2 \notin m2) {
-        k <@ RO2.get(rc.`2);
-        m2.[rc.`2] <- k; 
-      }
-      k <- oget m2.[rc.`2];
-    } else { (* ph.`2 <> h0 /\ ph.`2 <> h1 *)
+      k <@ RO2.get(rc.`2);
+    } else { (* rc.`1 <> z0 /\ rc.`1 <> z1 *)
       k <$ dkey;
       if (rc \notin mr) {
         mr.[rc] <- k;
@@ -1350,7 +1223,7 @@ local module (R_CRROMx2JJ_LEAKBINDKCT : ROM_JJ.Adv_CRROMx2)
     
     JW12(RO1, RO2).init(z0, z1);
     
-    (c0, c1) <@ A(JW12(RO1, RO2), G_RO).find(K_Binds_PK, pk0, sk0, pk1, sk1);
+    (c0, c1) <@ A(JW12(RO1, RO2), G_RO_SSample).find(K_Binds_PK, pk0, sk0, pk1, sk1);
     
     return (c0, c1);
   }
@@ -1359,24 +1232,79 @@ local module (R_CRROMx2JJ_LEAKBINDKCT : ROM_JJ.Adv_CRROMx2)
 local lemma Bnd_JJcoll_CRROMx2 &m :
   Pr[LEAK_BINDKPK_MLKEM_ROM_JG.main(K_Binds_PK) @ &m :
          LEAK_BINDKPK_MLKEM_ROM_JG.z0 <> LEAK_BINDKPK_MLKEM_ROM_JG.z1
-      /\ LEAK_BINDKPK_MLKEM_ROM_JG.k0' = LEAK_BINDKPK_MLKEM_ROM_JG.k1']
+      /\ LEAK_BINDKPK_MLKEM_ROM_JG.k0_ = LEAK_BINDKPK_MLKEM_ROM_JG.k1_]
   <=
-  p_max drand
-  +
   Pr[ROM_JJ.CR_ROM_x2(ROM_JJ.RO1_Default, ROM_JJ.RO2_Default, R_CRROMx2JJ_LEAKBINDKCT).main() @ &m : res].
 proof.
-rewrite Pr[mu_split LEAK_BINDKPK_MLKEM_ROM_JG.z0 = LEAK_BINDKPK_MLKEM_ROM_JG.z1] StdOrder.RealOrder.ler_add.
-+ byphoare => //.
-  proc.
-  swap 3 -2; swap 7 -5.
-  seq 2 : (LEAK_BINDKPK_MLKEM_ROM_JG.z0 = LEAK_BINDKPK_MLKEM_ROM_JG.z1)
-          (p_max drand)
-          1%r
-          _
-          0%r => //.
-  + by rnd; rnd; skip => />; smt(pmax_upper_bound).
-  by hoare; conseq (: _ ==> true) => // /#.
-by admit.
+byequiv => //.
+proc.
+swap{1} 18 -3.
+swap{1} [14..15] -2.
+seq 13 5 : #post; 2: by inline; auto. 
+inline{2} 3.
+swap{1} 3 -2; swap{2} 4 -3.  
+swap{1} 7 -5; swap{2} 8 -6.
+seq 2 2 : (   #pre 
+           /\ ={LEAK_BINDKPK_MLKEM_ROM_JG.z0, LEAK_BINDKPK_MLKEM_ROM_JG.z1}). 
++ by rnd; rnd.
+case (LEAK_BINDKPK_MLKEM_ROM_JG.z0{1} = LEAK_BINDKPK_MLKEM_ROM_JG.z1{1}).
++ conseq (: _ ==> true) => //.
+  inline.
+  auto.
+  call{1} (A_find_ll G_RO_SSample J_RO).
+  + by proc; auto => />; smt(dkey_ll drand_ll).
+  + by proc; auto => />; smt(dkey_ll).
+  call{2} (A_find_ll G_RO_SSample (JW12(ROM_JJ.RO1_Default, ROM_JJ.RO2_Default))).
+  + proc; inline. 
+    by auto => />; smt(dkey_ll drand_ll).
+  + proc.
+    inline get.
+    by if; 2: if; auto => />; smt(dkey_ll). 
+  by auto.
+inline get.
+seq 9 11 : (    ={LEAK_BINDKPK_MLKEM_ROM_JG.z0, LEAK_BINDKPK_MLKEM_ROM_JG.z1}
+             /\ ={LEAK_BINDKPK_MLKEM_ROM_JG.c0, LEAK_BINDKPK_MLKEM_ROM_JG.c1}
+             /\ LEAK_BINDKPK_MLKEM_ROM_JG.z0{1} <> LEAK_BINDKPK_MLKEM_ROM_JG.z1{1}
+             /\ (forall (c : ctxt_t),
+                   ROM_J.RO.m{1}.[(LEAK_BINDKPK_MLKEM_ROM_JG.z0{1}, c)]
+                   =
+                   ROM_JJ.RO1_Default.m{2}.[c])
+             /\ (forall (c : ctxt_t),
+                   ROM_J.RO.m{1}.[(LEAK_BINDKPK_MLKEM_ROM_JG.z1{1}, c)]
+                   =
+                   ROM_JJ.RO2_Default.m{2}.[c])).
++ call (:   ={ROM_G.RO.m, LEAK_BINDKPK_MLKEM_ROM_JG.z0, LEAK_BINDKPK_MLKEM_ROM_JG.z1}
+         /\ JW12.z0{2} = LEAK_BINDKPK_MLKEM_ROM_JG.z0{1}
+         /\ JW12.z1{2} = LEAK_BINDKPK_MLKEM_ROM_JG.z1{1}
+         /\ JW12.z0{2} <> JW12.z1{2}
+         /\ (forall (c : ctxt_t), ROM_J.RO.m{1}.[(JW12.z0{2}, c)] = ROM_JJ.RO1_Default.m{2}.[c])
+         /\ (forall (c : ctxt_t), ROM_J.RO.m{1}.[(JW12.z1{2}, c)] = ROM_JJ.RO2_Default.m{2}.[c])
+         /\ (forall (z : rand_t) (c : ctxt_t), z <> JW12.z0{2} /\ z <> JW12.z1{2} =>
+               ROM_J.RO.m{1}.[(z, c)] = JW12.mr{2}.[(z, c)])).
+  + by proc; auto.
+  + proc.
+    inline get.
+    if{2}.
+    + case (rc{2}.`2 \notin ROM_JJ.RO1_Default.m{2}).
+      + rcondt{1} ^if; 1: by auto => /> /#.
+        rcondt{2} ^if; 1: by auto.
+        by auto => />; smt(get_setE).
+      rcondf{1} ^if; 1: by auto => /> /#.
+      rcondf{2} ^if; 1: by auto.
+      by auto => />; smt(get_setE).
+    if{2}.
+    + case (rc{2}.`2 \notin ROM_JJ.RO2_Default.m{2}).
+      + rcondt{1} ^if; 1: by auto => /> /#.
+        rcondt{2} ^if; 1: by auto.
+        by auto => />; smt(get_setE).
+      rcondf{1} ^if; 1: by auto => /> /#.
+      rcondf{2} ^if; 1: by auto.
+      by auto => />; smt(get_setE).
+    by auto => />; smt(get_setE).
+  inline init.
+  by auto => />; smt(mem_empty).
+wp; rnd; wp; rnd. 
+by wp; skip => />; smt(get_setE).
 qed.
 
 
