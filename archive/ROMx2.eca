@@ -150,7 +150,7 @@ module Counting_RO2 (RO2 : RandomOracle2) : RandomOracle2 = {
 (* Properties *)
 (* Collision resistance between two random oracles (CR-ROM-x2) *)
 (** Adversary class for CR-ROM-x2 **)
-module type Adv_CRROMx2 (RO1 : RandomOracle1) (RO2 : RandomOracle2) ={ 
+module type Adv_CRROMx2 (RO1 : RandomOracle1) (RO2 : RandomOracle2) = { 
   proc find() : in_t1 * in_t2
 }.
 
@@ -186,16 +186,33 @@ declare axiom A_find_ll (RO1 <: RandomOracle1{-A}) (RO2 <: RandomOracle2{-A}) :
 (* 
   By assumption, the number of adversary queries is bounded 
   (by some non-negative constants)
-*)
+
 declare op q1 : { int | 0 <= q1 } as ge0_q1.
-declare axiom A_find_qs1 (RO1 <: RandomOracle1{-A, -Counting_RO1}) (RO2 <: RandomOracle2{-A, -Counting_RO1, -RO1}) :
+declare axiom A_find_qs1 (RO1 <: RandomOracle1{-A, -Counting_RO1}) (RO2 <: RandomOracle2{-A, -Counting_RO1}) :
   hoare[A(Counting_RO1(RO1), RO2).find : Counting_RO1.q = 0 ==> Counting_RO1.q <= q1].
 
 declare op q2 : { int | 0 <= q2 } as ge0_q2.
-declare axiom A_find_qs2 (RO1 <: RandomOracle1{-A, -Counting_RO2}) (RO2 <: RandomOracle2{-A, -Counting_RO2, -RO1}) :
+declare axiom A_find_qs2 (RO1 <: RandomOracle1{-A, -Counting_RO2}) (RO2 <: RandomOracle2{-A, -Counting_RO2}) :
   hoare[A(RO1, Counting_RO2(RO2)).find : Counting_RO2.q = 0 ==> Counting_RO2.q <= q2].
 
+declare op q1 : { int | 0 <= q1 } as ge0_q1.
+declare axiom A_find_qs1 :
+  hoare[A(Counting_RO1(RO1_Default), RO2_Default).find : Counting_RO1.q = 0 ==> Counting_RO1.q <= q1].
 
+declare op q2 : { int | 0 <= q2 } as ge0_q2.
+declare axiom A_find_qs2 :
+  hoare[A(RO1_Default, Counting_RO2(RO2_Default)).find : Counting_RO2.q = 0 ==> Counting_RO2.q <= q2].
+*)
+
+declare op q1 : { int | 0 <= q1 } as ge0_q1.
+declare axiom A_find_qs1 :
+  hoare[A(RO1_Default, RO2_Default).find : fsize RO1_Default.m = 0 ==> fsize RO1_Default.m <= q1].
+
+declare op q2 : { int | 0 <= q2 } as ge0_q2.
+declare axiom A_find_qs2 :
+  hoare[A(RO1_Default, RO2_Default).find : fsize RO2_Default.m = 0 ==> fsize RO2_Default.m <= q2].
+
+  
 (* 
   Clone and import relevant ROM-related results 
   for first (type of) random oracle
@@ -230,6 +247,16 @@ local clone FullRO as FullRO2 with
   Clone and import relevant ROM-related results for an
   intermediate (auxiliary) RO in order to perform lazy-eager argument on 
   RO1 (can do similarly on RO2 if desired).
+local clone import FullRO as FullROI with
+  type in_t <- int,
+  type out_t <- out_t,
+  
+  type d_in_t <- unit,
+  type d_out_t <- bool,
+  
+  op dout <- fun _ => dout
+  
+  proof *.
 *)
 local clone import FullRO as FullROI with
   type in_t <- int,
@@ -242,18 +269,22 @@ local clone import FullRO as FullROI with
   
   proof *.
 
-
+  
 (* 
   Step (1):
   Show equivalence between original game and one where the default 
   random oracles are replaced by their more advanced (lazy) variants from the
   PROM theory (as to be able to utilize the results from PROM later)
-*)
+
 local equiv Eqv_CRROMx2_PROM :
   CR_ROM_x2(RO1_Default, RO2_Default, A).main ~ CR_ROM_x2(FullRO1.LRO, FullRO2.LRO, A).main :
     ={glob A} ==> ={res}.
 proof. by proc; sim. qed.
-
+*)
+local equiv Eqv_CRROMx2_PROM :
+  CR_ROM_x2(RO1_Default, RO2_Default, A).main ~ CR_ROM_x2(FullRO1.LRO, FullRO2.LRO, A).main :
+    ={glob A} ==> ={res} /\ ={m}(RO1_Default, FullRO1.RO) /\ ={m}(RO2_Default, FullRO2.RO).
+proof. by proc; sim. qed.
 
 (* 
   Auxiliary oracle that simulates the first random oracle 
@@ -296,6 +327,34 @@ local module RO1_WI (ROI : FullROI.RO) : FullRO1.RO = {
 }.
 
 
+local lemma test (ROI <: FullROI.RO{-RO1_WI}) (RO2 <: FullRO2.RO{-RO1_WI}): 
+  hoare[A(RO1_WI(ROI), RO2).find : 
+          RO1_WI.qu = 0 /\ FullRO1.RO.m = empty ==> RO1_WI.qu <= fsize FullRO1.RO.m]. 
+proof.
+proc (RO1_WI.qu <= fsize FullRO1.RO.m).
+smt(fsize_empty). smt(fsize_empty).
+proc (RO1_WI.qu <= fsize FullRO1.RO.m) => //.
+proc; auto.
+if.
+wp.
+call (: true).
+skip => />; smt(fsize_set).
+by wp.
+qed.
+
+
+local lemma test2 :
+  equiv[A(RO1_Default, RO2_Default).find ~ A(FullRO1.LRO, FullRO2.LRO).find :
+          ={glob A} /\ ={m}(RO1_Default, FullRO1.RO) /\ ={m}(RO2_Default, FullRO2.RO) 
+        ==>
+          ={m}(RO1_Default, FullRO1.RO) /\ ={m}(RO2_Default, FullRO2.RO)]. 
+proof.
+proc (={m}(RO1_Default, FullRO1.RO) /\ ={m}(RO2_Default, FullRO2.RO)) => //.
+by sim.
+by sim.
+qed.
+
+
 (* 
   Auxiliary intermediate variant of CR-ROM-x2 that
   uses the above auxiliary oracle (RO1_W) instead of RO1.
@@ -303,7 +362,7 @@ local module RO1_WI (ROI : FullROI.RO) : FullRO1.RO = {
   oracles (of the intermediate type).
   Uses a separate procedure to have the correct form
   for the results from PROM.    
-*)
+
 local module CR_ROM_x2_I (ROI : FullROI.RO) = {
   proc distinguish() = {
     var x1 : in_t1;
@@ -342,6 +401,65 @@ local module CR_ROM_x2_I (ROI : FullROI.RO) = {
     return b;
   }  
 }.
+*)
+local module CR_ROM_x2_I (ROI : FullROI.RO) = {  
+  var x1 : in_t1
+  var x2 : in_t2
+  
+  proc distinguish() = {    
+    
+    RO1_WI(ROI).init();
+    
+    (x1, x2) <@ A(RO1_WI(ROI), FullRO2.LRO).find();
+    
+    return RO1_WI.qu <= fsize FullRO1.RO.m;
+  }
+  
+  proc main() = {
+    var y1, y2 : out_t;
+    
+    x1 <- witness;
+    x2 <- witness;
+    ROI.init();
+    FullRO1.RO.m <- empty;
+    RO1_WI.qu <- 0;
+    FullRO2.RO.m <- empty;
+    
+    distinguish();
+
+    if (x1 \notin FullRO1.RO.m) {
+      y1 <$ dout;
+    } else {
+      y1 <- oget FullRO1.RO.m.[x1];
+    }
+    
+    if (x2 \notin FullRO2.RO.m) {
+      y2 <$ dout;
+    } else {
+      y2 <- oget FullRO2.RO.m.[x2];
+    }
+
+    return y1 = y2;
+  }  
+}.
+
+local equiv Eqv_CRROMx2_Dist_LRO_RO :
+  CR_ROM_x2_I(FullROI.LRO).distinguish ~ CR_ROM_x2_I(FullROI.RO).distinguish :
+    ={glob CR_ROM_x2_I, FullROI.RO.m} ==> ={res, glob CR_ROM_x2_I, RO1_WI.qu}.   
+proof.
+symmetry. 
+conseq (FullROI.FullEager.RO_LRO_D CR_ROM_x2_I _) => //.
+by move => ?; apply dout_ll.
+qed.
+
+local equiv Eqv_CRROMx2_Main_LRO_RO :
+  CR_ROM_x2_I(FullROI.LRO).main ~ CR_ROM_x2_I(FullROI.RO).main :
+    ={glob A} ==> ={res, FullRO1.RO.m, FullRO2.RO.m}.
+proof.
+proc.
+seq 4 4 : ( ={glob CR_ROM_x2_I, FullROI.RO.m}); 1: by inline *; auto. 
+by rewrite equiv[{1} 1 Eqv_CRROMx2_Dist_LRO_RO]; sim.
+qed.
 
 (*
   Step (2):
@@ -349,7 +467,6 @@ local module CR_ROM_x2_I (ROI : FullROI.RO) = {
   type of lazy oracles from PROM) 
   and the above auxiliary intermediate CR-ROM-x2 using the intermediate type 
   of lazy oracle from PROM.   
-*)
 local equiv Eqv_CRROMx2RO_ILRO :
   CR_ROM_x2(FullRO1.LRO, FullRO2.LRO, A).main ~ CR_ROM_x2_I(FullROI.LRO).main :
     ={glob A} ==> ={res}.
@@ -409,13 +526,141 @@ rcondf{1} ^if; 1: by auto.
 rcondf{2} ^if; 1: by auto.
 by wp; rnd{1}; wp; rnd{1}; skip.
 qed.
+*)
+local equiv Eqv_CRROMx2RO_ILRO :
+  CR_ROM_x2(FullRO1.LRO, FullRO2.LRO, A).main ~ CR_ROM_x2_I(FullROI.LRO).main :
+        ={glob A} 
+    ==> 
+           ={res} 
+        /\ fsize FullRO1.RO.m{2} <= fsize FullRO1.RO.m{1}
+        /\ fsize FullRO2.RO.m{2} <= fsize FullRO2.RO.m{1}.
+proof.
+proc.
+inline{2} distinguish.
+seq 2 5 : (   ={glob A} 
+           /\ FullRO1.RO.m{1} = empty
+           /\ FullRO1.RO.m{2} = empty
+           /\ FullRO2.RO.m{1} = empty
+           /\ FullRO2.RO.m{2} = empty
+           /\ FullROI.RO.m{2} = empty
+           /\ RO1_WI.qu{2} = 0).
++ inline *.
+  while{2} (true) (q1 - i{2}).
+  + by auto => /> /#. 
+  by auto => />; smt(ge0_q1). 
+inline get.   
+seq 1 2 : (   ={x1, x2, FullRO1.RO.m, FullRO2.RO.m}
+           (*/\ x1{1} = CR_ROM_x2_I.x1{2}
+            /\ x2{1} = CR_ROM_x2_I.x2{2}*)
+           /\ RO1_WI.qu{2} \notin RO.m{2}).
++ wp. 
+  call (:   ={FullRO1.RO.m, FullRO2.RO.m} 
+         /\ dom RO.m{2} = mem (range 0 RO1_WI.qu{2}) 
+         /\ 0 <= RO1_WI.qu{2}).
+  + proc.
+    by wp; rnd.
+  + proc.
+    inline{2} get.
+    case (x{1} \notin FullRO1.RO.m{1}).
+    + rcondt{1} ^if; 1: by auto.
+      rcondt{2} ^if; 1: by auto.
+      rcondt{2} ^if; 1: move => &m. 
+      + rnd; wp; skip => /> &m'. 
+        by rewrite fun_ext => /(_ RO1_WI.qu{m'}); rewrite mem_range => -> /#.
+      by wp; rnd; wp; skip => /> &m; smt(get_set_sameE mem_range mem_set). 
+    rcondf{1} ^if; 1: by auto.
+    rcondf{2} ^if; 1: by auto.
+    by rnd{1}; wp.
+  by skip => />; smt(mem_empty mem_range). 
+sp 1 0.
+case (x{1} \notin FullRO1.RO.m{1}).
++ rcondt{1} ^if; 1: by auto.
+  rcondt{2} ^if; 1: by auto.
+  case (x2{1} \notin FullRO2.RO.m{1}).
+  + rcondt{1} ^if; 1: by auto.
+    rcondt{2} ^if; 1: by auto.    
+    by auto => />; smt(get_set_sameE fsize_set).  
+  + rcondf{1} ^if; 1: by auto.
+    rcondf{2} ^if; 1: by auto.
+    by wp; rnd{1}; wp; rnd; skip => />; smt(get_set_sameE fsize_set).  
+rcondf{1} ^if; 1: by auto.
+rcondf{2} ^if; 1: by auto.
+case (x2{1} \notin FullRO2.RO.m{1}).
++ rcondt{1} ^if; 1: by auto.
+  rcondt{2} ^if; 1: by auto.
+  auto => />; smt(get_set_sameE fsize_set).  
+rcondf{1} ^if; 1: by auto.
+rcondf{2} ^if; 1: by auto.
+by wp; rnd{1}; wp; rnd{1}; skip.
+qed.
 
+(*
+local equiv Eqv_CRROMx2RO_ILRO :
+  CR_ROM_x2(FullRO1.LRO, FullRO2.LRO, A).main ~ CR_ROM_x2_I(FullROI.LRO).main :
+    ={glob A} ==> ={res, glob FullRO1.RO, glob FullRO2.RO}.
+proof.
+proc.
+inline{2} distinguish.
+seq 2 5 : (   ={glob A} 
+           /\ FullRO1.RO.m{1} = empty
+           /\ FullRO1.RO.m{2} = empty
+           /\ FullRO2.RO.m{1} = empty
+           /\ FullRO2.RO.m{2} = empty
+           /\ FullROI.RO.m{2} = empty
+           /\ RO1_WI.qu{2} = 0).
++ inline *.
+  while{2} (true) (q1 - i{2}).
+  + by auto => /> /#. 
+  by auto => />; smt(ge0_q1). 
+inline get.   
+seq 1 1 : (   ={x1, x2, FullRO1.RO.m, FullRO2.RO.m}
+           /\ RO1_WI.qu{2} \notin RO.m{2}).
++ call (:   ={FullRO1.RO.m, FullRO2.RO.m} 
+         /\ dom RO.m{2} = mem (range 0 RO1_WI.qu{2}) 
+         /\ 0 <= RO1_WI.qu{2}).
+  + proc.
+    by wp; rnd.
+  + proc.
+    inline{2} get.
+    case (x{1} \notin FullRO1.RO.m{1}).
+    + rcondt{1} ^if; 1: by auto.
+      rcondt{2} ^if; 1: by auto.
+      rcondt{2} ^if; 1: move => &m. 
+      + rnd; wp; skip => /> &m'. 
+        by rewrite fun_ext => /(_ RO1_WI.qu{m'}); rewrite mem_range => -> /#.
+      by wp; rnd; wp; skip => /> &m; smt(get_set_sameE mem_range mem_set). 
+    rcondf{1} ^if; 1: by auto.
+    rcondf{2} ^if; 1: by auto.
+    by rnd{1}; wp.
+  by skip => />; smt(mem_empty mem_range). 
+sp 1 0.
+case (x{1} \notin FullRO1.RO.m{1}).
++ rcondt{1} ^if; 1: by auto.
+  rcondt{2} ^if; 1: by auto.
+  case (x2{1} \notin FullRO2.RO.m{1}).
+  + rcondt{1} ^if; 1: by auto.
+    rcondt{2} ^if; 1: by auto.
+    auto => />. .; smt(get_set_sameE).  
+  + rcondf{1} ^if; 1: by auto.
+    rcondf{2} ^if; 1: by auto.
+    by wp; rnd{1}; wp; rnd; skip => />; smt(get_set_sameE).  
+rcondf{1} ^if; 1: by auto.
+rcondf{2} ^if; 1: by auto.
+case (x2{1} \notin FullRO2.RO.m{1}).
++ rcondt{1} ^if; 1: by auto.
+  rcondt{2} ^if; 1: by auto.
+  auto => />; smt(get_set_sameE).  
+rcondf{1} ^if; 1: by auto.
+rcondf{2} ^if; 1: by auto.
+by wp; rnd{1}; wp; rnd{1}; skip.
+qed.
+*)
 
 (* 
   Step (3):
   Apply the results from PROM to show move from lazy sampling to eagerly sampling
   (up to q1 queries) for the first (type of) random oracle.
-*)
+
 local equiv Eqv_CRROMx2_Dist_LRO_RO :
   CR_ROM_x2_I(FullROI.LRO).distinguish ~ CR_ROM_x2_I(FullROI.RO).distinguish :
     ={glob CR_ROM_x2_I, FullROI.RO.m} ==> ={res, glob CR_ROM_x2_I}.   
@@ -427,12 +672,126 @@ qed.
 
 local equiv Eqv_CRROMx2_Main_LRO_RO :
   CR_ROM_x2_I(FullROI.LRO).main ~ CR_ROM_x2_I(FullROI.RO).main :
-    ={glob A} ==> ={res}.   
+    ={glob A} ==> ={res}.
 proof.
 proc.
 seq 4 4 : ( ={glob CR_ROM_x2_I, FullROI.RO.m}); 1: by inline *; auto. 
 by rewrite equiv[{1} 1 Eqv_CRROMx2_Dist_LRO_RO]; sim.
 qed.
+*)
+
+local equiv Eqv_CRROMx2_Dist_LRO_RO :
+  CR_ROM_x2_I(FullROI.LRO).distinguish ~ CR_ROM_x2_I(FullROI.RO).distinguish :
+    ={glob CR_ROM_x2_I, FullROI.RO.m} ==> ={res, glob CR_ROM_x2_I}.   
+proof.
+symmetry. 
+conseq (FullROI.FullEager.RO_LRO_D CR_ROM_x2_I _) => //.
+by move => ?; apply dout_ll.
+qed.
+
+local equiv Eqv_CRROMx2_Main_LRO_RO :
+  CR_ROM_x2_I(FullROI.LRO).main ~ CR_ROM_x2_I(FullROI.RO).main :
+    ={glob A} ==> ={res, FullRO1.RO.m, FullRO2.RO.m}.
+proof.
+proc.
+seq 4 4 : ( ={glob CR_ROM_x2_I, FullROI.RO.m}); 1: by inline *; auto. 
+by rewrite equiv[{1} 1 Eqv_CRROMx2_Dist_LRO_RO]; sim.
+qed.
+
+local module As (ROI : FullROI.RO) = { 
+  proc distinguish = A(RO1_WI(ROI), FullRO2.LRO).find
+}. 
+
+local equiv Eqv_Adv_PROM :
+  A(RO1_Default, RO2_Default).find ~ A(FullRO1.LRO, FullRO2.LRO).find :
+    ={glob A} /\ ={m}(RO1_Default, FullRO1.RO) /\ ={m}(RO2_Default, FullRO2.RO)
+    ==> 
+    ={res} /\ ={m}(RO1_Default, FullRO1.RO) /\ ={m}(RO2_Default, FullRO2.RO).
+proof. 
+by proc (={m}(RO1_Default, FullRO1.RO) /\ ={m}(RO2_Default, FullRO2.RO)) => //; sim. 
+qed.
+
+
+local equiv Eqv_Adv_PRO2M :
+  A(FullRO1.LRO, FullRO2.LRO).find ~ As(FullROI.LRO).distinguish :
+       ={glob A, FullRO1.RO.m, FullRO2.RO.m} 
+    /\ FullROI.RO.m{2} = empty
+    /\ RO1_WI.qu{2} = 0
+    ==> 
+    ={res, FullRO1.RO.m, FullRO2.RO.m} /\ 0 <= RO1_WI.qu{2} <= fsize FullRO1.RO.m{2}.
+proof.
+proc (   ={FullRO1.RO.m, FullRO2.RO.m} 
+      /\ dom FullROI.RO.m{2} = mem (range 0 RO1_WI.qu{2})
+      /\ 0 <= RO1_WI.qu{2} <= fsize FullRO1.RO.m{2}) => //. 
+smt(mem_empty mem_range domE ge0_fsize).
+proc; auto.
+proc.
+case (x{1} \notin FullRO1.RO.m{1}). 
++ rcondt{1} ^if; 1: by auto.
+  rcondt{2} ^if; 1: by auto.
+  inline get.
+  rcondt{2} ^if; 1: by auto; smt(mem_range domE).
+  auto. progress. 
+  smt(@FMap). 
+  smt(@FMap).   
+  smt(mem_set mem_range).  smt(mem_set mem_range).
+  smt(mem_set mem_range fsize_set).
++ rcondf{1} ^if; 1: by auto.
+  rcondf{2} ^if; 1: by auto.
+  inline get.
+  auto.
+qed.
+
+print FullROI.FullEager.RO_LRO.
+local equiv Eqv_Adv_Dist_LRO_RO :
+  As(FullROI.LRO).distinguish ~ As(FullROI.RO).distinguish :
+    ={glob As, glob RO1_WI, FullROI.RO.m} ==> ={res, glob As, glob RO1_WI}.   
+proof.
+symmetry. 
+conseq (FullROI.FullEager.RO_LRO_D As _) => //.
+by move => ?; apply dout_ll.
+qed.
+
+
+local hoare Eqv_Adv_Dist_LRO_ROT :
+  As(FullROI.LRO).distinguish : 
+    RO1_WI.qu = 0 ==> RO1_WI.qu <= q1.
+proof.
+have eqv_qqu :
+  equiv[ A(RO1_WI(RO), FullRO2.LRO).find ~ A(Counting_RO1(RO1_WI(RO)), FullRO2.LRO).find : 
+          ={glob A, glob RO, glob RO1_WI, glob FullRO2.LRO} /\ RO1_WI.qu{2} <= Counting_RO1.q{2} 
+            ==> 
+          ={res, RO1_WI.qu} /\ RO1_WI.qu{2} <= Counting_RO1.q{2}]. 
++ proc (={glob RO, glob RO1_WI, glob FullRO2.LRO} /\ RO1_WI.qu{2} <= Counting_RO1.q{2}) => //.  
+  + by proc; auto. 
+  proc; inline get.
+  sp 0 1.
+  by if => //; auto => /> /#. 
+conseq eqv_qqu (: Counting_RO1.q = 0 ==> Counting_RO1.q <
+symmetry. 
+conseq (FullROI.FullEager.RO_LRO_D As _) => //.
+by move => ?; apply dout_ll.
+qed.
+
+
+local lemma A_find_qs1_RO1WI :
+  hoare[A(RO1_WI(RO), FullRO2.LRO).find : 
+                 FullRO1.RO.m = empty
+              /\ dom FullROI.RO.m = mem (range 0 q1)
+              /\ RO1_WI.qu = 0 
+          ==> 
+                 RO1_WI.qu <= q1].
+proof.
+
+local equiv Eqv_Adv_Dist_LRO_RO :
+  As(FullROI.LRO).distinguish ~ As(FullROI.RO).distinguish :
+    ={glob As, FullROI.RO.m} ==> ={res, glob As, glob RO1_WI}.   
+proof.
+symmetry. 
+conseq (FullROI.FullEager.RO_LRO_D As _) => //.
+by move => ?; apply dout_ll.
+qed.
+
 
 
 (* 
@@ -516,7 +875,7 @@ local module CR_ROM_x2_Eager1 = {
   Translate the assumption regarding the adversary's (first) oracle 
   queries to a concrete statement usable in the current stage 
   of the proof.
-*)
+
 local lemma A_find_qs1_RO1WI :
   hoare[A(RO1_WI(RO), FullRO2.LRO).find : RO1_WI.qu = 0 ==> RO1_WI.qu <= q1].
 proof.
@@ -532,7 +891,94 @@ have eqv_qqu :
   by if => //; auto => /> /#. 
 conseq eqv_qqu (: Counting_RO1.q = 0 ==> Counting_RO1.q <= q1); 1,2: by smt(). 
 by apply (A_find_qs1 (RO1_WI(RO)) (FullRO2.LRO)).
-qed. 
+qed.
+*)
+
+local lemma A_find_qs1_RO1WI :
+  hoare[A(RO1_WI(RO), FullRO2.LRO).find : 
+                 FullRO1.RO.m = empty
+              /\ dom FullROI.RO.m = mem (range 0 q1)
+              /\ RO1_WI.qu = 0 
+          ==> 
+                 RO1_WI.qu <= q1].
+proof.
+have eqv_qqu :
+  equiv[ A(RO1_WI(RO), FullRO2.LRO).find ~ A(RO1_Default, RO2_Default).find : 
+               ={glob A}
+            /\ FullRO1.RO.m{1} = RO1_Default.m{2}
+            /\ FullRO2.RO.m{1} = RO2_Default.m{2}
+            /\ FullRO1.RO.m{1} = empty
+            /\ dom FullROI.RO.m{1} = mem (range 0 q1)
+            /\ RO1_WI.qu{1} = 0 
+        ==> 
+            fsize RO1_Default.m{2} <= q1
+            /\ 
+            (fsize RO1_Default.m{2} <= q1 =>
+               ={res} 
+            /\ RO1_WI.qu{1} <= fsize RO1_Default.m{2}) ]. 
++ conseq (: 
+               ={glob A}
+            /\ FullRO1.RO.m{1} = RO1_Default.m{2}
+            /\ FullRO2.RO.m{1} = RO2_Default.m{2}
+            /\ FullRO1.RO.m{1} = empty
+            /\ dom FullROI.RO.m{1} = mem (range 0 q1)
+            /\ RO1_WI.qu{1} = 0 
+  ==>
+  (fsize RO1_Default.m{2} <= q1 =>
+               ={res} 
+            /\ RO1_WI.qu{1} <= fsize RO1_Default.m{2})  ) _ A_find_qs1 => //.
+            progress. smt(fsize_empty).
+  proc (q1 < fsize RO1_Default.m)
+       (   FullRO1.RO.m{1} = RO1_Default.m{2}
+        /\ FullRO2.RO.m{1} = RO2_Default.m{2}
+        /\ dom FullROI.RO.m{1} = mem (range 0 q1)
+        /\ 0 <= RO1_WI.qu{1} <= fsize RO1_Default.m{2}) => //. 
+   progress.  smt(fsize_empty).
+   progress;  smt(fsize_empty).
+   move => O1 O2 O2ll O1ll; apply (A_find_ll O1 O2 O1ll O2ll).
+  + by proc; auto. 
+  move=> &2 lt1. 
+  proc; auto. smt(dout_ll).
+  move=> _. 
+  proc.
+  auto. smt(dout_ll).
+  proc. 
+  case (x{1} \notin FullRO1.RO.m{1}).
+  rcondt{1} ^if; 1: by auto.
+  rcondt{2} ^if; 1: by auto.
+  inline get.
+  
+  case (RO1_WI.qu{1} = q1).
+  wp -1 -1.
+  conseq (: _ ==> true).   
+  progress; smt(@FMap @List mem_range domE ge0_q1). 
+  
+  by auto.  
+  
+  rcondf{1} ^if. auto.   progress; smt(@FMap @List mem_range domE ge0_q1). 
+  auto => />; progress. 
+    smt(@FMap @List mem_range domE ge0_q1). 
+
+  
+  move: H0.
+  rewrite fun_ext => /(_ RO1_WI.qu{hr}) ->.
+  rewrite mem_range.
+  
+  
+
+
+  wp; rnd; wp; skip => />.
+  progress.
+  smt(get_set_sameE).
+  smt(get_set_sameE).
+  smt(get_set_sameE fsize_set).
+  smt(get_set_sameE).
+      
+  rcondt{1}
+  
+conseq eqv_qqu (: fsize RO1_Default.m = 0 ==> fsize RO1_Default.m <= q1); 1,2: smt(fsize_empty). 
+by apply (A_find_qs1).
+qed.
 
 (* 
   Step (4):
@@ -584,7 +1030,7 @@ call (:   ={glob A}
   symmetry.
   proc (q1 < RO1_WI.qu) 
        (   ={FullRO1.RO.m, FullRO2.RO.m} 
-        /\ fsize FullRO1.RO.m {1} = RO1_WI.qu{2}
+        /\ fsize FullRO1.RO.m{1} = RO1_WI.qu{2}
         /\ RO.m{2} = RO1_Eager.mi{1} 
         /\ dom RO.m{2} = mem (range 0 q1)) => //; 1,2: smt(fsize_empty).  
   + by move => RO1 RO2 RO1ll RO2ll; apply (A_find_ll RO1 RO2 RO2ll RO1ll). 
@@ -856,7 +1302,7 @@ declare axiom A_find_ll (RO1 <: RandomOracle1{-A}) (RO2 <: RandomOracle2{-A}) :
   (by some non-negative constant)
 *)
 declare op q2 : { int | 0 <= q2 } as ge0_q2.
-declare axiom A_find_qs2 (RO1 <: RandomOracle1{-A}) (RO2 <: RandomOracle2{-A, -Counting_RO2, -RO1}) :
+declare axiom A_find_qs2 (RO1 <: RandomOracle1{-A, -Counting_RO2}) (RO2 <: RandomOracle2{-A, -Counting_RO2}) :
   hoare[A(RO1, Counting_RO2(RO2)).find : Counting_RO2.q = 0 ==> Counting_RO2.q <= q2].
 
 
@@ -1287,7 +1733,7 @@ declare axiom A_find_ll (RO1 <: RandomOracle1{-A}) (RO2 <: RandomOracle2{-A}) :
   (by some non-negative constant)
 *)
 declare op q2 : { int | 0 <= q2 } as ge0_q2.
-declare axiom A_find_qs2 (RO1 <: RandomOracle1{-A}) (RO2 <: RandomOracle2{-A, -Counting_RO2, -RO1}) :
+declare axiom A_find_qs2 (RO1 <: RandomOracle1{-A, -Counting_RO2}) (RO2 <: RandomOracle2{-A, -Counting_RO2}) :
   hoare[A(RO1, Counting_RO2(RO2)).find : Counting_RO2.q = 0 ==> Counting_RO2.q <= q2].
 
 (* 

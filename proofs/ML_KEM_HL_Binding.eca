@@ -475,6 +475,69 @@ clone import FullRO as ROM_J with
     
   proof *.
 
+(*
+(** Counting wrapper for (type of) G oracle **)
+module Counting_ROG (ROG : ROM_G.RO) : RandomOracle = {  
+  var q : int
+  
+  proc get(x : ptxt_t * rand_t) : key_t * rand_t = {
+    var y : key_t * rand_t;
+    
+    y <@ ROG.get(x);
+    
+    q <- q + 1;
+        
+    return y;
+  }
+}.
+
+(** Counting wrapper for (type of) J oracle **)
+module Counting_ROJ (ROJ : ROM_J.RO) : RandomOracle2 = {
+  var q : int
+  proc get(x : rand_t * ctxt_t) : key_t = {
+    var y : key_t;
+    
+    y <@ ROJ.get(x);
+    
+    q <- q + 1;
+        
+    return y;
+  }
+}.
+*)
+
+(** Counting wrapper for first/G (type of) oracle **)
+module Counting_RO1 (RO1 : RandomOracle) : RandomOracle = {
+  var q : int
+    
+  proc get(x : ptxt_t * rand_t) : key_t * rand_t = {
+    var y : key_t * rand_t;
+    
+    y <@ RO1.get(x);
+    
+    q <- q + 1;
+        
+    return y;
+  }
+}.
+
+(** Counting wrapper for second J (type of) oracle **)
+module Counting_RO2 (RO2 : RandomOracle2) : RandomOracle2 = {
+  var q : int
+
+  proc get(x : rand_t * ctxt_t) : key_t = {
+    var y : key_t;
+    
+    y <@ RO2.get(x);
+    
+    q <- q + 1;
+        
+    return y;
+  }
+}.
+
+
+
 (** Alias for default random oracle implementation for G **)
 module G_RO = ROM_G.LRO.
 
@@ -482,14 +545,26 @@ module G_RO = ROM_G.LRO.
 module J_RO = ROM_J.LRO. 
 
 
-
 section MLKEM_LEAKBINDKPK_ROMx2.
 
-declare module A <: Adv_LEAKBIND_ROMx2 {-G_RO, -J_RO}.
+declare module A <: Adv_LEAKBIND_ROMx2 {-G_RO, -J_RO, -Counting_RO1, -Counting_RO2}.
 
 (* By assumption, the adversary's finding procedure terminates (given that its oracles terminate) *)
 declare axiom A_find_ll (RO1 <: RandomOracle{-A}) (RO2 <: RandomOracle2{-A}) :
   islossless RO1.get => islossless RO2.get => islossless A(RO2, RO1).find.
+
+(* 
+  By assumption, the number of adversary queries is bounded 
+  (by some non-negative constants).
+*)
+declare op qG : { int | 0 <= qG } as ge0_qG.
+declare axiom A_find_qG (RO1 <: RandomOracle{-A, -Counting_RO1}) (RO2 <: RandomOracle2{-A, -Counting_RO1, -RO1}) :
+  hoare[A(RO2, Counting_RO1(RO1)).find : Counting_RO1.q = 0 ==> Counting_RO1.q <= qG].
+
+declare op qJ : { int | 0 <= qJ } as ge0_qJ.
+declare axiom A_find_qJ (RO1 <: RandomOracle{-A, -Counting_RO2}) (RO2 <: RandomOracle2{-A, -Counting_RO2, -RO1}) :
+  hoare[A(Counting_RO2(RO2), RO1).find : Counting_RO2.q = 0 ==> Counting_RO2.q <= qJ].
+
 
 (*
   Split sampling (of pairs) in G_RO
@@ -540,7 +615,7 @@ qed.
 
 (* 
   Alternative version of LEAK-BIND-K-PK property 
-  for ML-KEM in ROM (with G modeled as a random oracle)
+  for ML-KEM in ROM (with J and G modeled as a random oracle)
   with (non-RO) concrete procedures inlined, several variables 
   moved to the module level, and extraneous variables removed.
 *)
@@ -585,6 +660,7 @@ local module LEAK_BINDKPK_MLKEM_ROM_JG = {
     return is_bindbreak K_Binds_PK (oget k0) (oget k1) pk0 pk1 c0 c1;
   }
 }.
+
 
 local lemma EqPr_LEAKBINDROMJG_KPK &m :
   Pr[LEAK_BIND_ROMx2(J_RO, G_RO, ML_KEM_HL_ROM_JG, A).main(K_Binds_PK) @ &m : res]
@@ -798,6 +874,7 @@ local module (R_CRROMx2GG_LEAKBINDKCT : ROM_GkGk.Adv_CRROMx2)
     return (p0', p1');
   }
 }.
+
 
 local lemma Bnd_GGcoll_CRROMx2 &m :
   Pr[LEAK_BINDKPK_MLKEM_ROM_JG.main(K_Binds_PK) @ &m :
@@ -1307,65 +1384,20 @@ wp; rnd; wp; rnd.
 by wp; skip => />; smt(get_setE).
 qed.
 
+print R_CRROMx2GG_LEAKBINDKCT.
 
-(*
-  Split get procedure of G_RO_SSample into
-  two get procedures samplings (each sampling one part of the pair)
+local module (R_CRROMx2GG_LEAKBINDKCT_Qs : ROM_GkGk.Adv_CRROMx2) 
+             (RO1 : ROM_GkGk.RandomOracle1) (RO2 : ROM_GkGk.RandomOracle2) = {
+  import var LEAK_BINDKPK_MLKEM_ROM_JG
+  import var Counting_RO1
   
-local module G_RO_SGet = {
-  import var ROM_G.RO
-  var mk : (ptxt_t * rand_t, key_t) fmap
-  var mr : (ptxt_t * rand_t, rand_t) fmap
-  
-  proc getk(ph : ptxt_t * rand_t) : rand_t = { 
-    var k : key_t;
-    
-    k <$ dkey;
-    if (ph \notin mk) {
-      mk.[ph] <- k; 
-    }
-    
-    return oget mk.[ph];
-  }
-  
-  proc getr(ph : ptxt_t * rand_t) : rand_t = { 
-    var r : rand_t;
-    
-    r <$ drand;
-    if (ph \notin mr) {
-      mr.[ph] <- r; 
-    }
-    
-    return oget mr.[ph];
-  }
-  
-  proc get = getk
-}.
-*)
-
-
-(* 
-  Alternative version of LEAK-BIND-K-PK property 
-  for ML-KEM in ROM (with G and J modeled as a random oracle)
-  with (non-RO) concrete procedures inlined, several variables 
-  moved to the module level, and extraneous variables removed.
-
-local module LEAK_BINDKPK_MLKEM_ROM_JG = {
-  var pk_pke0, pk_pke1 : pk_t_pke
-  var sk_pke0, sk_pke1 : sk_t_pke
-  var c0, c1 : ctxt_t
-  var h0, h1, z0, z1, r0', r1' : rand_t
-  var p0', p1' : ptxt_t 
-  var k0', k1', k0_, k1_ : key_t
-  var k0, k1 : key_t option
-  
-  proc main(bc : bindconf) : bool = {
+  proc find() : ptxt_t * ptxt_t = { 
     var pk0, pk1 : pk_t;
-    var sk0, sk1 : sk_t;
+    var sk0, sk1 : sk_t;  
     
+    q <- 0;
     J_RO.init();
-    G_RO_SSample.init();
-             
+    
     z0 <$ drand;
     (pk_pke0, sk_pke0) <$ dkg;
     pk0 <- pk_pke0;
@@ -1376,22 +1408,448 @@ local module LEAK_BINDKPK_MLKEM_ROM_JG = {
     pk1 <- pk_pke1;
     sk1 <- (sk_pke1, pk1, H pk1, z1);
     
-    (c0, c1) <@ A(J_RO, G_RO_SSample).find(K_Binds_PK, pk0, sk0, pk1, sk1);
+    GW12(RO1, RO2).init(H pk0, H pk1);
     
-    p0' <- dec sk_pke0 c0;
-    (k0', r0') <@ G_RO_SSample.get((p0', H pk0));
-    k0_ <@ J_RO.get((z0, c0));
-    k0 <- Some (if c0 <> enc r0' pk_pke0 p0' then k0_ else k0');
+    (c0, c1) <@ A(J_RO, Counting_RO1(GW12(RO1, RO2))).find(K_Binds_PK, pk0, sk0, pk1, sk1);
     
+    p0' <- dec sk_pke0 c0;    
     p1' <- dec sk_pke1 c1;
-    (k1', r1') <@ G_RO_SSample.get((p1', H pk1));
-    k1_ <@ J_RO.get((z1, c1));
-    k1 <- Some (if c1 <> enc r1' pk_pke1 p1' then k1_ else k1');
-          
-    return is_bindbreak K_Binds_PK (oget k0) (oget k1) pk0 pk1 c0 c1;
+    
+    return (p0', p1');
   }
 }.
+
+local lemma test &m :
+  Pr[ROM_GkGk.CR_ROM_x2(ROM_GkGk.RO1_Default, ROM_GkGk.RO2_Default, R_CRROMx2GG_LEAKBINDKCT).main() @ &m : res]
+  =
+  Pr[ROM_GkGk.CR_ROM_x2(ROM_GkGk.RO1_Default, ROM_GkGk.RO2_Default, R_CRROMx2GG_LEAKBINDKCT_Qs).main() @ &m : res].
+proof.
+byequiv => //.
+proc.
+inline{1} 3; inline{2} 3.
+seq 13 14 : (   ={ROM_GkGk.RO1_Default.m, ROM_GkGk.RO2_Default.m} 
+             /\ ={LEAK_BINDKPK_MLKEM_ROM_JG.c0, LEAK_BINDKPK_MLKEM_ROM_JG.c1}
+             /\ ={LEAK_BINDKPK_MLKEM_ROM_JG.sk_pke1, LEAK_BINDKPK_MLKEM_ROM_JG.sk_pke0}); 2: by sim.
+call (:   ={glob GW12, RO.m, ROM_GkGk.RO1_Default.m, ROM_GkGk.RO2_Default.m}
+       /\ ={LEAK_BINDKPK_MLKEM_ROM_JG.sk_pke1, LEAK_BINDKPK_MLKEM_ROM_JG.sk_pke0}).
++ proc; inline{2} 1.
+  sp 0 1; wp 1 1. 
+  by sim.
++ by sim.
+inline init. 
+by auto.
+qed.
+  
+(*
+  Translate the assumption regarding the adversary's G oracle 
+  queries to concrete statements usable in the current stage 
+  of the proof.
 *)
+local lemma A_find_qG_GW12_1 (O1 <: ROM_GkGk.RandomOracle1{-R_CRROMx2GG_LEAKBINDKCT_Qs, -ROM_GkGk.Counting_RO1}) 
+                             (O2 <: ROM_GkGk.RandomOracle1{-R_CRROMx2GG_LEAKBINDKCT_Qs, -ROM_GkGk.Counting_RO1, -O1}) :
+  hoare[A(J_RO, Counting_RO1(GW12(ROM_GkGk.Counting_RO1(O1), O2))).find : 
+             ROM_GkGk.Counting_RO1.q = 0 
+         ==> 
+             ROM_GkGk.Counting_RO1.q <= qG].
+proof. 
+have eqv_fszq :
+  equiv[ A(J_RO, Counting_RO1(GW12(ROM_GkGk.Counting_RO1(O1), O2))).find 
+         ~ 
+         A(J_RO, Counting_RO1(GW12(ROM_GkGk.Counting_RO1(O1), O2))).find 
+         :
+                 ={arg, glob A, glob J_RO, glob GW12, glob O1, glob O2}             
+               /\ ROM_GkGk.Counting_RO1.q{1} <=  Counting_RO1.q{2} 
+           ==> 
+                  ={res, glob J_RO, glob GW12, glob O1, glob O2} 
+               /\ ROM_GkGk.Counting_RO1.q{1} <= Counting_RO1.q{2} ].
++ proc (   ={glob J_RO, glob GW12, glob O1, glob O2}             
+        /\ ROM_GkGk.Counting_RO1.q{1} <= Counting_RO1.q{2}) => //.  
+  + proc; inline{1} 1; inline{2} 1.
+    sp 1 1; wp 1 1. 
+    if => //.    
+    + seq 1 1 : (#pre /\ ={r}); 1: by rnd.
+      if => //.
+      + inline.
+        wp.
+        call (: true).
+        by wp; skip => /> /#.
+      by wp; skip => /> /#. 
+    if => //.
+    + seq 1 1 : (#pre /\ ={r}); 1: by rnd.
+      if => //.
+      + inline.
+        wp.
+        call (: true).
+        by wp; skip => /> /#.
+      by wp; skip => /> /#. 
+    by auto => /> /#.
+  by proc; auto.
+conseq eqv_fszq (: Counting_RO1.q = 0 ==> Counting_RO1.q <= qG); 1,2: smt(). 
+by apply (A_find_qG (GW12(ROM_GkGk.Counting_RO1(O1), O2)) J_RO). 
+qed.
+
+local lemma A_find_qG_GW12_2 (O1 <: ROM_GkGk.RandomOracle1{-R_CRROMx2GG_LEAKBINDKCT_Qs, -ROM_GkGk.Counting_RO2}) 
+                             (O2 <: ROM_GkGk.RandomOracle1{-R_CRROMx2GG_LEAKBINDKCT_Qs, -ROM_GkGk.Counting_RO2, -O1}) :
+  hoare[A(J_RO, Counting_RO1(GW12(O1, ROM_GkGk.Counting_RO2(O2)))).find : 
+             ROM_GkGk.Counting_RO2.q = 0 
+         ==> 
+             ROM_GkGk.Counting_RO2.q <= qG].
+proof. 
+have eqv_fszq :
+  equiv[ A(J_RO, Counting_RO1(GW12(O1, ROM_GkGk.Counting_RO2(O2)))).find
+         ~ 
+         A(J_RO, Counting_RO1(GW12(O1, ROM_GkGk.Counting_RO2(O2)))).find 
+         :
+                 ={arg, glob A, glob J_RO, glob GW12, glob O1, glob O2}             
+               /\ ROM_GkGk.Counting_RO2.q{1} <= Counting_RO1.q{2} 
+           ==> 
+                  ={res, glob J_RO, glob GW12, glob O1, glob O2} 
+               /\ ROM_GkGk.Counting_RO2.q{1} <= Counting_RO1.q{2} ].
++ proc (   ={glob J_RO, glob GW12, glob O1, glob O2}             
+        /\ ROM_GkGk.Counting_RO2.q{1} <= Counting_RO1.q{2}) => //.  
+  + proc; inline{1} 1; inline{2} 1.
+    sp 1 1; wp 1 1. 
+    if => //.    
+    + seq 1 1 : (#pre /\ ={r}); 1: by rnd.
+      if => //.
+      + inline.
+        wp.
+        call (: true).
+        by wp; skip => /> /#.
+      by wp; skip => /> /#. 
+    if => //.
+    + seq 1 1 : (#pre /\ ={r}); 1: by rnd.
+      if => //.
+      + inline.
+        wp.
+        call (: true).
+        by wp; skip => /> /#.
+      by wp; skip => /> /#. 
+    by auto => /> /#.
+  by proc; auto.
+conseq eqv_fszq (: Counting_RO1.q = 0 ==> Counting_RO1.q <= qG); 1,2: smt(). 
+by apply (A_find_qG (GW12(O1, ROM_GkGk.Counting_RO2(O2))) J_RO). 
+qed.
+
+
+(*
+sim.
+        proc.
+wp; sp.
+if => //.
+auto => />. progress. 
+smt(@FMap).
+smt(@FMap).
+auto => />. progress. 
+smt(@FMap).
+if => //.
+seq 1 1 : (#pre /\ ={r}); 1: by rnd.
+if => //.
+auto => />. progress. 
+smt(@FMap).
+smt(@FMap).
+auto => />. progress. 
+smt(@FMap).
+auto => />. progress. 
+smt(@FMap).
+smt(@FMap).
+by proc; auto.
+(*
+  proc (   ={glob J_RO}
+        /\ dom GW12.m1{2} = dom ROM_GkGk.RO1_Default.m{2}
+        /\ dom GW12.m2{2} = dom ROM_GkGk.RO2_Default.m{2}
+        /\ (forall (ph : ptxt_t * rand_t),
+              ROM_G.RO.m{1}.[ph]
+              =
+              if ph.`2 = GW12.h0{2} 
+              then GW12.m1{2}.[ph.`1]
+              else (if ph.`2 = GW12.h1{2} 
+                    then GW12.m2{2}.[ph.`1]
+                    else GW12.mr{2}.[ph]))
+        /\ ROM_GkGk.Counting_RO1.q{2} <= fsize ROM_G.RO.m{1}) => //; 1: smt(mem_empty fsize_empty).
+  + transitivity G_RO_SSample.get 
+                 (={glob G_RO, RO.m, arg} ==> ={glob G_RO, RO.m, res}) 
+                     (      ={arg, RO.m}
+                         /\ dom GW12.m1{2} = dom ROM_GkGk.RO1_Default.m{2}
+                         /\ dom GW12.m2{2} = dom ROM_GkGk.RO2_Default.m{2}
+                         /\ (forall (ph : ptxt_t * rand_t),
+                              ROM_G.RO.m{1}.[ph]
+                              =
+                              if ph.`2 = GW12.h0{2} 
+                              then GW12.m1{2}.[ph.`1]
+                              else (if ph.`2 = GW12.h1{2} 
+                                    then GW12.m2{2}.[ph.`1]
+                                    else GW12.mr{2}.[ph]))
+                         /\ ROM_GkGk.Counting_RO1.q{2} <= fsize ROM_G.RO.m{1}
+                     ==> 
+                            ={res, RO.m}
+                         /\ dom GW12.m1{2} = dom ROM_GkGk.RO1_Default.m{2}
+                         /\ dom GW12.m2{2} = dom ROM_GkGk.RO2_Default.m{2}
+                         /\ (forall (ph : ptxt_t * rand_t),
+                              ROM_G.RO.m{1}.[ph]
+                              =
+                              if ph.`2 = GW12.h0{2} 
+                              then GW12.m1{2}.[ph.`1]
+                              else (if ph.`2 = GW12.h1{2} 
+                                    then GW12.m2{2}.[ph.`1]
+                                    else GW12.mr{2}.[ph]))
+                         /\ ROM_GkGk.Counting_RO1.q{2} <= fsize ROM_G.RO.m{1}) => //.
+    + move=> /> &1 &2 eqdm1 eqdm2 eqm lefsz. 
+      by exists ROM_G.RO.m{1} RO.m{2} arg{2}.     
+    + by conseq Eqv_GRO_GROSS_Get.
+  + proc.
+    if{2}.
+    + case (ph{2}.`1 \notin GW12.m1{2}).
+      + rcondt{1} ^if; 1: by auto => /> /#. 
+        inline get.
+        rcondt{2} ^if; 1: by auto.
+        rcondt{2} ^if; 1: by auto => /> /#.         
+        by swap{1} 1 1; wp; rnd; wp; rnd; skip => />; smt(get_setE domE fsize_set).
+      rcondf{1} ^if; 1: by auto => /> /#.
+      rcondf{2} ^if; 1: by auto.
+      by wp; rnd; rnd{1}; skip => /> /#. 
+    if{2}.
+    + case (ph{2}.`1 \notin GW12.m2{2}).
+      + rcondt{1} ^if; 1: by auto => /> /#. 
+        inline get.
+        rcondt{2} ^if; 1: by auto.
+        rcondt{2} ^if; 1: by auto => /> /#.
+        by swap{1} 1 1; wp; rnd; wp; rnd; skip => />; smt(get_setE domE fsize_set).
+      rcondf{2} ^if; 1: by auto.
+      rcondf{1} ^if; 1: by auto => /> /#.
+      by wp; rnd; rnd{1}; skip => /> /#. 
+    by wp; rnd; rnd; skip => />; smt(get_setE fsize_set).
+  by proc; auto.
+  *)
+conseq eqv_fszq (: Counting_RO1.q = 0 ==> Counting_RO1.q <= qG). 
+progress. smt(). smt(). 
+by apply (A_find_qG (GW12(ROM_GkGk.Counting_RO1(ROM_GkGk.RO1_Default), ROM_GkGk.RO2_Default)) J_RO).
+qed.
+*)
+
+(*
+local lemma A_find_qG_GW12_1 :
+  hoare[A(J_RO, GW12(ROM_GkGk.Counting_RO1(ROM_GkGk.RO1_Default), ROM_GkGk.RO2_Default)).find : 
+                GW12.m1 = empty 
+             /\ GW12.m2 = empty 
+             /\ GW12.mr = empty
+             /\ ROM_GkGk.RO1_Default.m = empty
+             /\ ROM_GkGk.RO2_Default.m = empty 
+             /\ ROM_GkGk.Counting_RO1.q = 0 
+         ==> 
+                ROM_GkGk.Counting_RO1.q <= qG].
+proof.
+have eqv_fszq :
+  equiv[ A(J_RO, GW12(ROM_GkGk.Counting_RO1(ROM_GkGk.RO1_Default), ROM_GkGk.RO2_Default)).find ~ A(J_RO, G_RO).find : 
+                 ={arg, glob A, glob J_RO}
+               /\ GW12.m1{1} = empty 
+               /\ GW12.m2{1} = empty 
+               /\ GW12.mr{1} = empty
+               /\ ROM_GkGk.RO1_Default.m{1} = empty
+               /\ ROM_GkGk.RO2_Default.m{1} = empty               
+               /\ ROM_GkGk.Counting_RO1.q{1} = 0 
+               /\ ROM_G.RO.m{2} = empty
+           ==> 
+                  ={res, glob J_RO} 
+               /\ ROM_GkGk.Counting_RO1.q{1} <= fsize ROM_G.RO.m{2} ]. 
++ symmetry.
+  proc (   ={glob J_RO}
+        /\ dom GW12.m1{2} = dom ROM_GkGk.RO1_Default.m{2}
+        /\ dom GW12.m2{2} = dom ROM_GkGk.RO2_Default.m{2}
+        /\ (forall (ph : ptxt_t * rand_t),
+              ROM_G.RO.m{1}.[ph]
+              =
+              if ph.`2 = GW12.h0{2} 
+              then GW12.m1{2}.[ph.`1]
+              else (if ph.`2 = GW12.h1{2} 
+                    then GW12.m2{2}.[ph.`1]
+                    else GW12.mr{2}.[ph]))
+        /\ ROM_GkGk.Counting_RO1.q{2} <= fsize ROM_G.RO.m{1}) => //; 1: smt(mem_empty fsize_empty).
+  + transitivity G_RO_SSample.get 
+                 (={glob G_RO, RO.m, arg} ==> ={glob G_RO, RO.m, res}) 
+                     (      ={arg, RO.m}
+                         /\ dom GW12.m1{2} = dom ROM_GkGk.RO1_Default.m{2}
+                         /\ dom GW12.m2{2} = dom ROM_GkGk.RO2_Default.m{2}
+                         /\ (forall (ph : ptxt_t * rand_t),
+                              ROM_G.RO.m{1}.[ph]
+                              =
+                              if ph.`2 = GW12.h0{2} 
+                              then GW12.m1{2}.[ph.`1]
+                              else (if ph.`2 = GW12.h1{2} 
+                                    then GW12.m2{2}.[ph.`1]
+                                    else GW12.mr{2}.[ph]))
+                         /\ ROM_GkGk.Counting_RO1.q{2} <= fsize ROM_G.RO.m{1}
+                     ==> 
+                            ={res, RO.m}
+                         /\ dom GW12.m1{2} = dom ROM_GkGk.RO1_Default.m{2}
+                         /\ dom GW12.m2{2} = dom ROM_GkGk.RO2_Default.m{2}
+                         /\ (forall (ph : ptxt_t * rand_t),
+                              ROM_G.RO.m{1}.[ph]
+                              =
+                              if ph.`2 = GW12.h0{2} 
+                              then GW12.m1{2}.[ph.`1]
+                              else (if ph.`2 = GW12.h1{2} 
+                                    then GW12.m2{2}.[ph.`1]
+                                    else GW12.mr{2}.[ph]))
+                         /\ ROM_GkGk.Counting_RO1.q{2} <= fsize ROM_G.RO.m{1}) => //.
+    + move=> /> &1 &2 eqdm1 eqdm2 eqm lefsz. 
+      by exists ROM_G.RO.m{1} RO.m{2} arg{2}.     
+    + by conseq Eqv_GRO_GROSS_Get.
+  + proc.
+    if{2}.
+    + case (ph{2}.`1 \notin GW12.m1{2}).
+      + rcondt{1} ^if; 1: by auto => /> /#. 
+        inline get.
+        rcondt{2} ^if; 1: by auto.
+        rcondt{2} ^if; 1: by auto => /> /#.         
+        by swap{1} 1 1; wp; rnd; wp; rnd; skip => />; smt(get_setE domE fsize_set).
+      rcondf{1} ^if; 1: by auto => /> /#.
+      rcondf{2} ^if; 1: by auto.
+      by wp; rnd; rnd{1}; skip => /> /#. 
+    if{2}.
+    + case (ph{2}.`1 \notin GW12.m2{2}).
+      + rcondt{1} ^if; 1: by auto => /> /#. 
+        inline get.
+        rcondt{2} ^if; 1: by auto.
+        rcondt{2} ^if; 1: by auto => /> /#.
+        by swap{1} 1 1; wp; rnd; wp; rnd; skip => />; smt(get_setE domE fsize_set).
+      rcondf{2} ^if; 1: by auto.
+      rcondf{1} ^if; 1: by auto => /> /#.
+      by wp; rnd; rnd{1}; skip => /> /#. 
+    by wp; rnd; rnd; skip => />; smt(get_setE fsize_set).
+  by proc; auto.
+conseq eqv_fszq (: fsize ROM_G.RO.m = 0 ==> fsize ROM_G.RO.m <= qG); 1,2: smt(fsize_empty).
+by apply A_find_qG.
+qed. 
+
+local lemma A_find_qG_GW12_2 :
+  hoare[A(J_RO, GW12(ROM_GkGk.Counting_RO1(ROM_GkGk.RO1_Default), ROM_GkGk.RO2_Default)).find : 
+                GW12.m1 = empty 
+             /\ GW12.m2 = empty 
+             /\ GW12.mr = empty
+             /\ ROM_GkGk.RO1_Default.m = empty
+             /\ ROM_GkGk.RO2_Default.m = empty 
+             /\ ROM_GkGk.Counting_RO2.q = 0 
+         ==> 
+                ROM_GkGk.Counting_RO2.q <= qG].
+proof.
+have eqv_fszq :
+  equiv[ A(J_RO, GW12(ROM_GkGk.Counting_RO1(ROM_GkGk.RO1_Default), ROM_GkGk.RO2_Default)).find ~ A(J_RO, G_RO).find : 
+                 ={arg, glob A, glob J_RO}
+               /\ GW12.m1{1} = empty 
+               /\ GW12.m2{1} = empty 
+               /\ GW12.mr{1} = empty
+               /\ ROM_GkGk.RO1_Default.m{1} = empty
+               /\ ROM_GkGk.RO2_Default.m{1} = empty               
+               /\ ROM_GkGk.Counting_RO2.q{1} = 0 
+               /\ ROM_G.RO.m{2} = empty
+           ==> 
+                  ={res, glob J_RO} 
+               /\ ROM_GkGk.Counting_RO2.q{1} <= fsize ROM_G.RO.m{2} ]. 
++ symmetry.
+  proc (   ={glob J_RO}
+        /\ dom GW12.m1{2} = dom ROM_GkGk.RO1_Default.m{2}
+        /\ dom GW12.m2{2} = dom ROM_GkGk.RO2_Default.m{2}
+        /\ (forall (ph : ptxt_t * rand_t),
+              ROM_G.RO.m{1}.[ph]
+              =
+              if ph.`2 = GW12.h0{2} 
+              then GW12.m1{2}.[ph.`1]
+              else (if ph.`2 = GW12.h1{2} 
+                    then GW12.m2{2}.[ph.`1]
+                    else GW12.mr{2}.[ph]))
+        /\ ROM_GkGk.Counting_RO2.q{2} <= fsize ROM_G.RO.m{1}) => //; 1: smt(mem_empty fsize_empty).
+  + transitivity G_RO_SSample.get 
+                 (={glob G_RO, RO.m, arg} ==> ={glob G_RO, RO.m, res}) 
+                     (      ={arg, RO.m}
+                         /\ dom GW12.m1{2} = dom ROM_GkGk.RO1_Default.m{2}
+                         /\ dom GW12.m2{2} = dom ROM_GkGk.RO2_Default.m{2}
+                         /\ (forall (ph : ptxt_t * rand_t),
+                              ROM_G.RO.m{1}.[ph]
+                              =
+                              if ph.`2 = GW12.h0{2} 
+                              then GW12.m1{2}.[ph.`1]
+                              else (if ph.`2 = GW12.h1{2} 
+                                    then GW12.m2{2}.[ph.`1]
+                                    else GW12.mr{2}.[ph]))
+                         /\ ROM_GkGk.Counting_RO2.q{2} <= fsize ROM_G.RO.m{1}
+                     ==> 
+                            ={res, RO.m}
+                         /\ dom GW12.m1{2} = dom ROM_GkGk.RO1_Default.m{2}
+                         /\ dom GW12.m2{2} = dom ROM_GkGk.RO2_Default.m{2}
+                         /\ (forall (ph : ptxt_t * rand_t),
+                              ROM_G.RO.m{1}.[ph]
+                              =
+                              if ph.`2 = GW12.h0{2} 
+                              then GW12.m1{2}.[ph.`1]
+                              else (if ph.`2 = GW12.h1{2} 
+                                    then GW12.m2{2}.[ph.`1]
+                                    else GW12.mr{2}.[ph]))
+                         /\ ROM_GkGk.Counting_RO2.q{2} <= fsize ROM_G.RO.m{1}) => //.
+    + move=> /> &1 &2 eqdm1 eqdm2 eqm lefsz. 
+      by exists ROM_G.RO.m{1} RO.m{2} arg{2}.     
+    + by conseq Eqv_GRO_GROSS_Get.
+  + proc.
+    if{2}.
+    + case (ph{2}.`1 \notin GW12.m1{2}).
+      + rcondt{1} ^if; 1: by auto => /> /#. 
+        inline get.
+        rcondt{2} ^if; 1: by auto.
+        rcondt{2} ^if; 1: by auto => /> /#.         
+        by swap{1} 1 1; wp; rnd; wp; rnd; skip => />; smt(get_setE domE fsize_set).
+      rcondf{1} ^if; 1: by auto => /> /#.
+      rcondf{2} ^if; 1: by auto.
+      by wp; rnd; rnd{1}; skip => /> /#. 
+    if{2}.
+    + case (ph{2}.`1 \notin GW12.m2{2}).
+      + rcondt{1} ^if; 1: by auto => /> /#. 
+        inline get.
+        rcondt{2} ^if; 1: by auto.
+        rcondt{2} ^if; 1: by auto => /> /#.
+        by swap{1} 1 1; wp; rnd; wp; rnd; skip => />; smt(get_setE domE fsize_set).
+      rcondf{2} ^if; 1: by auto.
+      rcondf{1} ^if; 1: by auto => /> /#.
+      by wp; rnd; rnd{1}; skip => /> /#. 
+    by wp; rnd; rnd; skip => />; smt(get_setE fsize_set).
+  by proc; auto.
+conseq eqv_fszq (: fsize ROM_G.RO.m = 0 ==> fsize ROM_G.RO.m <= qG); 1,2: smt(fsize_empty).
+admit .
+(*by apply A_find_qG.*)
+qed. 
+*)
+
+local lemma Bnd_Concrete_GkGk_CRROMx2 &m :
+  Pr[ROM_GkGk.CR_ROM_x2(ROM_GkGk.RO1_Default, ROM_GkGk.RO2_Default, R_CRROMx2GG_LEAKBINDKCT_Qs).main() @ &m : res]
+  <=
+  (qG ^ 2 + 1)%r * p_max dkey.
+proof.
+rewrite expr2.
+apply: (ROM_GkGk.Bnd_CRROMx2 R_CRROMx2GG_LEAKBINDKCT_Qs _ _ ge0_qG _ _ ge0_qG). 
++ move=> O1 O2 O1ll O2ll.
+  proc; inline. 
+  wp; call (A_find_ll (Counting_RO1(GW12(O1, O2))) J_RO).
+  + proc; inline 1.
+    wp 2; sp 1.
+    if; 2: if; last by auto => />; smt(dkey_ll drand_ll).
+    + wp.
+      seq 1 : true 1%r 1%r 0%r 0%r => //; first by auto => />; smt(drand_ll).
+      by if => //; wp; call O1ll.      
+    wp.
+    seq 1 : true 1%r 1%r 0%r 0%r => //; first by auto => />; smt(drand_ll).
+    by if => //; wp; call O2ll.
+  + by proc; auto => />; smt(dkey_ll).
+  by auto => />; smt(drand_ll dkg_ll).
++ move => O1 O2.
+  proc; inline.
+  wp.
+  call (A_find_qG_GW12_1 O1 O2).
+  by auto.
+move => O1 O2.
+proc; inline.
+wp.
+call (A_find_qG_GW12_2 O1 O2).
+by auto.
+qed.
 
 
 end section MLKEM_LEAKBINDKPK_ROMx2.
