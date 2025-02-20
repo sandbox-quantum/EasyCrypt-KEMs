@@ -1,29 +1,6 @@
 require import AllCore Distr List FMap PROM.
 require (*--*) ROM.
 
-(* Auxiliary properties *) 
-lemma size_behead (s : 'a list) : 
-  size (behead s) = if s = [] then 0 else size s - 1.
-proof. by elim: s. qed.
-
-lemma behead_drop (s : 'a list) (n : int) :
-  0 <= n => behead (drop n s) = drop (n + 1) s. 
-proof. by elim: s n => // /#. qed. 
-
-lemma uniq_le_mem_size_perm_eq (s1 s2 : 'a list) :
-  uniq s1 => mem s1 <= mem s2 => size s2 <= size s1 => perm_eq s1 s2. 
-proof.
-elim: s1 s2 => [| x l ih s2 /= [ninl uql] lemem le1sz]; 1: smt(size_ge0). 
-move: (ih (rem x s2) uql _ _); 1,2: smt(mem_rem_neq size_rem).
-rewrite -(perm_cons x) => peqxc.
-rewrite (perm_eq_trans _ _ _ peqxc) perm_eq_sym perm_to_rem 1:/#.
-qed.
-
-lemma uniq_drop (s : 'a list) (n : int) :
-  uniq s => uniq (drop n s). 
-proof. by elim: s n => // /#. qed.
-
-
 (* Types *)
 (** Input type of first oracle **) 
 type in_t1.
