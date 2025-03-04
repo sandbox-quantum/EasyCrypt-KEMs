@@ -1,5 +1,5 @@
-require import AllCore Distr PROM.
-require KeyEncapsulationMechanismsROM.
+require import AllCore Distr.
+require (*--*) HashFunctions KeyEncapsulationMechanisms.
 
 
 (* Types *)
@@ -19,19 +19,182 @@ type ctxt_t.
 type rand_t.
 
 
+(* Clones *)
+(* Definitions for KEMs in ROM *)
+clone import KeyEncapsulationMechanisms as KEMs with
+  type pk_t <- pk_t,
+  type sk_t <- sk_t,
+  type key_t <- key_t,
+  type ctxt_t <- ctxt_t
+  
+  proof *.
+  
+(* Definitions for malicious binding in ROM *)
+clone import MALBIND with
+  type rand_t <- rand_t
+  
+  proof *.
+
+
+(** 
+  Considers the case where the post-processing is done 
+  by passing the symmetric key and encapsulation (obtained from any other KEM) 
+  to a KDF (modeled as a RO).
+**)
+abstract theory PPKDFKCT.
+(* Key derivation function (hash) function for post-processing *)
+op kdf : key_t * ctxt_t -> key_t.
+
+(* Clones and import *)
+clone import HashFunctions as KDF with
+  type in_t <- key_t * ctxt_t,
+  type out_t <- key_t,
+  
+  op f <- kdf
+  
+  proof *.
+
+
+(* Scheme *)
+(** 
+  KEM that adds a post-processing step to the encapsulation and decapsulation
+  of the provided KEM (processing the symmetric key and encapsulation/ciphertext).
+**)
+(**
+  Note, the KEMs (both provided and constructed) are of the "derandomized KEM" type
+  because we will mainly be considering malicious binding properties.
+**)
+module KEM_KDF_PP_KCT (S : SchemeDerand) : SchemeDerand = {
+  proc keygen = S.keygen
+  
+  proc encaps(pk : pk_t, r : rand_t) : key_t * ctxt_t = {
+    var k, kpp : key_t;
+    var c : ctxt_t;
+    
+    (k, c) <@ S.encaps(pk, r);
+    kpp <- kdf (k, c);
+    
+    return (kpp, c);
+  }
+  
+  proc decaps(sk : sk_t, c : ctxt_t) : key_t option = {
+    var ko, kppo : key_t option;
+    var kpp : key_t;
+    
+    ko <@ S.decaps(sk, c);
+    
+    if (ko = None) {
+      kppo <- None;
+    } else {
+      kpp <- kdf (oget ko, c);
+      kppo <- Some kpp;
+    }
+    
+    return kppo;
+  }
+}.
+
+
+(* Security proof *)
+(** Reduction adversary reducing from CR to MAL-BIND-K-CT **) 
+module R_KCT_CR (S : SchemeDerand) (A : Adv_MALBIND) : Adv_CR = {
+  proc find() : (key_t * ctxt_t) * (key_t * ctxt_t) = {
+    var mbs : malbind_scenario;
+    var sk0, sk1 : sk_t;
+    var r0, r1 : rand_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t;
+    var k0o, k1o : key_t option;
+    var pk0, pk1 : pk_t;
+    var kc0, kc1 : key_t * ctxt_t;
+        
+    mbs <@ A.choose(K_Binds_CT);
+    
+    if (mbs = DECAPS_DECAPS) {
+      (sk0, sk1, c0, c1) <@ A.find_dd();
+    
+      pk0 <- sk2pk sk0;
+      pk1 <- sk2pk sk1;
+
+      k0o <@ S.decaps(sk0, c0);
+      k1o <@ S.decaps(sk1, c1);
+      
+      kc0 <- (oget k0o, c0);
+      kc1 <- (oget k1o, c1);
+    } elif (mbs = ENCAPS_DECAPS) {
+      (sk0, sk1, r0, c1) <@ A.find_ed();
+
+      pk0 <- sk2pk sk0;
+      pk1 <- sk2pk sk1;
+
+      (k0, c0) <@ S.encaps(pk0, r0);
+      k1o <@ S.decaps(sk1, c1);
+      
+      kc0 <- (k0, c0);
+      kc1 <- (oget k1o, c1);
+    } else { (* mbs = ENCAPS_ENCAPS *)
+      (sk0, sk1, r0, r1) <@ A.find_ee();
+    
+      pk0 <- sk2pk sk0;
+      pk1 <- sk2pk sk1;
+
+      (k0, c0) <@ S.encaps(pk0, r0);
+      (k1, c1) <@ S.encaps(pk1, r1);
+      
+      kc0 <- (k0, c0);
+      kc1 <- (k1, c1);
+    }
+
+    return (kc0, kc1);
+  }  
+}.
+
+
+section.
+(* Declare arbitrary ("derandomized") KEM *)
+declare module S <: SchemeDerand.
+
+(* Declare arbitrary MAL-BIND adversary (in ROM)*)
+declare module A <: Adv_MALBIND{-S}.
+
+(** 
+  Equivalence between MAL-BIND-K-CT of post-processing KEM (for arbitrary adversary)
+  and CR (for above reduction adversary). (Shows CR --> MAL-BIND-K-CT)
+**)
+equiv Eqv_MALBINDKCT_CR : 
+  MAL_BIND(KEM_KDF_PP_KCT(S), A).main ~ CR(R_KCT_CR(S, A)).main : 
+    ={glob S, glob A} /\ arg{1} = K_Binds_CT ==> res{1} => res{2}. 
+proof.
+proc.
+inline{2} find.
+seq 1 1 : (#pre /\ ={mbs}); 1: by call (: true).
+inline KEM_KDF_PP_KCT(S).decaps KEM_KDF_PP_KCT(S).encaps.
+wp; if => //.
++ by do 3! (wp; call (: true)); skip => /> /#.
+if => //.
++ by do 3! (wp; call (: true)); skip => /> /#.
+by do 3! (wp; call (: true)); skip => /> /#.
+qed.
+
+end section.
+
+end PPKDFKCT.
+
+
+
+(*
 (** 
   Considers the case where the post-processing is done 
   by passing the symmetric key and encapsulation (obtained from any other KEM) 
   to a KDF (modeled as a RO).
 **)
 theory PPKDFKCT.
-(* Clones and imports *)
+(* Clones and import *)
 clone import FullRO as F_RO with
   type in_t <- key_t * ctxt_t,
   type out_t <- key_t
   
   proof *.
-
   
 (* Definitions for KEMs in ROM *)
 clone import KeyEncapsulationMechanismsROM as KEMsROM with
@@ -239,21 +402,156 @@ qed.
 end section.
 
 end PPKDFKCT.
+*)
 
 
+abstract theory PPKDFKPK.
+(* Key derivation function (hash) function for post-processing *)
+op kdf : key_t * pk_t -> key_t.
 
+(* Clones and import *)
+clone import HashFunctions as KDF with
+  type in_t <- key_t * pk_t,
+  type out_t <- key_t,
+  
+  op f <- kdf
+  
+  proof *.
+
+  
+(* Scheme *)
+(** 
+  KEM that adds a post-processing step to the encapsulation and decapsulation
+  of the provided KEM (processing the symmetric key and encapsulation/ciphertext).
+**)
+(**
+  Note, the KEMs (both provided and constructed) are of the "derandomized KEM" type
+  because we will mainly be considering malicious binding properties.
+**)
+module KEM_KDF_PP_KCT (S : SchemeDerand) : SchemeDerand = {
+  proc keygen = S.keygen
+  
+  proc encaps(pk : pk_t, r : rand_t) : key_t * ctxt_t = {
+    var k, kpp : key_t;
+    var c : ctxt_t;
+    
+    (k, c) <@ S.encaps(pk, r);
+    kpp <- kdf (k, pk);
+    
+    return (kpp, c);
+  }
+  
+  proc decaps(sk : sk_t, c : ctxt_t) : key_t option = {
+    var ko, kppo : key_t option;
+    var kpp : key_t;
+    
+    ko <@ S.decaps(sk, c);
+    
+    if (ko = None) {
+      kppo <- None;
+    } else {
+      kpp <- kdf (oget ko, sk2pk sk);
+      kppo <- Some kpp;
+    }
+    
+    return kppo;
+  }
+}.
+
+
+(* Security proof *)
+(** Reduction adversary reducing from CR to MAL-BIND-K-PK **) 
+module R_KPK_CR (S : SchemeDerand) (A : Adv_MALBIND) : Adv_CR = {
+  proc find() : (key_t * pk_t) * (key_t * pk_t) = {
+    var mbs : malbind_scenario;
+    var sk0, sk1 : sk_t;
+    var r0, r1 : rand_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t;
+    var k0o, k1o : key_t option;
+    var pk0, pk1 : pk_t;
+    var kc0, kc1 : key_t * pk_t;
+        
+    mbs <@ A.choose(K_Binds_PK);
+    
+    if (mbs = DECAPS_DECAPS) {
+      (sk0, sk1, c0, c1) <@ A.find_dd();
+    
+      pk0 <- sk2pk sk0;
+      pk1 <- sk2pk sk1;
+
+      k0o <@ S.decaps(sk0, c0);
+      k1o <@ S.decaps(sk1, c1);
+      
+      kc0 <- (oget k0o, pk0);
+      kc1 <- (oget k1o, pk1);
+    } elif (mbs = ENCAPS_DECAPS) {
+      (sk0, sk1, r0, c1) <@ A.find_ed();
+
+      pk0 <- sk2pk sk0;
+      pk1 <- sk2pk sk1;
+
+      (k0, c0) <@ S.encaps(pk0, r0);
+      k1o <@ S.decaps(sk1, c1);
+      
+      kc0 <- (k0, pk0);
+      kc1 <- (oget k1o, pk1);
+    } else { (* mbs = ENCAPS_ENCAPS *)
+      (sk0, sk1, r0, r1) <@ A.find_ee();
+    
+      pk0 <- sk2pk sk0;
+      pk1 <- sk2pk sk1;
+
+      (k0, c0) <@ S.encaps(pk0, r0);
+      (k1, c1) <@ S.encaps(pk1, r1);
+      
+      kc0 <- (k0, pk0);
+      kc1 <- (k1, pk1);
+    }
+
+    return (kc0, kc1);
+  }  
+}.
+
+
+section.
+(* Declare arbitrary ("derandomized") KEM *)
+declare module S <: SchemeDerand.
+
+(* Declare arbitrary MAL-BIND adversary (in ROM)*)
+declare module A <: Adv_MALBIND{-S}.
+
+(** 
+  Equivalence between MAL-BIND-K-PK of post-processing KEM (for arbitrary adversary)
+  and CR (for above reduction adversary). (Shows CR --> MAL-BIND-K-PK)
+**)
+equiv Eqv_MALBINDKPK_CR : 
+  MAL_BIND(KEM_KDF_PP_KCT(S), A).main ~ CR(R_KPK_CR(S, A)).main : 
+    ={glob S, glob A} /\ arg{1} = K_Binds_PK ==> res{1} => res{2}. 
+proof.
+proc.
+inline{2} find.
+seq 1 1 : (#pre /\ ={mbs}); 1: by call (: true).
+inline KEM_KDF_PP_KCT(S).decaps KEM_KDF_PP_KCT(S).encaps.
+wp; if => //.
++ by do 3! (wp; call (: true)); skip => /> /#.
+if => //.
++ by do 3! (wp; call (: true)); skip => /> /#.
+by do 3! (wp; call (: true)); skip => /> /#.
+qed.
+
+end section.
+
+end PPKDFKPK.
+
+
+(*
 (** 
   Considers the case where the post-processing is done 
   by passing the symmetric key and public key (obtained from any other KEM) 
   to a KDF (modeled as a RO).
 **)
 theory PPKDFKPK.
-(* Clones and imports *)
-clone import FullRO as F_RO with
-  type in_t <- key_t * pk_t,
-  type out_t <- key_t
-  
-  proof *.
   
 (* Definitions for KEMs in ROM *)
 clone import KeyEncapsulationMechanismsROM as KEMsROM with
@@ -463,8 +761,193 @@ qed.
 end section.
 
 end PPKDFKPK.
+*)
+
+abstract theory PPKDFKCTPK.
+(* Key derivation function (hash) function for post-processing *)
+op kdf : key_t * ctxt_t * pk_t -> key_t.
+
+(* Clones and import *)
+clone import HashFunctions as KDF with
+  type in_t <- key_t * ctxt_t * pk_t,
+  type out_t <- key_t,
+  
+  op f <- kdf
+  
+  proof *.
+
+  
+(* Scheme *)
+(** 
+  KEM that adds a post-processing step to the encapsulation and decapsulation
+  of the provided KEM (processing the symmetric key and encapsulation/ciphertext).
+**)
+(**
+  Note, the KEMs (both provided and constructed) are of the "derandomized KEM" type
+  because we will mainly be considering malicious binding properties.
+**)
+module KEM_KDF_PP_KCTPK (S : SchemeDerand) : SchemeDerand = {
+  proc keygen = S.keygen
+  
+  proc encaps(pk : pk_t, r : rand_t) : key_t * ctxt_t = {
+    var k, kpp : key_t;
+    var c : ctxt_t;
+    
+    (k, c) <@ S.encaps(pk, r);
+    kpp <- kdf (k, c, pk);
+    
+    return (kpp, c);
+  }
+  
+  proc decaps(sk : sk_t, c : ctxt_t) : key_t option = {
+    var ko, kppo : key_t option;
+    var kpp : key_t;
+    
+    ko <@ S.decaps(sk, c);
+    
+    if (ko = None) {
+      kppo <- None;
+    } else {
+      kpp <- kdf (oget ko, c, sk2pk sk);
+      kppo <- Some kpp;
+    }
+    
+    return kppo;
+  }
+}.
 
 
+(* Security proof *)
+(** 
+  Shared part between reduction adversaries reducing from CR 
+  to MAL-BIND-K-CT and MAL-BIND-K-PK
+**) 
+module R_S (S : SchemeDerand) (A : Adv_MALBIND) = {
+  proc find(bc : bindconf) : (key_t * ctxt_t * pk_t) * (key_t * ctxt_t * pk_t) = {
+    var mbs : malbind_scenario;
+    var sk0, sk1 : sk_t;
+    var r0, r1 : rand_t;
+    var c0, c1 : ctxt_t;
+    var k0, k1 : key_t;
+    var k0o, k1o : key_t option;
+    var pk0, pk1 : pk_t;
+    var kcpk0, kcpk1 : key_t * ctxt_t * pk_t;
+        
+    mbs <@ A.choose(bc);
+    
+    if (mbs = DECAPS_DECAPS) {
+      (sk0, sk1, c0, c1) <@ A.find_dd();
+    
+      pk0 <- sk2pk sk0;
+      pk1 <- sk2pk sk1;
+
+      k0o <@ S.decaps(sk0, c0);
+      k1o <@ S.decaps(sk1, c1);
+      
+      kcpk0 <- (oget k0o, c0, pk0);
+      kcpk1 <- (oget k1o, c1, pk1);
+    } elif (mbs = ENCAPS_DECAPS) {
+      (sk0, sk1, r0, c1) <@ A.find_ed();
+
+      pk0 <- sk2pk sk0;
+      pk1 <- sk2pk sk1;
+
+      (k0, c0) <@ S.encaps(pk0, r0);
+      k1o <@ S.decaps(sk1, c1);
+      
+      kcpk0 <- (k0, c0, pk0);
+      kcpk1 <- (oget k1o, c1, pk1);
+    } else { (* mbs = ENCAPS_ENCAPS *)
+      (sk0, sk1, r0, r1) <@ A.find_ee();
+    
+      pk0 <- sk2pk sk0;
+      pk1 <- sk2pk sk1;
+
+      (k0, c0) <@ S.encaps(pk0, r0);
+      (k1, c1) <@ S.encaps(pk1, r1);
+      
+      kcpk0 <- (k0, c0, pk0);
+      kcpk1 <- (k1, c1, pk1);
+    }
+
+    return (kcpk0, kcpk1);
+  }  
+}.
+
+
+(** Reduction adversary reducing from CR to MAL-BIND-K-CT **) 
+module R_KCT_CR (S : SchemeDerand) (A : Adv_MALBIND) : Adv_CR = {
+  proc find() : (key_t * ctxt_t * pk_t) * (key_t * ctxt_t * pk_t) = {
+    var kcpk0, kcpk1 : key_t * ctxt_t * pk_t;
+    
+    (kcpk0, kcpk1) <@ R_S(S, A).find(K_Binds_CT);
+
+    return (kcpk0, kcpk1);
+  }  
+}.
+
+(** Reduction adversary reducing from CR to MAL-BIND-K-PK **) 
+module R_KPK_CR (S : SchemeDerand) (A : Adv_MALBIND) : Adv_CR = {
+  proc find() : (key_t * ctxt_t * pk_t) * (key_t * ctxt_t * pk_t) = {
+    var kcpk0, kcpk1 : key_t * ctxt_t * pk_t;
+    
+    (kcpk0, kcpk1) <@ R_S(S, A).find(K_Binds_PK);
+
+    return (kcpk0, kcpk1);
+  }  
+}.
+
+section.
+(* Declare arbitrary ("derandomized") KEM *)
+declare module S <: SchemeDerand.
+
+(* Declare arbitrary MAL-BIND adversary (in ROM)*)
+declare module A <: Adv_MALBIND{-S}.
+
+(** 
+  Equivalence between MAL-BIND-K-CT of post-processing KEM (for arbitrary adversary)
+  and CR (for above reduction adversary). (Shows CR --> MAL-BIND-K-CT)
+**)
+equiv Eqv_MALBINDKCT_CR : 
+  MAL_BIND(KEM_KDF_PP_KCTPK(S), A).main ~ CR(R_KCT_CR(S, A)).main : 
+    ={glob S, glob A} /\ arg{1} = K_Binds_CT ==> res{1} => res{2}. 
+proof.
+proc.
+inline{2} find.
+seq 1 2 : (#pre /\ ={bc, mbs}); 1: by call (: true); wp.
+inline KEM_KDF_PP_KCTPK(S).decaps KEM_KDF_PP_KCTPK(S).encaps.
+wp; if => //.
++ by do 3! (wp; call (: true)); skip => /> /#.
+if => //.
++ by do 3! (wp; call (: true)); skip => /> /#.
+by do 3! (wp; call (: true)); skip => /> /#.
+qed.
+
+
+(** 
+  Equivalence between MAL-BIND-K-PK of post-processing KEM (for arbitrary adversary)
+  and CR (for above reduction adversary). (Shows CR --> MAL-BIND-K-PK)
+**)
+equiv Eqv_MALBINDKPK_CR : 
+  MAL_BIND(KEM_KDF_PP_KCTPK(S), A).main ~ CR(R_KPK_CR(S, A)).main : 
+    ={glob S, glob A} /\ arg{1} = K_Binds_PK ==> res{1} => res{2}. 
+proof.
+proc.
+inline{2} find.
+seq 1 2 : (#pre /\ ={bc, mbs}); 1: by call (: true); wp.
+inline KEM_KDF_PP_KCTPK(S).decaps KEM_KDF_PP_KCTPK(S).encaps.
+wp; if => //.
++ by do 3! (wp; call (: true)); skip => /> /#.
+if => //.
++ by do 3! (wp; call (: true)); skip => /> /#.
+by do 3! (wp; call (: true)); skip => /> /#.
+qed.
+
+end section.
+
+end PPKDFKCTPK.
+
+(*
 (** 
   Considers the case where the post-processing is done 
   by passing the symmetric key, encapsulation, and public key 
@@ -765,3 +1248,4 @@ qed.
 end section.
 
 end PPKDFKCTPK.
+*)
