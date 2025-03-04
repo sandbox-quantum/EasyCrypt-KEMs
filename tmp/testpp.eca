@@ -1,36 +1,100 @@
-require KeyEncapsulationMechanisms.
+require import AllCore Distr FMap FelTactic.
 
-clone import KeyEncapsulationMechanisms as KEMs.
+type in_t.
+type out_t.
 
-print HON_BIND.
+op dout : out_t distr.
 
+module type T = {
+  proc get(x : in_t) : out_t 
+}.
 
-module T = {
-  proc main(bc : bindconf) : unit = {
-    var pk0 : pk_t;
-    var pk1 : pk_t;
-    var sk0 : sk_t;
-    var sk1 : sk_t;
-    var b : bool;
-    var c0 : ctxt_t;
-    var c1 : ctxt_t;
-    var k0 : key_t option;
-    var k1 : key_t option;
-    var no_fail : bool;
+module type Adv (O : T) = {
+  proc find() : in_t * in_t
+}.
+
+module X : T = {
+  var m : (in_t, out_t) fmap
+  
+  proc init() = {
+    m <- empty;  
+  }
+  
+  proc get(x : in_t) = {
+    var y : out_t;
     
+    y <$ dout;
+    if (x \notin m) {
+      m.[x] <- y;
+    }
     
-    if (is_pkbsc bc) 
-      (pk1, sk1) <- (pk0, sk0);
-    else {
-      if (is_pkbtc bc) 
-        (pk1, sk1) <- witness;
-      else {
-        b <- false ;
-        if (b) 
-          (pk1, sk1) <- witness;
-        else 
-          (pk1, sk1) <- (pk0, sk0);
-      }
-    } 
+    return oget m.[x];
   }
 }.
+
+module Y = X.
+
+
+module G (A : Adv)  = {
+  var x, x' : in_t
+  proc main() = {
+    Y.init();
+    (x, x') <@ A(Y).find();
+  }
+}.
+
+op q : int.
+
+lemma fooF &m (A <: Adv {-G}) :
+  Pr[G(A).main() @ &m : fsize Y.m <= q] <= q%r * mu1 dout witness.
+proof.
+fel 1
+    (fsize Y.m)
+    (fun i => i%r * mu1 dout witness)
+    q
+    (exists t t', t \in Y.m /\ t' \in Y.m)
+    [ Y.get : (arg \notin Y.m) ].
++ admit.
++ admit.
++ admit.
++ admit.
++ admit. (* Should have (arg \notin Y.m) or even (arg \notin X.m) as precondition, but doesn't *) 
++ admit. (* Similar: should have ! (arg \notin Y.m) or even ! (arg \notin X.m), but doesn't  *)
+qed.
+
+lemma fooT &m (A <: Adv {-G}) :
+  Pr[G(A).main() @ &m : fsize Y.m <= q] <= q%r * mu1 dout witness.
+proof.
+fel 1
+    (fsize Y.m)
+    (fun i => i%r * mu1 dout witness)
+    q
+    (exists t t', t \in Y.m /\ t' \in Y.m)
+    [ X.get : (arg \notin Y.m) ].
++ admit.
++ admit.
++ admit.
++ admit.
++ admit. (* Has (arg \notin Y.m), as expected *)
++ admit. (* Has ! (arg \notin Y.m), as expected *)
+qed.
+
+module G' (A : Adv)  = {
+  module Y' = {
+    proc get(x : in_t) : out_t = {
+      var y : out_t;
+      
+      y <@ Y.get(x);
+      
+      return y; 
+    } 
+  }
+  
+  proc main() = {
+    var x, x': in_t;
+ 
+    Y.init();
+    (x, x') <@ A(Y).find();
+  }
+}.
+

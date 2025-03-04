@@ -1,0 +1,18 @@
+require import AllCore PROM FinType.
+
+type u.
+clone FinType as FTu with type t <= u.
+
+section.
+local clone FullRO as FROu with type in_t <- u. 
+
+(* anomaly: EcLib.EcCoreGoal.InvalidGoalShape
+local clone FROu.FinEager as FEu with 
+  axiom FinFrom.enum_spec <- FTu.enum_spec. 
+*)
+ 
+clone FROu.FinEager as FEu with theory FinFrom <- FTu.
+print FROu.FinEager.
+(* anomaly: File "src/ecSection.ml", line 926, characters 4-10: Assertion failed *)
+end section. 
+

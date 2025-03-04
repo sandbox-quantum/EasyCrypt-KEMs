@@ -8,9 +8,8 @@
 ^*)
 (* Require/Import *)
 require import AllCore Distr PROM FMap.
-require (*--*) ROM ROMx2.
 require (*--*) DMap DProd.
-require (*--*) HashFunctions KeyedHashFunctions KeyEncapsulationMechanismsROMx2.
+require (*--*) ROMx2 KeyEncapsulationMechanismsROMx2.
 
 
 (* Types *)
@@ -475,36 +474,6 @@ clone import FullRO as ROM_J with
     
   proof *.
 
-(*
-(** Counting wrapper for (type of) G oracle **)
-module Counting_ROG (ROG : ROM_G.RO) : RandomOracle = {  
-  var q : int
-  
-  proc get(x : ptxt_t * rand_t) : key_t * rand_t = {
-    var y : key_t * rand_t;
-    
-    y <@ ROG.get(x);
-    
-    q <- q + 1;
-        
-    return y;
-  }
-}.
-
-(** Counting wrapper for (type of) J oracle **)
-module Counting_ROJ (ROJ : ROM_J.RO) : RandomOracle2 = {
-  var q : int
-  proc get(x : rand_t * ctxt_t) : key_t = {
-    var y : key_t;
-    
-    y <@ ROJ.get(x);
-    
-    q <- q + 1;
-        
-    return y;
-  }
-}.
-*)
 
 (** Counting wrapper for first/G (type of) oracle **)
 module Counting_RO1 (RO1 : RandomOracle) : RandomOracle = {
