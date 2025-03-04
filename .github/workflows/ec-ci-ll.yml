@@ -24,7 +24,7 @@ env:
 
 jobs:
     default:
-        runs-on: ubuntu-20.04
+        runs-on: ubuntu-latest
         container:
             image: ghcr.io/easycrypt/ec-build-box
         steps:
