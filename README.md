@@ -7,4 +7,5 @@ convenience, it also provides some sensible defaults, particularly for
 oracles.  Most of the content is based on relevant literature.
 
 Includes generic instantiations of KEMs based on variation of the
-Fujisaki-Okamoto transform.
+Fujisaki-Okamoto transform, as well as an instance of ML-KEM based on 
+the libraries, for which a number of binding properties are proven.
