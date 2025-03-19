@@ -4,7 +4,7 @@ This repository contains an EasyCrypt development aimed at the formal verificati
 
 Initially, this repository also contained comprehensive libraries for Key Encapsulation Mechanisms (KEMs) and Public-Key Encryption (PKE) schemes, generically defining the constructions as well as their properties and corresponding relations, including those in the Random Oracle Model (ROM). These libraries were constructed as an initial endeavor in this project, but [have since been integrated into EasyCrypt itself](https://github.com/EasyCrypt/easycrypt/tree/main/theories/crypto).
 
-What follows is an overview of the directories and files in this repository.
+What follows is an overview of the directories and files in this repository (related to the EasyCrypt development).
 
 - `archive/`: Archived/Deprecated files (that might still be useful for quick reference).
 - `proofs/`: Main proof scripts
@@ -15,4 +15,3 @@ What follows is an overview of the directories and files in this repository.
   - `KeyEncapsulationMechanismROMx2.eca`: "Library" formalizing KEMs considering two random oracles and their security properties. (Currently very minimal and only contains what is needed for other proofs.)
   - `ML_KEM_HL_Binding.eca`: Formalization and analysis of ML-KEM (on a high-level).
   - `ROMx2.eca`: Formalization and analysis of scenarios dealing with two independent random oracles at the same time, particularly concerning the probability of collisions between them.
-  
