@@ -1,4 +1,2 @@
 [general]
 timeout = 1
-idirs = tmp
-rdirs = formosa-mlkem/proof
