@@ -177,7 +177,7 @@ module ML_KEM_HL : Scheme = {
     var c : ctxt_t_pke;
     
     p <$ drand;
-    (k, r) <- G (p, (H pk));
+    (k, r) <- G (p, H pk);
     
     c <@ K_PKE_HL.enc(pk, p, r);
 

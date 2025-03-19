@@ -1,3 +1,9 @@
+(*^
+  Specification and analysis of KEM transform that
+  post-processes (different parts of) the output of encaps/decaps 
+  with a key derivation function. Analysis primarily aimed
+  at binding properties.
+^*)
 require import AllCore Distr.
 require (*--*) HashFunctions KeyEncapsulationMechanisms.
 
@@ -20,7 +26,7 @@ type rand_t.
 
 
 (* Clones *)
-(* Definitions for KEMs in ROM *)
+(* Definitions for KEMs *)
 clone import KeyEncapsulationMechanisms as KEMs with
   type pk_t <- pk_t,
   type sk_t <- sk_t,
@@ -29,7 +35,7 @@ clone import KeyEncapsulationMechanisms as KEMs with
   
   proof *.
   
-(* Definitions for malicious binding in ROM *)
+(* Definitions for malicious binding *)
 clone import MALBIND with
   type rand_t <- rand_t
   
@@ -154,7 +160,7 @@ section.
 (* Declare arbitrary ("derandomized") KEM *)
 declare module S <: SchemeDerand.
 
-(* Declare arbitrary MAL-BIND adversary (in ROM)*)
+(* Declare arbitrary MAL-BIND adversary *)
 declare module A <: Adv_MALBIND{-S}.
 
 (** 
@@ -225,6 +231,7 @@ module type Adv_CR_ROM (RO : RandomOracle) = {
 module CR_ROM (RO : RandomOraclei, A : Adv_CR_ROM) = {
   proc main() = {
     var kc, kc' : key_t * ctxt_t;
+
     var k, k' : key_t;
     
     RO.init();
@@ -518,7 +525,7 @@ section.
 (* Declare arbitrary ("derandomized") KEM *)
 declare module S <: SchemeDerand.
 
-(* Declare arbitrary MAL-BIND adversary (in ROM)*)
+(* Declare arbitrary MAL-BIND adversary *)
 declare module A <: Adv_MALBIND{-S}.
 
 (** 
@@ -901,7 +908,7 @@ section.
 (* Declare arbitrary ("derandomized") KEM *)
 declare module S <: SchemeDerand.
 
-(* Declare arbitrary MAL-BIND adversary (in ROM)*)
+(* Declare arbitrary MAL-BIND adversary *)
 declare module A <: Adv_MALBIND{-S}.
 
 (** 

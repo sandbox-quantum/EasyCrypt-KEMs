@@ -1,3 +1,10 @@
+(*^
+  Specification and analysis of a generic scenario
+  considering two random oracles, particularly concerning
+  properties involving both oracles simultaneously (e.g.,
+  probability of an input for one oracle colliding
+  with an input for the other oracle. 
+^*)
 require import AllCore Distr List FMap PROM.
 require (*--*) ROM.
 
@@ -20,7 +27,7 @@ op [lossless] dout : out_t distr.
 (* Oracles *)
 (** 
   Interface of (first type of) random oracle for security notions, 
-  exposes both initialization and query
+  exposes both initialization and query procedure
 **)
 module type RandomOracle1i = {
   proc init() : unit
@@ -29,7 +36,7 @@ module type RandomOracle1i = {
 
 (** 
   Interface of (second type of) random oracle for security notions, 
-  exposes both initialization and query
+  exposes both initialization and query procedure
 **)
 module type RandomOracle2i = {
   proc init() : unit
@@ -37,16 +44,16 @@ module type RandomOracle2i = {
 }.
 
 (** 
-  Interface of (first type of) random oracle for security notions, 
-  exposes both initialization and query
+  Interface of (first type of) random oracle for adversaries, 
+  exposes query procedure only
 **)
 module type RandomOracle1 = {
   include RandomOracle1i [get]
 }.
 
 (** 
-  Interface of (second type of) random oracle for security notions, 
-  exposes both initialization and query
+  Interface of (second type of) random oracle for adversaries, 
+  exposes query procedure only
 **)
 module type RandomOracle2 = {
   include RandomOracle2i [get]

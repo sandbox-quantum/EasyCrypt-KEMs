@@ -35,7 +35,7 @@ clone import PublicKeyEncryption as PKE with
   proof *. 
 
   
-(** FO U tranform that hashes both message and ciphertext. **)
+(** FO U tranform that hashes both message and ciphertext **)
 abstract theory Umc.
 (* Operators *)
 (** Hash function to compute shared keys **)
@@ -595,7 +595,7 @@ module Umc_Implicit (S : PKE.Scheme) : KEM.Scheme = {
   
 
 (*
-  Overview of binding properties for Umc_Implicit (and corersponding proof intuitions):
+  Overview of binding properties for Umc_Implicit (and corresponding proof intuitions):
   > X-BIND-K-CT break gives CR break: 
     Different ct, which is input to h, but equal k, which is output of h.
   > HON-BIND-K-PK break gives SROB-CCA or CR break (unless equal s or s equals po): 

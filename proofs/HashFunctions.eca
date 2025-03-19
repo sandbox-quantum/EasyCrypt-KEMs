@@ -1,16 +1,29 @@
+(*^
+  Library for hash functions (non-keyed).
+^*)
 require import AllCore.
 
+(* Types *)
+(** Inputs **)
 type in_t.
 
+(** Outputs ("digests") **)
 type out_t.
 
+
+(* Operators *)
+(** Hash function **)
 op f : in_t -> out_t.
 
 
+(* Properties *)
+(* Collision Resistance (CR) *)
+(** Class of adversaries for CR **)
 module type Adv_CR = {
   proc find() : in_t * in_t
 }.
 
+(** CR game **)
 module CR (A : Adv_CR) = {
   proc main() : bool = {
     var x, x' : in_t;
