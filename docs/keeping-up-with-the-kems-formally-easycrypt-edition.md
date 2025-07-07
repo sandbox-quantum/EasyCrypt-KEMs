@@ -103,7 +103,7 @@ The U transforms are all pretty similar and, in fact, only differ in two regards
 
 ![Paper: $\mathrm{U}_{m,c}^{\not\bot}$.](./assets/kem-generic-fo-transform.png "Paper: $\mathrm{U}_{m,c}^{\not\bot}$.")
 
-*Paper: $\mathrm{U}_{m,c}^{\not\bot}$.*
+* Paper: $\mathrm{U}_{m,c}^{\not\bot}$. *
 
 The (paper) formalizations of the other U transforms are obtained by straightforwardly adapting the above in accordance with the previous description. For example, the formalization of $\mathrm{U}_{m,c}^{\bot}$ can be obtained by taking the above and replacing $\mathsf{H}(s, c)$ by $\bot$ (in $\mathsf{Decaps}$). Turning to EasyCrypt, the formalizations of the transforms are, as before, a near-direct and rather intuitive translation of their paper counterparts. Exemplifying this, the following shows our EasyCrypt formalization of $\mathrm{U}_{m,c}^{\not\bot}$.
 
