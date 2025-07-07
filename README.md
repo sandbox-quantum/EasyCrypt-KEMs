@@ -15,3 +15,5 @@ What follows is an overview of the directories and files in this repository (rel
   - `KeyEncapsulationMechanismROMx2.eca`: "Library" formalizing KEMs considering two random oracles and their security properties. (Currently very minimal and only contains what is needed for other proofs.)
   - `ML_KEM_HL_Binding.eca`: Formalization and analysis of ML-KEM (on a high-level).
   - `ROMx2.eca`: Formalization and analysis of scenarios dealing with two independent random oracles at the same time, particularly concerning the probability of collisions between them.
+
+There's a writeup of this work [here](./docs/keeping-up-with-the-kems-formally-easycrypt-edition.md)
