@@ -109,7 +109,7 @@ The (paper) formalizations of the other U transforms are obtained by straightfor
 
 ![EasyCrypt: $\mathrm{U}_{m,c}^{\not\bot}$.](./assets/easycrypt-generic-fo-transform.png "EasyCrypt: $\mathrm{U}_{m,c}^{\not\bot}$.")
 
-*EasyCrypt: $\mathrm{U}_{m,c}^{\not\bot}$.*
+* EasyCrypt: $\mathrm{U}_{m,c}^{\not\bot}$. *
 
 If you look closely, you can see that our libraries snuck into the picture here: the module `Umc_Implicit(S)` is of type `KEM` and its module parameter `S` is of type `PKE`, both of which come from our KEM and PKE library, respectively. What this means is that, if we have some module `S` formalizing a PKE scheme, then we can immediately start talking about any of the properties we defined in our libraries by simply passing in `Umc_Implicit(S)` (for KEM properties) or `S` (for PKE properties) for the property's scheme parameter. Indeed, this is directly analogous to how we usually "instantiate" generic properties on paper as well: we simply replace the references to the abstract scheme with references to the considered concrete scheme! What's more, since EasyCrypt allows us to quantify over modules of a particular type, we can formalize statements of the form "for *any* PKE scheme with security property X, applying the Z transform gives us a KEM with security property Y", exactly the type of statement we typically use when proving security!
 
